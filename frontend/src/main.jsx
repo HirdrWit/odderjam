@@ -214,7 +214,35 @@ function Arbs() {
   );
 }
 
-const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, Calculator: Calculators, Tracker };
+function LowHold() {
+  const [maxHold, setMaxHold] = useStored("lhMax", 1);
+  const [book, setBook] = useStored("lhBook", "");
+  const [stake, setStake] = useStored("lhStake", 100);
+  const [market, setMarket] = useStored("lhMarket", "");
+  const data = useApi(`/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${market ? `&market=${market}` : ""}`);
+  return (
+    <>
+      <div className="bar">
+        Max hold % <input type="number" step="0.25" value={maxHold} onChange={(e) => setMaxHold(+e.target.value)} />
+        One leg at <select value={book} onChange={(e) => setBook(e.target.value)}>
+          {["", "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet"].map((b) => <option key={b} value={b}>{b || "Any book"}</option>)}</select>
+        Market <select value={market} onChange={(e) => setMarket(e.target.value)}>
+          <option value="">All markets</option>{Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        Total stake $<input type="number" step="10" value={stake} onChange={(e) => setStake(+e.target.value)} />
+      </div>
+      <table><thead><tr><th>Hold</th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr></thead><tbody>
+        {(data || []).map((r, i) => (
+          <tr key={i}><td className={r.hold_pct <= 0 ? "best" : ""}>{r.hold_pct.toFixed(2)}%</td><td>{r.event} <span className="mut">{r.sport}</span></td>
+            <td>{MARKETS[r.market] || r.market}</td>
+            <td>{r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>)}</td>
+            <td className={r.expected_loss <= 0 ? "best" : "bad"}>{money(r.expected_loss)}</td></tr>
+        ))}
+      </tbody></table>
+    </>
+  );
+}
+
+const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, "Low Hold": LowHold, Calculator: Calculators, Tracker };
 function App() {
   const [tab, setTab] = useState(() => { try { const t = localStorage.getItem("tab"); return t in TABS ? t : "Odds Screen"; } catch { return "Odds Screen"; } });
   const go = (t) => { setTab(t); try { localStorage.setItem("tab", t); } catch {} };

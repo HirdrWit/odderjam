@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .engine import arb as arbm, devig, ev, markets as mk, odds
+from .engine import arb as arbm, devig, ev, lowhold, markets as mk, odds
 from .providers.books import SHARP, US_BOOKS, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
@@ -91,6 +91,28 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                                           for (o, book, price), stake in zip(best, result["stakes"])],
                                  "profit_pct": result["profit_pct"]})
     return sorted(rows, key=lambda r: -r["profit_pct"])
+
+
+@app.get("/api/lowhold")
+def low_hold(max_hold: float = 1.0, book: str | None = None, stake: float = 100.0, market: str | None = None):
+    """Two-sided bets that cover both outcomes for the smallest hold, for clearing rollover.
+
+    With ``book`` set, one leg must be at that book. Sorted by hold, lowest first.
+    """
+    rows = []
+    for e in get_snapshot():
+        for key, g in _groups(e):
+            if (market and key != market) or len(g["outcomes"]) != 2:
+                continue  # three-way markets can't be covered with two bets
+            a, b = g["outcomes"]
+            pair = lowhold.best_pair(us_only(a["prices"]), us_only(b["prices"]), book or None, stake)
+            if pair is None or pair["hold_pct"] > max_hold:
+                continue
+            for o, leg in zip(g["outcomes"], pair["legs"]):
+                leg.update(pick=mk.label(o), point=o["point"])
+            rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
+                         "market": key, "point": g["point"], "stake": stake, **pair})
+    return sorted(rows, key=lambda r: r["hold_pct"])
 
 
 @app.post("/api/refresh")
