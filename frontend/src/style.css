@@ -24,6 +24,7 @@ th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #222c38; 
 .bad { color: #ff6b6b; font-weight: 600; }
 .wrap { flex-wrap: wrap; } .wrap input { width: 110px; }
 button.primary, button.track { background: #2a6df4; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+a.bet { background: #1f9d55; color: #fff; border-radius: 4px; padding: 4px 10px; text-decoration: none; font-size: 0.9em; }
 button.x { background: none; border: 0; color: #8795a6; cursor: pointer; }
 input.mini { width: 60px; }
 .subnav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }

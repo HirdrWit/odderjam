@@ -4,6 +4,8 @@ import random
 from datetime import datetime, timedelta, timezone
 from statistics import NormalDist
 
+from .books import BOOK_URLS
+
 BOOKS = ["Pinnacle", "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics"]
 GAMES = {
     "NBA": [("Lakers", "Celtics"), ("Warriors", "Nuggets"), ("Bucks", "Heat")],
@@ -42,9 +44,14 @@ def _priced(p: float, book: str, rng: random.Random) -> tuple[int, int]:
             _to_american(min(0.97, (1 - pa) * (1 + vig / 2))))
 
 
-def _add(outcomes: dict[tuple[str, float | None], dict], name: str, point: float | None, book: str, price: int) -> None:
+def _add(outcomes: dict[tuple[str, float | None], dict], name: str, point: float | None, book: str, price: int,
+         event_id: str = "", market: str = "") -> None:
     outcome = outcomes.setdefault((name, point), {"name": name, "point": point, "prices": {}})
     outcome["prices"][book] = price
+    if book in BOOK_URLS:
+        # Fake deep link: the real book homepage plus a fragment naming the bet, so it opens somewhere sensible.
+        pick = f"{name}{'' if point is None else f'_{point:+g}'}".replace(" ", "_")
+        outcome.setdefault("links", {})[book] = f"{BOOK_URLS[book]}/#odderjam-mock={event_id}/{market}/{pick}"
 
 
 def snapshot(seed: int | None = None) -> list[dict]:
@@ -67,27 +74,28 @@ def snapshot(seed: int | None = None) -> list[dict]:
             ml: dict[tuple[str, float | None], dict] = {}
             spreads: dict[tuple[str, float | None], dict] = {}
             totals: dict[tuple[str, float | None], dict] = {}
+            eid = f"{sport}-{i}"
             for book in BOOKS:
                 home_price, away_price = _priced(true_home, book, rng)
-                _add(ml, home, None, book, home_price)
-                _add(ml, away, None, book, away_price)
+                _add(ml, home, None, book, home_price, eid, "moneyline")
+                _add(ml, away, None, book, away_price, eid, "moneyline")
 
                 # Lines per book are stable for a game; prices move with rng.
                 book_rng = random.Random(f"{sport}{i}{book}")
                 spread_shift = 0 if book == "Pinnacle" else book_rng.choice(LINE_SHIFTS)
                 home_line = market_spread if fixed_spread is not None else market_spread + spread_shift
                 home_price, away_price = _priced(1 - margin_dist.cdf(-home_line), book, rng)  # home covers if margin + line > 0
-                _add(spreads, home, home_line, book, home_price)
-                _add(spreads, away, -home_line, book, away_price)
+                _add(spreads, home, home_line, book, home_price, eid, "spreads")
+                _add(spreads, away, -home_line, book, away_price, eid, "spreads")
 
                 total_shift = 0 if book == "Pinnacle" else book_rng.choice(LINE_SHIFTS)
                 total_line = max(0.5, market_total + total_shift)
                 over, under = _priced(1 - total_dist.cdf(total_line), book, rng)
-                _add(totals, "Over", total_line, book, over)
-                _add(totals, "Under", total_line, book, under)
+                _add(totals, "Over", total_line, book, over, eid, "totals")
+                _add(totals, "Under", total_line, book, under, eid, "totals")
 
             events.append({
-                "id": f"{sport}-{i}", "sport": sport, "home": home, "away": away, "start": start.isoformat(),
+                "id": eid, "sport": sport, "home": home, "away": away, "start": start.isoformat(),
                 "markets": {"moneyline": list(ml.values()), "spreads": list(spreads.values()),
                             "totals": list(totals.values())},
             })
