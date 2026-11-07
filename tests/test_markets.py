@@ -3,8 +3,7 @@ from fastapi.testclient import TestClient
 
 from backend import main
 from backend.engine.markets import is_prop, label, line_groups
-from backend.providers import mock
-from backend.providers import theoddsapi
+from backend.providers import mock, theoddsapi
 from backend.providers.theoddsapi import parse_event
 
 
@@ -155,11 +154,12 @@ def test_snapshot_fetches_props_per_event(monkeypatch):
 
     def fake_get(url, params, timeout):
         calls.append((url, params["markets"]))
+        if "/events/" in url:
+            market = {"key": "player_points", "outcomes": [{"name": "Over", "description": "P1", "price": -110, "point": 20.5}]}
+        else:
+            market = {"key": "h2h", "outcomes": [{"name": "A", "price": -110}, {"name": "B", "price": -110}]}
         game = {"id": "g1", "home_team": "A", "away_team": "B", "commence_time": "t", "bookmakers": [
-            {"key": "draftkings", "title": "DraftKings", "markets": [
-                {"key": "player_points", "outcomes": [{"name": "Over", "description": "P1", "price": -110, "point": 20.5}]}
-                if "/events/" in url else
-                {"key": "h2h", "outcomes": [{"name": "A", "price": -110}, {"name": "B", "price": -110}]}]}]}
+            {"key": "draftkings", "title": "DraftKings", "markets": [market]}]}
         return Resp(game if "/events/" in url else [game])
 
     monkeypatch.setenv("ODDS_API_KEY", "k")

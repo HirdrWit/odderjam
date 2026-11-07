@@ -52,7 +52,7 @@ def _priced(p: float, book: str, rng: random.Random, noise_sd: float = 0.025) ->
             _to_american(min(0.97, (1 - pa) * (1 + vig / 2))))
 
 
-def _add(outcomes: dict[tuple, dict], name: str, point: float | None, book: str, price: int,
+def _add(outcomes: dict[tuple[str, str | None, float | None], dict], name: str, point: float | None, book: str, price: int,
          player: str | None = None) -> None:
     new = {"name": name, "point": point, "prices": {}}
     if player:
@@ -68,14 +68,14 @@ def _poisson_over(mean: float, line: float) -> float:
 
 def _props(sport: str, i: int, home: str, away: str, rng: random.Random) -> dict[str, list[dict]]:
     """Over/Under props for a few made-up players per team."""
-    markets: dict[str, dict[tuple, dict]] = {}
+    markets: dict[str, dict[tuple[str, str | None, float | None], dict]] = {}
     for market, (lo, hi), sd in SPORT_PROPS[sport]:
         outcomes = markets.setdefault(market, {})
         for team in (home, away):
             for n in range(1, PLAYERS_PER_TEAM + 1):
                 player = f"{team} Player {n}"
-                rs = random.Random(f"{sport}{i}{market}{player}")
-                mean = rs.uniform(lo, hi)
+                player_rng = random.Random(f"{sport}{i}{market}{player}")
+                mean = player_rng.uniform(lo, hi)
                 line = _half(mean) if sd is not None else max(0.5, _half(mean - 0.5))
                 for book in BOOKS:
                     book_line = line

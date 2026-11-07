@@ -52,7 +52,10 @@ function RefreshBox() {
 const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
 const isProp = (k) => /^(player|batter|pitcher)_/.test(k);
 // "player_points" -> "Points", "batter_total_bases" -> "Total Bases"
-const propName = (k) => k.replace(/^(player|batter|pitcher)_/, "").split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+const propName = (k) => k.replace(/^(player|batter|pitcher)_/, "").split("_")
+  .filter(Boolean)
+  .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+  .join(" ");
 const marketName = (k) => MARKETS[k] || (isProp(k) ? propName(k) : k);
 const PROP_FILTER = { include: "Include props", mainlines: "Mainlines only" };
 const propsParam = (f) => (f === "mainlines" ? "&props=false" : "");
@@ -74,7 +77,7 @@ function OddsScreen() {
           {Object.entries({ ...MARKETS, props: "Player props" }).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </div>
-      {market === "props" && (data || []).map((e) => <PropsCard key={e.id} e={e} open={open === e.id} toggle={() => setOpen(open === e.id ? null : e.id)} />)}
+      {market === "props" && (data || []).map((e) => <PropsCard key={e.id} event={e} open={open === e.id} toggle={() => setOpen(open === e.id ? null : e.id)} />)}
       {market !== "props" && (data || []).filter((e) => e.markets[market]).map((e) => {
         const outs = e.markets[market];
         const books = [...new Set(outs.flatMap((o) => Object.keys(o.prices)))];
@@ -83,7 +86,7 @@ function OddsScreen() {
         const names = [...new Set(outs.map((o) => o.name))];
         return (
           <div className="card" key={e.id} onClick={() => setOpen(open === e.id ? null : e.id)}>
-            <b>{e.away} @ {e.home}</b> <span className="mut">{e.sport} · {new Date(e.start).toLocaleString()}</span>
+            <b>{event.away} @ {event.home}</b> <span className="mut">{event.sport} · {new Date(event.start).toLocaleString()}</span>
             <div className="mut">Best: {names.map((n) => { const o = bestBy(n); return `${outcomeLabel(o)} ${fmt(best(o))}`; }).join(" · ")}</div>
             {open === e.id && (
               <table><thead><tr><th>Book</th>{outs.map((o) => <th key={`${o.name}${o.point}`}>{outcomeLabel(o)}</th>)}</tr></thead><tbody>
@@ -100,18 +103,18 @@ function OddsScreen() {
   );
 }
 
-function PropsCard({ e, open, toggle }) {
-  const keys = Object.keys(e.markets).filter(isProp);
+function PropsCard({ event, open, toggle }) {
+  const keys = Object.keys(event.markets).filter(isProp);
   if (!keys.length) return null;
   // One row per (prop, player, side, line); outcomes sorted so Over/Under at a line sit together.
-  const rows = keys.flatMap((k) => [...e.markets[k]]
+  const rows = keys.flatMap((k) => [...event.markets[k]]
     .sort((a, b) => (a.player || "").localeCompare(b.player || "") || a.point - b.point || a.name.localeCompare(b.name))
     .map((o) => ({ k, o })));
   const books = [...new Set(rows.flatMap(({ o }) => Object.keys(o.prices)))];
   const players = new Set(rows.map(({ o }) => o.player));
   return (
     <div className="card" onClick={toggle}>
-      <b>{e.away} @ {e.home}</b> <span className="mut">{e.sport} · {new Date(e.start).toLocaleString()}</span>
+      <b>{event.away} @ {event.home}</b> <span className="mut">{event.sport} · {new Date(event.start).toLocaleString()}</span>
       <div className="mut">{players.size} players · {keys.map(propName).join(", ")}</div>
       {open && (
         <table><thead><tr><th>Player</th><th>Prop</th><th>Pick</th>{books.map((b) => <th key={b}>{b}</th>)}</tr></thead><tbody>
