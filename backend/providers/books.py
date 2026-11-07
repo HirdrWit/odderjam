@@ -21,3 +21,10 @@ def us_name(title: str) -> str | None:
 def us_only(ml: dict) -> dict:
     """Moneyline map filtered to US books (drops Pinnacle and all non-US books)."""
     return {b: o for b, o in ml.items() if b in US_BOOKS}
+
+
+# Books that offer same-game parlays. Others reject two legs from one event.
+SGP_BOOKS = {
+    "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics",
+    "ESPN BET", "theScore Bet", "Hard Rock Bet", "BetParx", "Bally Bet", "Borgata", "Unibet", "Fliff",
+}
