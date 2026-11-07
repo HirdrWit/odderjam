@@ -100,6 +100,7 @@ PromoKind = Literal["bonus-bet", "profit-boost", "second-chance"]
 
 def _convert(kind: PromoKind, amount: float, promo_odds: float, hedge_odds: float, boost_pct: float,
              max_boost: float | None, refund_value: float) -> dict:
+    # Dispatch to the hedge function for the promo kind.
     if kind == "bonus-bet":
         return pm.bonus_bet_hedge(amount, promo_odds, hedge_odds)
     if kind == "profit-boost":
@@ -131,7 +132,8 @@ def promo_conversions(kind: PromoKind, book: str, amount: float = 100.0, boost_p
                 if not hedges:
                     continue
                 hedge_book, hedge_odds = max(hedges.items(), key=lambda kv: kv[1])
-                r = _convert(kind, amount, side["prices"][book], hedge_odds, boost_pct, max_boost, refund_value)
+                r = _convert(kind=kind, amount=amount, promo_odds=side["prices"][book], hedge_odds=hedge_odds,
+                             boost_pct=boost_pct, max_boost=max_boost, refund_value=refund_value)
                 rows.append({
                     "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                     "market": key, "point": g["point"], "kind": kind,

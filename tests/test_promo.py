@@ -9,7 +9,7 @@ from backend.providers import mock
 from backend.routes import bets
 
 
-def outcome(name, point, **prices):
+def _outcome(name, point, **prices):
     return {"name": name, "point": point, "prices": prices}
 
 
@@ -44,7 +44,7 @@ def test_profit_boost_hedge():
 def test_profit_boost_cap_and_zero_boost():
     capped = promo.profit_boost_hedge(100, 100, -110, 100, max_boost=25)
     assert capped["boosted_odds"] == pytest.approx(125)
-    assert promo.profit_boost_hedge(100, 100, -110, 0)["profit"] < 0  # no boost: just paying vig
+    assert promo.profit_boost_hedge(100, 100, -110, 0)["profit"] < 0  # No boost: just paying vig.
 
 
 def test_second_chance_hedge():
@@ -62,7 +62,7 @@ def test_second_chance_refund_value_and_cap():
     lo = promo.second_chance_hedge(100, 200, -150, refund_value=0.5)
     hi = promo.second_chance_hedge(100, 200, -150, refund_value=0.8)
     assert hi["profit"] > lo["profit"]
-    # refund capped at the stake
+    # Refund is capped at the stake.
     assert promo.second_chance_hedge(100, 200, -150, refund=500)["profit"] == pytest.approx(
         promo.second_chance_hedge(100, 200, -150)["profit"])
 
@@ -92,13 +92,13 @@ def test_promo_endpoint_ranks_and_hedges_elsewhere(client, kind):
 
 def test_promo_endpoint_uses_best_other_book(monkeypatch):
     ev = {"id": "x", "sport": "NBA", "home": "A", "away": "B", "start": "t", "markets": {"moneyline": [
-        outcome("A", None, DraftKings=250, FanDuel=260),
-        outcome("B", None, DraftKings=-300, FanDuel=-320, BetMGM=-280, Pinnacle=-200)]}}
+        _outcome("A", None, DraftKings=250, FanDuel=260),
+        _outcome("B", None, DraftKings=-300, FanDuel=-320, BetMGM=-280, Pinnacle=-200)]}}
     monkeypatch.setattr(main, "get_snapshot", lambda: [ev])
     rows = TestClient(main.app).get("/api/promo/bonus-bet", params={"book": "DraftKings"}).json()
     assert len(rows) == 2
     top = rows[0]
-    assert [leg["pick"] for leg in top["legs"]] == ["A", "B"]  # long side converts better
+    assert [leg["pick"] for leg in top["legs"]] == ["A", "B"]  # Long side converts better.
     assert (top["legs"][1]["book"], top["legs"][1]["odds"]) == ("BetMGM", -280)
     assert top["conversion_pct"] == pytest.approx(promo.bonus_bet_hedge(100, 250, -280)["conversion_pct"])
 

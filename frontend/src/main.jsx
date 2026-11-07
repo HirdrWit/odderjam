@@ -242,7 +242,7 @@ function Promos() {
       const boosted = l.promo && r.boosted_odds != null;
       await fetch("/api/bets", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event: r.event, sport: r.sport, market: r.market, pick: l.pick, book: l.book,
-          odds: boosted ? +r.boosted_odds.toFixed(2) : l.odds, stake: +l.stake.toFixed(2), is_bonus: l.is_bonus,
+          odds: boosted ? Number(r.boosted_odds.toFixed(2)) : l.odds, stake: Number(l.stake.toFixed(2)), is_bonus: l.is_bonus,
           notes: l.promo ? `${PROMOS[kind][0]}${boosted ? ` (posted ${fmt(l.odds)}, +${boost}%)` : ""}` : `${PROMOS[kind][0]} hedge` }) });
     }
     window.dispatchEvent(new Event("data-changed"));
@@ -255,10 +255,10 @@ function Promos() {
           {Object.entries(PROMOS).map(([k, [v]]) => <option key={k} value={k}>{v}</option>)}</select>
         Book <select value={book} onChange={(e) => setBook(e.target.value)}>
           {PROMO_BOOKS.map((b) => <option key={b}>{b}</option>)}</select>
-        Amount $ <input type="number" step="1" value={amount} onChange={(e) => setAmount(+e.target.value)} />
-        {kind === "profit-boost" && <>Boost % <input type="number" step="5" value={boost} onChange={(e) => setBoost(+e.target.value)} />
+        Amount $ <input type="number" step="1" value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+        {kind === "profit-boost" && <>Boost % <input type="number" step="5" value={boost} onChange={(e) => setBoost(Number(e.target.value))} />
           Max $ <input type="number" placeholder="none" value={maxBoost} onChange={(e) => setMaxBoost(e.target.value)} /></>}
-        {kind === "second-chance" && <>Bonus conversion % <input type="number" step="5" value={rate} onChange={(e) => setRate(+e.target.value)} /></>}
+        {kind === "second-chance" && <>Bonus conversion % <input type="number" step="5" value={rate} onChange={(e) => setRate(Number(e.target.value))} /></>}
         <select value={market} onChange={(e) => setMarket(e.target.value)}>
           <option value="">All markets</option>
           {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
