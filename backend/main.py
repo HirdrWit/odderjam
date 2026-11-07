@@ -1,10 +1,12 @@
 from collections.abc import Iterator
 from pathlib import Path
 
-from fastapi import FastAPI
+from typing import Literal
+
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from .engine import arb as arbm, devig, ev, markets as mk, odds
+from .engine import arb as arbm, devig, ev, markets as mk, odds, promo as pm
 from .providers.books import SHARP, US_BOOKS, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
@@ -91,6 +93,60 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                                           for (o, book, price), stake in zip(best, result["stakes"])],
                                  "profit_pct": result["profit_pct"]})
     return sorted(rows, key=lambda r: -r["profit_pct"])
+
+
+PromoKind = Literal["bonus-bet", "profit-boost", "second-chance"]
+
+
+def _convert(kind: PromoKind, amount: float, promo_odds: float, hedge_odds: float, boost_pct: float,
+             max_boost: float | None, refund_value: float) -> dict:
+    if kind == "bonus-bet":
+        return pm.bonus_bet_hedge(amount, promo_odds, hedge_odds)
+    if kind == "profit-boost":
+        return pm.profit_boost_hedge(amount, promo_odds, hedge_odds, boost_pct, max_boost)
+    return pm.second_chance_hedge(amount, promo_odds, hedge_odds, refund_value=refund_value)
+
+
+@app.get("/api/promo/{kind}")
+def promo_conversions(kind: PromoKind, book: str, amount: float = 100.0, boost_pct: float = 0.0,
+                      max_boost: float | None = None, refund_value: float = 0.7, market: str | None = None,
+                      limit: int = 50):
+    """Rank two-sided bets by how well they convert a promo at `book` into locked cash.
+
+    The promo goes on one side at `book`; the other side is hedged with cash at the best other US book.
+    """
+    if book not in US_BOOKS:
+        raise HTTPException(400, f"unknown US book: {book}")
+    if amount <= 0:
+        raise HTTPException(400, "amount must be positive")
+    rows = []
+    for e in get_snapshot():
+        for key, g in _groups(e):
+            if (market and key != market) or len(g["outcomes"]) != 2:
+                continue  # a single cash hedge only covers two-way markets
+            for side, other in (g["outcomes"], g["outcomes"][::-1]):
+                if book not in side["prices"]:
+                    continue
+                hedges = {b: p for b, p in us_only(other["prices"]).items() if b != book}
+                if not hedges:
+                    continue
+                hedge_book, hedge_odds = max(hedges.items(), key=lambda kv: kv[1])
+                r = _convert(kind, amount, side["prices"][book], hedge_odds, boost_pct, max_boost, refund_value)
+                rows.append({
+                    "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
+                    "market": key, "point": g["point"], "kind": kind,
+                    "profit": r["profit"], "conversion_pct": r["conversion_pct"],
+                    "boosted_odds": r.get("boosted_odds"),
+                    "legs": [
+                        {"pick": mk.label(side), "point": side["point"], "book": book,
+                         "odds": side["prices"][book], "stake": amount, "is_bonus": kind == "bonus-bet",
+                         "promo": True},
+                        {"pick": mk.label(other), "point": other["point"], "book": hedge_book,
+                         "odds": hedge_odds, "stake": r["hedge_stake"], "is_bonus": False, "promo": False},
+                    ],
+                })
+    rows.sort(key=lambda r: -r["conversion_pct"])
+    return rows[:limit]
 
 
 @app.post("/api/refresh")
