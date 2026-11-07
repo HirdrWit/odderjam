@@ -1,9 +1,27 @@
 """Which sportsbooks the app shows. Only books legally operating in the US are listed.
 
-Pinnacle is not available to US bettors; it is kept ONLY as the sharp reference price
-for removing the vig, and is never shown as a place to bet.
+Pinnacle and BetOnline are not available to US bettors; they are kept ONLY as sharp
+reference prices for removing the vig, and are never shown as a place to bet.
 """
+import os
+
 SHARP = "Pinnacle"
+# The Odds API bookmaker key -> name, for books used only as sharp references.
+REFERENCE_ONLY = {"pinnacle": SHARP, "betonlineag": "BetOnline.ag"}
+
+# Sharp books that set the fair price, and their weight in the consensus.
+# Override with SHARP_WEIGHTS="Pinnacle:1,Circa Sports:0.5" (or per request from the UI).
+SHARP_BOOKS = ["Pinnacle", "Circa Sports", "Novig", "BetOnline.ag"]
+DEFAULT_SHARP_WEIGHTS = "Pinnacle:1,Circa Sports:0.5,Novig:0.5,BetOnline.ag:0.25"
+
+
+def sharp_weights_spec() -> str:
+    return os.environ.get("SHARP_WEIGHTS", DEFAULT_SHARP_WEIGHTS)
+
+
+def max_sharp_hold() -> float:
+    """Sharp books holding more than this (percent) are left out of the fair price."""
+    return float(os.environ.get("MAX_SHARP_HOLD", "6"))
 
 US_BOOKS = {
     "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics",

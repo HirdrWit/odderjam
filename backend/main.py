@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from .engine import arb as arbm, devig, ev, odds
-from .providers.books import SHARP, US_BOOKS, us_only
+from .engine import arb as arbm, devig, ev, odds, sharp
+from .providers.books import SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
 
@@ -21,17 +21,31 @@ def odds_screen(sport: str | None = None):
     return [e for e in shown if e["markets"]["moneyline"]]
 
 
+@app.get("/api/sharps")
+def sharp_settings():
+    """Defaults for the fair-price settings in the UI."""
+    return {"books": SHARP_BOOKS, "weights": sharp.parse_weights(sharp_weights_spec()),
+            "max_hold": max_sharp_hold(), "methods": list(devig.METHODS)}
+
+
 @app.get("/api/ev")
-def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25):
+def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25,
+                sharps: str | None = None, max_hold: float | None = None):
+    """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
+    more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price."""
+    if method not in devig.METHODS:
+        raise HTTPException(400, f"unknown devig method {method!r}")
+    weights = sharp.parse_weights(sharps if sharps is not None else sharp_weights_spec())
+    max_hold = max_sharp_hold() if max_hold is None else max_hold
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     rows = []
     for e in get_snapshot():
         ml = e["markets"]["moneyline"]
-        if SHARP not in ml:
+        fair = sharp.consensus(ml, weights, method, max_hold)
+        if fair is None:
             continue
-        sh = ml[SHARP]
-        probs = devig.METHODS[method]([odds.american_to_prob(sh["home"]), odds.american_to_prob(sh["away"])])
-        for side, fp in zip(("home", "away"), probs):
+        for side in ("home", "away"):
+            fp = fair[side]
             for book_name, o in ml.items():
                 if book_name not in US_BOOKS or (book and book_name != book):
                     continue
@@ -42,6 +56,7 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                         "pick": e[side], "book": book_name, "odds": o[side], "fair_prob": fp,
                         "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                         "stake": bankroll * ev.kelly_fraction(fp, o[side], kelly),
+                        "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"],
                     })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 

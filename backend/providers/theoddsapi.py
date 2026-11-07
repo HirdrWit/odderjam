@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 
-from .books import SHARP, us_name
+from .books import REFERENCE_ONLY, us_name
 
 ALL = {"NBA": "basketball_nba", "NFL": "americanfootball_nfl", "MLB": "baseball_mlb", "NHL": "icehockey_nhl"}
 # Each sport costs (regions x markets) credits per fetch. Pick sports in season via ODDS_SPORTS.
@@ -32,7 +32,7 @@ def snapshot() -> list[dict]:
         for e in r.json():
             ml = {}
             for bk in e["bookmakers"]:
-                name = SHARP if bk["key"] == "pinnacle" else us_name(bk["title"])
+                name = REFERENCE_ONLY.get(bk["key"]) or us_name(bk["title"])
                 if name is None:
                     continue  # not available to US bettors
                 oc = {o["name"]: o["price"] for o in bk["markets"][0]["outcomes"]}
