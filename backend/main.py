@@ -1,11 +1,11 @@
 from collections.abc import Iterator
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from .engine import arb as arbm, devig, ev, markets as mk, odds
-from .providers.books import SHARP, US_BOOKS, us_only
+from .engine import arb as arbm, devig, ev, markets as mk, odds, sharp
+from .providers.books import SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
 
@@ -39,19 +39,33 @@ def _groups(e: dict) -> Iterator[tuple[str, dict]]:
             yield key, g
 
 
+@app.get("/api/sharps")
+def sharp_settings():
+    """Defaults for the fair-price settings in the UI."""
+    return {"books": SHARP_BOOKS, "weights": sharp.parse_weights(sharp_weights_spec()),
+            "max_hold": max_sharp_hold(), "methods": list(devig.METHODS)}
+
+
 @app.get("/api/ev")
 def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25,
-                market: str | None = None):
+                sharps: str | None = None, max_hold: float | None = None, market: str | None = None):
+    """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
+    more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price."""
+    if method not in devig.METHODS:
+        raise HTTPException(400, f"unknown devig method {method!r}")
+    weights = sharp.parse_weights(sharps if sharps is not None else sharp_weights_spec())
+    max_hold = max_sharp_hold() if max_hold is None else max_hold
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     rows = []
     for e in get_snapshot():
         for key, g in _groups(e):
             if market and key != market:
                 continue
-            if not all(SHARP in o["prices"] for o in g["outcomes"]):
-                continue  # need the sharp price on every side of this exact line to devig
-            probs = devig.METHODS[method]([odds.american_to_prob(o["prices"][SHARP]) for o in g["outcomes"]])
-            for o, fp in zip(g["outcomes"], probs):
+            # Only sharps pricing every side of this exact line can devig it.
+            fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold)
+            if fair is None:
+                continue
+            for o, fp in zip(g["outcomes"], fair["probs"]):
                 for book_name, price in o["prices"].items():
                     if book_name not in US_BOOKS or (book and book_name != book):
                         continue
@@ -62,6 +76,7 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                             "market": key, "point": o["point"], "pick": mk.label(o), "book": book_name,
                             "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                             "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
+                            "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"],
                         })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 

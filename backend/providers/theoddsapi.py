@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 
-from .books import SHARP, us_name
+from .books import REFERENCE_ONLY, us_name
 
 ALL = {"NBA": "basketball_nba", "NFL": "americanfootball_nfl", "MLB": "baseball_mlb", "NHL": "icehockey_nhl"}
 # Each sport costs (regions x markets) credits per fetch. Pick sports in season via ODDS_SPORTS
@@ -23,7 +23,7 @@ def parse_event(e: dict, sport: str) -> dict:
     """Convert one Odds API event into our event shape."""
     markets: dict[str, dict[tuple[str, float | None], dict]] = {}
     for bk in e["bookmakers"]:
-        name = SHARP if bk["key"] == "pinnacle" else us_name(bk["title"])
+        name = REFERENCE_ONLY.get(bk["key"]) or us_name(bk["title"])
         if name is None:
             continue  # not available to US bettors
         for m in bk["markets"]:

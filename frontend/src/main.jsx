@@ -13,6 +13,7 @@ function useStored(key, init) {
 function useApi(url, every = 60000) {
   const [data, setData] = useState(null);
   useEffect(() => {
+    if (!url) return;
     let live = true;
     const load = () => fetch(url).then((r) => r.json()).then((d) => live && setData(d));
     load();
@@ -173,7 +174,15 @@ function PositiveEV() {
         stake: +r.stake.toFixed(2) || 1, ev_pct: r.ev_pct }) });
     alert(`Tracked ${r.pick} @ ${r.book}`);
   };
-  const data = useApi(`/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}`);
+  const cfg = useApi("/api/sharps", 600000);
+  const [weights, setWeights] = useStored("evSharpWeights", null);
+  const [maxHold, setMaxHold] = useStored("evMaxHold", null);
+  const w = weights ?? cfg?.weights;
+  const hold = maxHold ?? cfg?.max_hold;
+  const setWeight = (b, v) => setWeights({ ...w, [b]: v });
+  const sharpSpec = w ? Object.entries(w).filter(([, v]) => v > 0).map(([b, v]) => `${b}:${v}`).join(",") : null;
+  const data = useApi(cfg && `/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}`
+    + `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${hold}`);
   return (
     <>
       <div className="bar">
@@ -181,16 +190,27 @@ function PositiveEV() {
           {["DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet", ""].map((b) => <option key={b} value={b}>{b || "All books"}</option>)}</select>
         Min EV % <input type="number" step="0.5" value={minEv} onChange={(e) => setMinEv(+e.target.value)} />
         Devig <select value={method} onChange={(e) => setMethod(e.target.value)}>
-          <option>multiplicative</option><option>power</option><option>worst_case</option></select>
+          {(cfg?.methods || [method]).map((m) => <option key={m}>{m}</option>)}</select>
         {bank && <span>Bankroll <b className={bank.profit >= 0 ? "best" : "bad"}>${bank.current.toFixed(2)}</b>
           <span className="mut">start $<input className="mini" type="number" defaultValue={bank.starting}
             onBlur={(e) => +e.target.value !== bank.starting && setStart(+e.target.value)} /> {bank.profit >= 0 ? "+" : "-"}${Math.abs(bank.profit).toFixed(2)} P/L</span></span>}
         Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => setKelly(+e.target.value)} />
       </div>
-      <table><thead><tr><th>EV%</th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th><th>Fair</th><th>Stake</th><th></th></tr></thead><tbody>
+      {cfg && w && (
+        <div className="bar wrap">
+          Sharp weights {cfg.books.map((b) => (
+            <span key={b}>{b} <input className="mini" type="number" step="0.25" min="0" value={w[b] ?? 0}
+              onChange={(e) => setWeight(b, +e.target.value)} /></span>))}
+          Max sharp hold % <input className="mini" type="number" step="0.5" value={hold} onChange={(e) => setMaxHold(+e.target.value)} />
+          {(weights || maxHold != null) && <button onClick={() => { setWeights(null); setMaxHold(null); }}>Reset</button>}
+        </div>
+      )}
+      <table><thead><tr><th>EV%</th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th><th>Fair</th><th>Sharps (hold)</th><th>Stake</th><th></th></tr></thead><tbody>
         {(data || []).map((r, i) => (
           <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{MARKETS[r.market] || r.market}</td><td>{r.event}</td>
-            <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td><td>${r.stake.toFixed(2)}</td>
+            <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td>
+            <td className="mut small">{r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(" · ")}</td>
+            <td>${r.stake.toFixed(2)}</td>
             <td><button className="track" onClick={() => track(r)}>Track</button></td></tr>
         ))}
       </tbody></table>
