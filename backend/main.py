@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from . import history
 from .engine import arb as arbm, devig, ev, markets as mk, odds
 from .providers.books import SHARP, US_BOOKS, us_only
 from .routes import bets
@@ -62,6 +63,7 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                             "market": key, "point": o["point"], "pick": mk.label(o), "book": book_name,
                             "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                             "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
+                            "event_id": e["id"], "outcome": o["name"],
                         })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 
@@ -91,6 +93,12 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                                           for (o, book, price), stake in zip(best, result["stakes"])],
                                  "profit_pct": result["profit_pct"]})
     return sorted(rows, key=lambda r: -r["profit_pct"])
+
+
+@app.get("/api/history/{event_id}")
+def odds_history(event_id: str, market: str = "moneyline"):
+    """Every stored price for one event and market, oldest first."""
+    return history.history(event_id, market)
 
 
 @app.post("/api/refresh")
