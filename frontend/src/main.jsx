@@ -214,6 +214,12 @@ function Arbs() {
   );
 }
 
+/** Parses a number input's text, returning `fallback` when it is not a valid number. */
+function parseNumberInput(value, fallback) {
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 function LowHold() {
   const [maxHold, setMaxHold] = useStored("lhMax", 1);
   const [book, setBook] = useStored("lhBook", "");
@@ -223,12 +229,12 @@ function LowHold() {
   return (
     <>
       <div className="bar">
-        Max hold % <input type="number" step="0.25" value={maxHold} onChange={(e) => setMaxHold(+e.target.value)} />
+        Max hold % <input type="number" step="0.25" value={maxHold} onChange={(e) => setMaxHold(parseNumberInput(e.target.value, maxHold))} />
         One leg at <select value={book} onChange={(e) => setBook(e.target.value)}>
           {["", "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet"].map((b) => <option key={b} value={b}>{b || "Any book"}</option>)}</select>
         Market <select value={market} onChange={(e) => setMarket(e.target.value)}>
           <option value="">All markets</option>{Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        Total stake $<input type="number" step="10" value={stake} onChange={(e) => setStake(+e.target.value)} />
+        Total stake $<input type="number" step="10" value={stake} onChange={(e) => setStake(parseNumberInput(e.target.value, stake))} />
       </div>
       <table><thead><tr><th>Hold</th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr></thead><tbody>
         {(data || []).map((r, i) => (

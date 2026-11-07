@@ -34,9 +34,9 @@ def client(monkeypatch):
 
 def test_best_pair_takes_best_price_per_side():
     p = best_pair({"X": -110, "Y": 105}, {"X": -110, "Z": -105}, stake=200)
-    assert [(l["book"], l["odds"]) for l in p["legs"]] == [("Y", 105), ("Z", -105)]
+    assert [(leg["book"], leg["odds"]) for leg in p["legs"]] == [("Y", 105), ("Z", -105)]
     assert p["hold_pct"] == pytest.approx(hold_pct(105, -105))
-    assert sum(l["stake"] for l in p["legs"]) == pytest.approx(200)
+    assert sum(leg["stake"] for leg in p["legs"]) == pytest.approx(200)
     assert p["expected_loss"] == pytest.approx(200 * p["hold_pct"] / 100)
 
 
@@ -44,18 +44,20 @@ def test_best_pair_with_book_forces_one_leg_there():
     a, b = {"X": -120, "Y": 110}, {"X": 100, "Z": -105}
     p = best_pair(a, b, book="X")
     # X on side A (-120) + Z (-105) vs Y (+110) + X on side B (+100): the second is lower hold.
-    assert [(l["book"], l["odds"]) for l in p["legs"]] == [("Y", 110), ("X", 100)]
+    assert [(leg["book"], leg["odds"]) for leg in p["legs"]] == [("Y", 110), ("X", 100)]
     assert best_pair(a, b, book="Nope") is None
 
 
 def test_endpoint_sorted_ascending_and_filtered(client):
     rows = client.get("/api/lowhold", params={"max_hold": 10, "stake": 100}).json()
-    assert [r["event"] for r in rows] == ["B @ A", "B @ A"] and len(rows) == 2
+    assert [r["event"] for r in rows] == ["B @ A", "B @ A"]
+    assert len(rows) == 2
     holds = [r["hold_pct"] for r in rows]
     assert holds == sorted(holds)
     first, second = rows
-    assert [(l["pick"], l["book"], l["odds"]) for l in first["legs"]] == [("A", "DraftKings", 105), ("B", "FanDuel", -105)]
-    assert second["market"] == "totals" and [l["pick"] for l in second["legs"]] == ["Over 220.5", "Under 220.5"]
+    assert [(leg["pick"], leg["book"], leg["odds"]) for leg in first["legs"]] == [("A", "DraftKings", 105), ("B", "FanDuel", -105)]
+    assert second["market"] == "totals"
+    assert [leg["pick"] for leg in second["legs"]] == ["Over 220.5", "Under 220.5"]
     assert second["expected_loss"] == pytest.approx(100 * second["hold_pct"] / 100)
     assert second["stake"] == 100
 
@@ -65,7 +67,7 @@ def test_endpoint_sorted_ascending_and_filtered(client):
 
 def test_endpoint_book_filter(client):
     rows = client.get("/api/lowhold", params={"max_hold": 10, "book": "BetMGM"}).json()
-    assert rows and all("BetMGM" in {l["book"] for l in r["legs"]} for r in rows)
+    assert rows and all("BetMGM" in {leg["book"] for leg in r["legs"]} for r in rows)
     assert [r["hold_pct"] for r in rows] == sorted(r["hold_pct"] for r in rows)
     assert client.get("/api/lowhold", params={"max_hold": 10, "book": "Caesars"}).json() == []
     assert client.get("/api/lowhold", params={"max_hold": 10, "book": ""}).json()  # empty = any book

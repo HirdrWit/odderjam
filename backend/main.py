@@ -105,6 +105,7 @@ def low_hold(max_hold: float = 1.0, book: str | None = None, stake: float = 100.
             if (market and key != market) or len(g["outcomes"]) != 2:
                 continue  # three-way markets can't be covered with two bets
             a, b = g["outcomes"]
+            # Empty string means any book.
             pair = lowhold.best_pair(us_only(a["prices"]), us_only(b["prices"]), book or None, stake)
             if pair is None or pair["hold_pct"] > max_hold:
                 continue
