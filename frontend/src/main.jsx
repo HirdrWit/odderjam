@@ -47,6 +47,78 @@ function RefreshBox() {
   );
 }
 
+// Fixed categorical order (dark mode steps); a book keeps its colour whatever else is shown.
+const SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+const BOOK_ORDER = ["DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET"];
+const bookColor = (b, books) => {
+  const i = BOOK_ORDER.indexOf(b);
+  return SERIES[(i >= 0 ? i : BOOK_ORDER.length + books.filter((x) => !BOOK_ORDER.includes(x)).indexOf(b)) % SERIES.length];
+};
+const prob = (a) => 1 / dec(a);
+
+function MoveChart({ rows, outcome, label, books }) {
+  const [hover, setHover] = useState(null);
+  const W = 420, H = 140, L = 44, R = 8, T = 8, B = 20;
+  const pts = rows.filter((r) => r.outcome === outcome && books.includes(r.book));
+  if (!pts.length) return null;
+  const times = [...new Set(pts.map((r) => r.fetched_at))].sort();
+  const t0 = Date.parse(times[0]), t1 = Date.parse(times[times.length - 1]);
+  const ps = pts.map((r) => prob(r.price));
+  let lo = Math.min(...ps), hi = Math.max(...ps);
+  if (hi - lo < 0.02) { lo -= 0.01; hi += 0.01; }
+  const x = (t) => (t1 === t0 ? (L + W - R) / 2 : L + ((Date.parse(t) - t0) / (t1 - t0)) * (W - L - R));
+  const y = (a) => T + ((hi - prob(a)) / (hi - lo)) * (H - T - B);
+  const toOdds = (p) => fmt(p >= 0.5 ? -100 * p / (1 - p) : 100 * (1 - p) / p);
+  const shown = books.filter((b) => pts.some((r) => r.book === b));
+  const at = hover && pts.filter((r) => r.fetched_at === hover);
+  const move = (e) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - box.left) / box.width) * W;
+    setHover(times.reduce((a, t) => (Math.abs(x(t) - px) < Math.abs(x(a) - px) ? t : a), times[0]));
+  };
+  return (
+    <div className="move">
+      <div className="mut">{label} · price by book</div>
+      <svg viewBox={`0 0 ${W} ${H}`} onMouseMove={move} onMouseLeave={() => setHover(null)} role="img"
+        aria-label={`${label} odds over time`}>
+        {[hi, (hi + lo) / 2, lo].map((p) => {
+          const yy = T + ((hi - p) / (hi - lo)) * (H - T - B);
+          return <g key={p}><line x1={L} x2={W - R} y1={yy} y2={yy} className="grid" />
+            <text x={L - 6} y={yy + 4} textAnchor="end" className="axis">{toOdds(p)}</text></g>;
+        })}
+        <text x={L} y={H - 4} className="axis">{new Date(t0).toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}</text>
+        <text x={W - R} y={H - 4} textAnchor="end" className="axis">{new Date(t1).toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}</text>
+        {hover && <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} className="cross" />}
+        {shown.map((b) => {
+          const s = pts.filter((r) => r.book === b);
+          const c = bookColor(b, books);
+          return <g key={b}>
+            {s.length > 1 && <polyline fill="none" stroke={c} strokeWidth="2" strokeLinejoin="round"
+              points={s.map((r) => `${x(r.fetched_at)},${y(r.price)}`).join(" ")} />}
+            {(s.length === 1 || hover) && s.filter((r) => s.length === 1 || r.fetched_at === hover).map((r) =>
+              <circle key={r.fetched_at} cx={x(r.fetched_at)} cy={y(r.price)} r="4" fill={c} stroke="#161c24" strokeWidth="2" />)}
+          </g>;
+        })}
+      </svg>
+      <div className="legend">{shown.map((b) => <span key={b}><i style={{ background: bookColor(b, books) }} />{b}</span>)}</div>
+      {at && <div className="tip">{new Date(hover).toLocaleString()} · {at.map((r) => `${r.book} ${fmt(r.price)}`).join(" · ")}</div>}
+    </div>
+  );
+}
+
+function LineMovement({ e }) {
+  const rows = useApi(`/api/history/${encodeURIComponent(e.id)}?market=moneyline`, 300000);
+  const books = Object.keys(e.markets.moneyline);
+  if (!rows) return null;
+  if (!rows.length) return <div className="mut">No price history yet.</div>;
+  return (
+    <div className="moves" onClick={(ev) => ev.stopPropagation()}>
+      <MoveChart rows={rows} outcome="away" label={e.away} books={books} />
+      <MoveChart rows={rows} outcome="home" label={e.home} books={books} />
+    </div>
+  );
+}
+
 function OddsScreen() {
   const [sport, setSport] = useStored("oddsSport", "");
   const data = useApi(`/api/odds${sport ? `?sport=${sport}` : ""}`);
@@ -74,6 +146,7 @@ function OddsScreen() {
                 ))}
               </tbody></table>
             )}
+            {open === e.id && <LineMovement e={e} />}
           </div>
         );
       })}
@@ -107,7 +180,7 @@ function Tracker() {
   const tiles = stats && [
     ["Profit", money(stats.profit), stats.profit >= 0 ? "best" : "bad"], ["ROI", pct(stats.roi_pct)],
     ["Win rate", pct(stats.win_rate_pct)], ["Staked", money(stats.staked)],
-    ["Avg CLV", pct(stats.avg_clv_pct)], ["Pending", stats.pending],
+    ["Avg CLV", pct(stats.avg_clv_pct)], ["Sharp CLV", pct(stats.avg_clv_sharp_pct)], ["Pending", stats.pending],
   ];
   return (
     <>
@@ -121,7 +194,7 @@ function Tracker() {
         <input placeholder="Stake *" required type="number" step="0.01" value={f.stake} onChange={set("stake")} />
         <button className="primary">Add bet</button>
       </form>
-      <table><thead><tr><th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Odds</th><th>Stake</th><th>Close</th><th>CLV</th><th>Status</th><th>P/L</th><th></th></tr></thead><tbody>
+      <table><thead><tr><th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Odds</th><th>Stake</th><th>Close</th><th>CLV</th><th title="CLV vs the sharp no-vig closing line">Sharp CLV</th><th>Status</th><th>P/L</th><th></th></tr></thead><tbody>
         {(bets || []).map((b) => (
           <tr key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}`}><td>{new Date(b.placed_at).toLocaleDateString()}</td><td>{b.pick}</td><td>{b.event}</td><td>{b.book}</td>
             <td><input className="mini" type="number" defaultValue={b.odds}
@@ -131,6 +204,8 @@ function Tracker() {
             <td><input className="mini" type="number" defaultValue={b.closing_odds ?? ""} placeholder="—"
               onBlur={(e) => e.target.value !== String(b.closing_odds ?? "") && patch(b, { closing_odds: e.target.value })} /></td>
             <td className={b.clv_pct > 0 ? "best" : b.clv_pct < 0 ? "bad" : ""}>{pct(b.clv_pct)}</td>
+            <td className={b.clv_sharp_pct > 0 ? "best" : b.clv_sharp_pct < 0 ? "bad" : ""}
+              title={b.closing_sharp_odds != null ? `Sharp fair close ${fmt(b.closing_sharp_odds)}` : ""}>{pct(b.clv_sharp_pct)}</td>
             <td><select value={b.status} onChange={(e) => patch(b, { status: e.target.value })}>
               {["pending", "won", "lost", "push", "void"].map((x) => <option key={x}>{x}</option>)}</select></td>
             <td className={b.profit > 0 ? "best" : b.profit < 0 ? "bad" : ""}>{money(b.profit)}</td>
@@ -160,7 +235,8 @@ function PositiveEV() {
   const track = async (r) => {
     await fetch("/api/bets", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ event: r.event, sport: r.sport, pick: r.pick, book: r.book, odds: r.odds,
-        stake: +r.stake.toFixed(2) || 1, ev_pct: r.ev_pct }) });
+        stake: +r.stake.toFixed(2) || 1, ev_pct: r.ev_pct, event_id: r.event_id, market: r.market,
+        outcome: r.outcome, point: r.point, event_start: r.start }) });
     alert(`Tracked ${r.pick} @ ${r.book}`);
   };
   const data = useApi(`/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}`);

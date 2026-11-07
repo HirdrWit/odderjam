@@ -2,12 +2,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from backend.routes import bets
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(bets, "DB", tmp_path / "t.db")
+def client():
     return TestClient(app)
 
 

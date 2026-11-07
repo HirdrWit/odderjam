@@ -1,0 +1,104 @@
+"""Odds history: every fetched snapshot is kept in SQLite so we can chart line
+movement and fill in closing odds on tracked bets automatically.
+
+Timestamps are stored as fixed-width UTC strings (see ts()) so they sort and
+compare correctly as text.
+"""
+import os
+from datetime import datetime, timedelta, timezone
+
+from . import db
+from .engine import devig, odds
+from .providers.books import SHARP
+
+
+def ts(t: datetime | str) -> str:
+    """Normalise a datetime or ISO string to sortable UTC text: 2026-11-06T18:00:00.000000Z."""
+    if isinstance(t, str):
+        t = datetime.fromisoformat(t.replace("Z", "+00:00"))
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _keep_days() -> float:
+    return float(os.environ.get("ODDS_HISTORY_DAYS", "14"))
+
+
+def last_fetched_at() -> str | None:
+    with db.conn() as c:
+        return c.execute("SELECT MAX(fetched_at) FROM odds_history").fetchone()[0]
+
+
+def record(events: list[dict], fetched_at: datetime | None = None) -> int:
+    """Store one snapshot (all books, all events) and prune rows older than ODDS_HISTORY_DAYS."""
+    at = fetched_at or _now()
+    stamp = ts(at)
+    rows = [(e["id"], market, outcome, None, book, price, stamp)
+            for e in events
+            for market, books in e.get("markets", {}).items()
+            for book, prices in books.items()
+            for outcome, price in prices.items()]
+    with db.conn() as c:
+        c.executemany("INSERT INTO odds_history (event_id,market,outcome,point,book,price,fetched_at) "
+                      "VALUES (?,?,?,?,?,?,?)", rows)
+        c.execute("DELETE FROM odds_history WHERE fetched_at < ?", (ts(at - timedelta(days=_keep_days())),))
+    return len(rows)
+
+
+def history(event_id: str, market: str = "moneyline") -> list[dict]:
+    with db.conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT outcome, point, book, price, fetched_at FROM odds_history "
+            "WHERE event_id=? AND market=? ORDER BY fetched_at, book, outcome", (event_id, market))]
+
+
+def _last_price(c, bet, book: str, outcome: str, before: str) -> float | None:
+    r = c.execute("SELECT price FROM odds_history WHERE event_id=? AND market=? AND outcome=? AND point IS ? "
+                  "AND book=? AND fetched_at < ? ORDER BY fetched_at DESC LIMIT 1",
+                  (bet["event_id"], bet["market"], outcome, bet["point"], book, before)).fetchone()
+    return r["price"] if r else None
+
+
+def _sharp_close(c, bet, before: str) -> float | None:
+    """No-vig fair price (American) for the bet's outcome from the last pre-start sharp snapshot."""
+    r = c.execute("SELECT MAX(fetched_at) AS t FROM odds_history WHERE event_id=? AND market=? AND point IS ? "
+                  "AND book=? AND fetched_at < ?",
+                  (bet["event_id"], bet["market"], bet["point"], SHARP, before)).fetchone()
+    if not r["t"]:
+        return None
+    prices = {x["outcome"]: x["price"] for x in c.execute(
+        "SELECT outcome, price FROM odds_history WHERE event_id=? AND market=? AND point IS ? AND book=? "
+        "AND fetched_at=?", (bet["event_id"], bet["market"], bet["point"], SHARP, r["t"]))}
+    if bet["outcome"] not in prices or len(prices) < 2:
+        return None
+    names = list(prices)
+    fair = devig.multiplicative([odds.american_to_prob(prices[n]) for n in names])
+    return odds.prob_to_american(fair[names.index(bet["outcome"])])
+
+
+def capture_closing(now: datetime | None = None) -> int:
+    """For bets whose event has started, fill closing_odds (bet's book) and closing_sharp_odds
+    (sharp no-vig) from the last snapshot taken before the start. Never overwrites a value
+    already set. Returns the number of bets updated."""
+    cutoff = ts(now or _now())
+    updated = 0
+    with db.conn() as c:
+        bets = c.execute("SELECT * FROM bets WHERE event_id IS NOT NULL AND outcome IS NOT NULL "
+                         "AND event_start IS NOT NULL AND event_start <= ? "
+                         "AND (closing_odds IS NULL OR closing_sharp_odds IS NULL)", (cutoff,)).fetchall()
+        for b in bets:
+            close = b["closing_odds"]
+            if close is None and b["book"]:
+                close = _last_price(c, b, b["book"], b["outcome"], b["event_start"])
+            sharp = b["closing_sharp_odds"]
+            if sharp is None:
+                sharp = _sharp_close(c, b, b["event_start"])
+            if (close, sharp) != (b["closing_odds"], b["closing_sharp_odds"]):
+                c.execute("UPDATE bets SET closing_odds=?, closing_sharp_odds=? WHERE id=?", (close, sharp, b["id"]))
+                updated += 1
+    return updated
