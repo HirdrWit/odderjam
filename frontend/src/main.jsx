@@ -214,7 +214,86 @@ function Arbs() {
   );
 }
 
-const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, Calculator: Calculators, Tracker };
+const notifyOk = () => typeof Notification !== "undefined" && Notification.permission === "granted";
+
+// Polls the alert feed while the tab is open and shows a browser Notification for each new opportunity.
+function AlertWatcher() {
+  const [on, setOn] = useStored("alertsNotify", false);
+  const [perm, setPerm] = useState(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
+  useEffect(() => {
+    if (!on || perm !== "granted") return;
+    let live = true, after = null;
+    const poll = async () => {
+      const d = await (await fetch(`/api/alerts?after=${after ?? 0}&limit=${after == null ? 1 : 20}`)).json();
+      if (!live) return;
+      if (after != null) for (const o of [...d.items].reverse()) new Notification("Odderjam alert", { body: o.title, tag: `odderjam-${o.id}` });
+      after = d.latest_id;  // first poll only sets the starting point, so old alerts don't fire
+    };
+    poll().catch(() => {});
+    const t = setInterval(() => poll().catch(() => {}), 30000);
+    return () => { live = false; clearInterval(t); };
+  }, [on, perm]);
+  if (perm === "unsupported") return null;
+  const toggle = async () => {
+    if (on) return setOn(false);
+    const p = perm === "granted" ? perm : await Notification.requestPermission();
+    setPerm(p);
+    setOn(p === "granted");
+  };
+  return (
+    <div className="refresh">
+      <label className="mut"><input type="checkbox" checked={on && notifyOk()} onChange={toggle} /> Browser alerts</label>
+      {perm === "denied" && <div className="mut small">Notifications are blocked in this browser</div>}
+    </div>
+  );
+}
+
+const BOOKS = ["DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet"];
+const blankRule = { name: "", kind: "ev", min_value: 2, book: "", market: "", sport: "" };
+
+function Alerts() {
+  const [tick, setTick] = useState(0);
+  const rules = useApi(`/api/alerts/rules?t=${tick}`, 600000);
+  const feed = useApi(`/api/alerts?t=${tick}`, 30000);
+  const [f, setF] = useState(blankRule);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const add = async (e) => {
+    e.preventDefault();
+    await fetch("/api/alerts/rules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, min_value: +f.min_value }) });
+    setF(blankRule); setTick((t) => t + 1);
+  };
+  const del = async (r) => { await fetch(`/api/alerts/rules/${r.id}`, { method: "DELETE" }); setTick((t) => t + 1); };
+  return (
+    <>
+      <p className="mut">Rules are checked after each odds fetch that already happens. Alerts never spend extra API credits.
+        {feed && (feed.discord ? " Discord webhook is on." : " Set DISCORD_WEBHOOK_URL to also post to Discord.")}</p>
+      <form className="bar wrap" onSubmit={add}>
+        <select value={f.kind} onChange={set("kind")}><option value="ev">+EV</option><option value="arb">Arbitrage</option></select>
+        Min % <input type="number" step="0.5" value={f.min_value} onChange={set("min_value")} />
+        <select value={f.book} onChange={set("book")}>{["", ...BOOKS].map((b) => <option key={b} value={b}>{b || "Any book"}</option>)}</select>
+        <select value={f.market} onChange={set("market")}><option value="">Any market</option>
+          {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <select value={f.sport} onChange={set("sport")}>{["", "NBA", "NFL", "MLB", "NHL"].map((s) => <option key={s} value={s}>{s || "Any sport"}</option>)}</select>
+        <input placeholder="Name (optional)" value={f.name} onChange={set("name")} />
+        <button className="primary">Add alert</button>
+      </form>
+      <table><thead><tr><th>Rule</th><th>Type</th><th>Min</th><th>Book</th><th>Market</th><th>Sport</th><th></th></tr></thead><tbody>
+        {(rules || []).map((r) => (
+          <tr key={r.id}><td>{r.name}</td><td>{r.kind === "ev" ? "+EV" : "Arb"}</td><td>{r.min_value}%</td><td>{r.book || "Any"}</td>
+            <td>{MARKETS[r.market] || "Any"}</td><td>{r.sport || "Any"}</td><td><button className="x" onClick={() => del(r)}>✕</button></td></tr>
+        ))}
+      </tbody></table>
+      <h3>Recent alerts</h3>
+      <table><thead><tr><th>When</th><th>Alert</th><th>Rule</th></tr></thead><tbody>
+        {(feed?.items || []).map((o) => (
+          <tr key={o.id}><td>{new Date(o.created_at).toLocaleString()}</td><td>{o.title}</td><td className="mut">{o.rule_name}</td></tr>
+        ))}
+      </tbody></table>
+    </>
+  );
+}
+
+const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, Calculator: Calculators, Tracker, Alerts };
 function App() {
   const [tab, setTab] = useState(() => { try { const t = localStorage.getItem("tab"); return t in TABS ? t : "Odds Screen"; } catch { return "Odds Screen"; } });
   const go = (t) => { setTab(t); try { localStorage.setItem("tab", t); } catch {} };
@@ -222,7 +301,7 @@ function App() {
   return (
     <div className="app">
       <nav><h1>Odderjam</h1>{Object.keys(TABS).map((t) => (
-        <button key={t} className={t === tab ? "on" : ""} onClick={() => go(t)}>{t}</button>))}<RefreshBox /></nav>
+        <button key={t} className={t === tab ? "on" : ""} onClick={() => go(t)}>{t}</button>))}<RefreshBox /><AlertWatcher /></nav>
       <main><Page /></main>
     </div>
   );
