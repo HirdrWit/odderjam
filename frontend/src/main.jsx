@@ -2,26 +2,10 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import Calculators from "./Calculators.jsx";
+import OddsScreen from "./OddsScreen.jsx";
+import { useStored, useApi } from "./hooks.js";
 
 const fmt = (o) => (o > 0 ? `+${Math.round(o)}` : `${Math.round(o)}`);
-
-function useStored(key, init) {
-  const [v, setV] = useState(() => { try { const x = localStorage.getItem(key); return x == null ? init : JSON.parse(x); } catch { return init; } });
-  return [v, (n) => { setV(n); try { localStorage.setItem(key, JSON.stringify(n)); } catch {} }];
-}
-
-function useApi(url, every = 60000) {
-  const [data, setData] = useState(null);
-  useEffect(() => {
-    let live = true;
-    const load = () => fetch(url).then((r) => r.json()).then((d) => live && setData(d));
-    load();
-    const t = setInterval(load, every);
-    window.addEventListener("data-changed", load);
-    return () => { live = false; clearInterval(t); window.removeEventListener("data-changed", load); };
-  }, [url]);
-  return data;
-}
 
 const age = (s) => s == null ? "never" : s < 90 ? `${Math.round(s)}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${(s / 3600).toFixed(1)}h ago`;
 
@@ -48,49 +32,6 @@ function RefreshBox() {
 }
 
 const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
-const pt = (p, total) => (p == null ? "" : total ? `${p}` : p > 0 ? `+${p}` : `${p}`);
-const outcomeLabel = (o) => `${o.name}${o.point == null ? "" : ` ${pt(o.point, o.name === "Over" || o.name === "Under")}`}`;
-
-function OddsScreen() {
-  const [sport, setSport] = useStored("oddsSport", "");
-  const [market, setMarket] = useStored("oddsMarket", "moneyline");
-  const data = useApi(`/api/odds${sport ? `?sport=${sport}` : ""}`);
-  const [open, setOpen] = useState(null);
-  return (
-    <>
-      <div className="bar">
-        <select value={sport} onChange={(e) => setSport(e.target.value)}>
-          {["", "NBA", "NFL", "MLB", "NHL"].map((s) => <option key={s} value={s}>{s || "All sports"}</option>)}
-        </select>
-        <select value={market} onChange={(e) => setMarket(e.target.value)}>
-          {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-      </div>
-      {(data || []).filter((e) => e.markets[market]).map((e) => {
-        const outs = e.markets[market];
-        const books = [...new Set(outs.flatMap((o) => Object.keys(o.prices)))];
-        const best = (o) => Math.max(...Object.values(o.prices));
-        const bestBy = (name) => outs.filter((o) => o.name === name).reduce((a, o) => (!a || best(o) > best(a) ? o : a), null);
-        const names = [...new Set(outs.map((o) => o.name))];
-        return (
-          <div className="card" key={e.id} onClick={() => setOpen(open === e.id ? null : e.id)}>
-            <b>{e.away} @ {e.home}</b> <span className="mut">{e.sport} · {new Date(e.start).toLocaleString()}</span>
-            <div className="mut">Best: {names.map((n) => { const o = bestBy(n); return `${outcomeLabel(o)} ${fmt(best(o))}`; }).join(" · ")}</div>
-            {open === e.id && (
-              <table><thead><tr><th>Book</th>{outs.map((o) => <th key={`${o.name}${o.point}`}>{outcomeLabel(o)}</th>)}</tr></thead><tbody>
-                {books.map((b) => (
-                  <tr key={b}><td>{b}</td>
-                    {outs.map((o) => <td key={`${o.name}${o.point}`} className={o.prices[b] === best(o) ? "best" : ""}>{o.prices[b] == null ? "" : fmt(o.prices[b])}</td>)}</tr>
-                ))}
-              </tbody></table>
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
 const money = (n) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 const pct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 const blank = { event: "", sport: "", pick: "", book: "", odds: "", stake: "", closing_odds: "", status: "pending" };
