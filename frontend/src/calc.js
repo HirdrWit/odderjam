@@ -209,3 +209,76 @@ export function spreadToMoneyline(spread, sd) {
   const fav = normCdf(Math.abs(spread) / sd);
   return { fav_prob: fav, dog_prob: 1 - fav, fav_american: probToAmerican(fav), dog_american: probToAmerican(1 - fav) };
 }
+
+// ---- stake sizing (backend/engine/sizing.py) ----
+const CENT = 0.01, EPS = 1e-9;
+const r2 = (x) => Math.round(x * 100) / 100;
+const incOf = (inc) => (inc > 0 ? inc : CENT);
+
+/** Largest stake allowed on one side (max rounded down to the increment); throws if below one increment. */
+export function stakeCap(increment, maxPerSide) {
+  if (!(maxPerSide > 0)) return Infinity;
+  const inc = incOf(increment), cap = Math.floor(maxPerSide / inc + EPS) * inc;
+  if (cap <= 0) throw new Error("max stake per side is smaller than the rounding increment");
+  return r2(cap);
+}
+
+/** Single bet (e.g. a +EV Kelly stake): nearest increment, then capped. */
+export function roundStake(stake, increment = 1, maxPerSide = null) {
+  const inc = incOf(increment);
+  return r2(Math.min(Math.max(Math.floor(stake / inc + 0.5 + EPS) * inc, 0), stakeCap(increment, maxPerSide)));
+}
+
+function choices(target, inc, cap) {
+  const steps = target / inc, lo = Math.floor(steps + 1e-6) * inc;
+  const near = Math.abs(steps - Math.round(steps)) < 1e-6 ? [lo] : [lo, lo + inc];
+  const opts = [...new Set(near.filter((x) => x > 0 && x <= cap + EPS).map(r2))].sort((a, b) => a - b);
+  return opts.length ? opts : [r2(Math.min(inc, cap))];
+}
+
+const cartesian = (lists) => lists.reduce((acc, l) => acc.flatMap((a) => l.map((x) => [...a, x])), [[]]);
+const better = (a, b) => !b || a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+
+/** Rounded, capped stakes for an arb / low-hold bet; best worst-case % among floor/ceil choices. */
+export function sizeArb(american, total, increment = 1, maxPerSide = null) {
+  const dec = american.map(americanToDecimal);
+  const ideal = arb(american, total);
+  const inc = incOf(increment), cap = stakeCap(increment, maxPerSide);
+  const scale = Math.min(1, cap / Math.max(...ideal.stakes));
+  const targetTotal = total * scale, targets = ideal.stakes.map((s) => s * scale);
+  const score = (st) => {
+    const staked = st.reduce((a, b) => a + b, 0);
+    const worst = Math.min(...st.map((s, i) => s * dec[i])) - staked;
+    return [Math.round((worst / staked) * 1e9) / 1e9, -Math.abs(staked - targetTotal)];
+  };
+  let stakes = null, best = null;
+  for (const st of cartesian(targets.map((t) => choices(t, inc, cap)))) {
+    const sc = score(st);
+    if (better(sc, best)) { best = sc; stakes = st; }
+  }
+  const staked = r2(stakes.reduce((a, b) => a + b, 0));
+  const profits = stakes.map((s, i) => s * dec[i] - staked);
+  const lo = Math.min(...profits), hi = Math.max(...profits);
+  const roundingLoss = ideal.profit_pct >= 0 && lo < -EPS;
+  return {
+    stakes, ideal_stakes: targets, total_stake: staked, profits, min_profit: lo, max_profit: hi,
+    min_profit_pct: (lo / staked) * 100, ideal_profit_pct: ideal.profit_pct, capped: scale < 1, rounding_loss: roundingLoss,
+    warning: roundingLoss ? `Rounded stakes lose up to $${(-lo).toFixed(2)} on one outcome; use a smaller increment` : null,
+  };
+}
+
+/** Bonus bet (stake not returned) on A, cash hedge on B: rounded/capped hedge stake. */
+export function sizeBonusHedge(bonus, oddsBonus, oddsHedge, increment = 1, maxPerSide = null) {
+  const da = americanToDecimal(oddsBonus), db = americanToDecimal(oddsHedge);
+  const winA = bonus * (da - 1), ideal = winA / db;
+  const inc = incOf(increment), cap = stakeCap(increment, maxPerSide);
+  const profits = (h) => [winA - h, h * (db - 1)];
+  let hedge = null, best = null;
+  for (const h of choices(Math.min(ideal, cap), inc, cap)) {
+    const sc = [Math.min(...profits(h)), -Math.abs(h - ideal)];
+    if (better(sc, best)) { best = sc; hedge = h; }
+  }
+  const [ifA, ifB] = profits(hedge);
+  return { hedge_stake: hedge, ideal_hedge: ideal, profit_if_bonus_wins: ifA, profit_if_hedge_wins: ifB,
+    min_profit: Math.min(ifA, ifB), max_profit: Math.max(ifA, ifB), capped: ideal > cap, conversion_pct: (Math.min(ifA, ifB) / bonus) * 100 };
+}

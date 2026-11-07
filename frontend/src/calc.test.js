@@ -127,3 +127,37 @@ test("spread to moneyline", () => {
   assert.ok(f.fav_american < -100 && f.dog_american > 100);
   close(c.normCdf(1.96), 0.975, 1e-4);
 });
+
+test("stake rounding matches backend", () => {
+  assert.equal(c.roundStake(13.47, 5), 15);
+  assert.equal(c.roundStake(12.49, 5), 10);
+  assert.equal(c.roundStake(13.47, 0), 13.47);
+  assert.equal(c.roundStake(812, 10, 305), 300);
+  assert.throws(() => c.roundStake(10, 10, 5));
+});
+
+test("sizeArb re-balances and flags rounding losses", () => {
+  const r = c.sizeArb([110, 110], 100, 0);
+  assert.deepEqual(r.stakes, [50, 50]);
+  close(r.min_profit, 5);
+  assert.deepEqual(c.sizeArb([-110, -110], 200, 5).stakes, [100, 100]);
+  const capped = c.sizeArb([110, -105], 1000, 5, 300);
+  assert.ok(Math.max(...capped.stakes) <= 300 && capped.capped && capped.min_profit > 0);
+  assert.ok(c.sizeArb([105, -103], 20, 0).min_profit > 0);
+  const lossy = c.sizeArb([105, -103], 20, 10);
+  assert.ok(lossy.min_profit < 0 && lossy.rounding_loss && lossy.warning);
+  for (const a of [100, 105, 120, 150, 300]) for (const b of [-140, -120, -105, 100, 110])
+    for (const t of [10, 50, 100, 333]) for (const inc of [1, 5, 10]) {
+      const x = c.sizeArb([a, b], t, inc);
+      assert.ok(x.stakes.every((s) => Math.abs(s / inc - Math.round(s / inc)) < 1e-9));
+      if (x.ideal_profit_pct >= 0) assert.equal(x.rounding_loss, x.min_profit < -1e-9);
+    }
+});
+
+test("sizeBonusHedge rounds the hedge", () => {
+  const r = c.sizeBonusHedge(100, 250, -300, 5);
+  close(r.ideal_hedge, 187.5);
+  assert.ok([185, 190].includes(r.hedge_stake));
+  close(r.profit_if_bonus_wins, 250 - r.hedge_stake);
+  assert.equal(c.sizeBonusHedge(100, 250, -300, 5, 100).hedge_stake, 100);
+});

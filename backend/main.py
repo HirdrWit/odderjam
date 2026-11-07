@@ -1,10 +1,10 @@
 from collections.abc import Iterator
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from .engine import arb as arbm, devig, ev, markets as mk, odds
+from .engine import arb as arbm, devig, ev, markets as mk, odds, sizing
 from .providers.books import SHARP, US_BOOKS, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
@@ -41,7 +41,8 @@ def _groups(e: dict) -> Iterator[tuple[str, dict]]:
 
 @app.get("/api/ev")
 def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25,
-                market: str | None = None):
+                market: str | None = None, round_to: float = 1.0, max_side: float | None = None):
+    _check_sizing(round_to, max_side)
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     rows = []
     for e in get_snapshot():
@@ -57,17 +58,32 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                         continue
                     v = ev.ev_pct(fp, price)
                     if v >= min_ev:
+                        kelly_stake = bankroll * ev.kelly_fraction(fp, price, kelly)
                         rows.append({
                             "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                             "market": key, "point": o["point"], "pick": mk.label(o), "book": book_name,
                             "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
-                            "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
+                            "stake": sizing.round_stake(kelly_stake, round_to, max_side),
+                            "kelly_stake": kelly_stake,
                         })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 
 
+def _check_sizing(round_to: float, max_side: float | None) -> None:
+    try:
+        sizing.stake_cap(round_to, max_side)
+    except ValueError as err:
+        raise HTTPException(400, str(err)) from err
+
+
 @app.get("/api/arbs")
-def arbs(min_profit: float = 0.0, market: str | None = None):
+def arbs(min_profit: float = 0.0, market: str | None = None, total: float | None = None, round_to: float = 1.0,
+         max_side: float | None = None):
+    """Arbs sized to `total` (default: current bankroll), rounded to `round_to`, capped at `max_side`."""
+    _check_sizing(round_to, max_side)
+    if total is None or total <= 0:
+        total = bets.bankroll_info()["current"]
+        total = total if total > 0 else 100.0
     rows = []
     for e in get_snapshot():
         for key, g in _groups(e):
@@ -84,12 +100,16 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                     continue
                 result = arbm.arb([price for _, _, price in best])
                 if result["profit_pct"] >= min_profit:
+                    sized = sizing.size_arb([price for _, _, price in best], total, round_to, max_side)
                     rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
                                  "market": key, "point": g["point"],
                                  "legs": [{"pick": mk.label(o), "point": o["point"], "book": book, "odds": price,
-                                           "stake": stake}
-                                          for (o, book, price), stake in zip(best, result["stakes"])],
-                                 "profit_pct": result["profit_pct"]})
+                                           "stake": stake, "ideal_stake": ideal, "profit_if_wins": won}
+                                          for (o, book, price), stake, ideal, won
+                                          in zip(best, sized["stakes"], sized["ideal_stakes"], sized["profits"])],
+                                 "profit_pct": result["profit_pct"],
+                                 **{k: sized[k] for k in ("total_stake", "min_profit", "max_profit", "min_profit_pct",
+                                                          "capped", "rounding_loss", "warning")}})
     return sorted(rows, key=lambda r: -r["profit_pct"])
 
 

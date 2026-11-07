@@ -2,13 +2,9 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import Calculators from "./Calculators.jsx";
+import { SizingBar, sizingQuery, useSizing, useStored } from "./Sizing.jsx";
 
 const fmt = (o) => (o > 0 ? `+${Math.round(o)}` : `${Math.round(o)}`);
-
-function useStored(key, init) {
-  const [v, setV] = useState(() => { try { const x = localStorage.getItem(key); return x == null ? init : JSON.parse(x); } catch { return init; } });
-  return [v, (n) => { setV(n); try { localStorage.setItem(key, JSON.stringify(n)); } catch {} }];
-}
 
 function useApi(url, every = 60000) {
   const [data, setData] = useState(null);
@@ -162,6 +158,7 @@ function PositiveEV() {
   const [kelly, setKelly] = useStored("evKelly", 0.25);
   const [book, setBook] = useState(() => localStorage.getItem("evBook") ?? "DraftKings");
   const bank = useApi("/api/bankroll", 30000);
+  const sz = useSizing();
   const setStart = async (v) => {
     await fetch("/api/bankroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starting: v }) });
     window.dispatchEvent(new Event("data-changed"));
@@ -170,10 +167,10 @@ function PositiveEV() {
   const track = async (r) => {
     await fetch("/api/bets", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ event: r.event, sport: r.sport, market: r.market, pick: r.pick, book: r.book, odds: r.odds,
-        stake: +r.stake.toFixed(2) || 1, ev_pct: r.ev_pct }) });
+        stake: r.stake || 1, ev_pct: r.ev_pct }) });
     alert(`Tracked ${r.pick} @ ${r.book}`);
   };
-  const data = useApi(`/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}`);
+  const data = useApi(`/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}${sizingQuery(sz)}`);
   return (
     <>
       <div className="bar">
@@ -186,11 +183,12 @@ function PositiveEV() {
           <span className="mut">start $<input className="mini" type="number" defaultValue={bank.starting}
             onBlur={(e) => +e.target.value !== bank.starting && setStart(+e.target.value)} /> {bank.profit >= 0 ? "+" : "-"}${Math.abs(bank.profit).toFixed(2)} P/L</span></span>}
         Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => setKelly(+e.target.value)} />
+        <SizingBar s={sz} />
       </div>
       <table><thead><tr><th>EV%</th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th><th>Fair</th><th>Stake</th><th></th></tr></thead><tbody>
         {(data || []).map((r, i) => (
           <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{MARKETS[r.market] || r.market}</td><td>{r.event}</td>
-            <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td><td>${r.stake.toFixed(2)}</td>
+            <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td><td title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>{money(r.stake)}</td>
             <td><button className="track" onClick={() => track(r)}>Track</button></td></tr>
         ))}
       </tbody></table>
@@ -200,14 +198,20 @@ function PositiveEV() {
 
 function Arbs() {
   const [min, setMin] = useStored("arbMin", 0);
-  const data = useApi(`/api/arbs?min_profit=${min}`);
+  const sz = useSizing();
+  const bank = useApi("/api/bankroll", 30000);
+  const data = useApi(`/api/arbs?min_profit=${min}${sizingQuery(sz, true)}`);
   return (
     <>
-      <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} /></div>
+      <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} />
+        <SizingBar s={sz} showTotal totalHint={bank ? bank.current.toFixed(0) : "bankroll"} /></div>
       {(data || []).map((r, i) => (
         <div className="card" key={i}>
           <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
-          {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100</div>)}
+          {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake <b>{money(l.stake)}</b>{" "}
+            <span className="mut">· profit if wins <span className={l.profit_if_wins >= 0 ? "best" : "bad"}>{money(l.profit_if_wins)}</span></span></div>)}
+          <div className="mut">Total {money(r.total_stake)} · profit {money(r.min_profit)} to {money(r.max_profit)}{r.capped ? " · scaled down to max per side" : ""}</div>
+          {r.warning && <div className="bad">⚠ {r.warning}</div>}
         </div>
       ))}
     </>
