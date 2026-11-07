@@ -47,8 +47,13 @@ function RefreshBox() {
   );
 }
 
+const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
+const pt = (p, total) => (p == null ? "" : total ? `${p}` : p > 0 ? `+${p}` : `${p}`);
+const outcomeLabel = (o) => `${o.name}${o.point == null ? "" : ` ${pt(o.point, o.name === "Over" || o.name === "Under")}`}`;
+
 function OddsScreen() {
   const [sport, setSport] = useStored("oddsSport", "");
+  const [market, setMarket] = useStored("oddsMarket", "moneyline");
   const data = useApi(`/api/odds${sport ? `?sport=${sport}` : ""}`);
   const [open, setOpen] = useState(null);
   return (
@@ -57,20 +62,25 @@ function OddsScreen() {
         <select value={sport} onChange={(e) => setSport(e.target.value)}>
           {["", "NBA", "NFL", "MLB", "NHL"].map((s) => <option key={s} value={s}>{s || "All sports"}</option>)}
         </select>
+        <select value={market} onChange={(e) => setMarket(e.target.value)}>
+          {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
       </div>
-      {(data || []).map((e) => {
-        const ml = e.markets.moneyline;
-        const best = (side) => Math.max(...Object.values(ml).map((o) => o[side]));
+      {(data || []).filter((e) => e.markets[market]).map((e) => {
+        const outs = e.markets[market];
+        const books = [...new Set(outs.flatMap((o) => Object.keys(o.prices)))];
+        const best = (o) => Math.max(...Object.values(o.prices));
+        const bestBy = (name) => outs.filter((o) => o.name === name).reduce((a, o) => (!a || best(o) > best(a) ? o : a), null);
+        const names = [...new Set(outs.map((o) => o.name))];
         return (
           <div className="card" key={e.id} onClick={() => setOpen(open === e.id ? null : e.id)}>
             <b>{e.away} @ {e.home}</b> <span className="mut">{e.sport} · {new Date(e.start).toLocaleString()}</span>
-            <div className="mut">Best: {e.away} {fmt(best("away"))} · {e.home} {fmt(best("home"))}</div>
+            <div className="mut">Best: {names.map((n) => { const o = bestBy(n); return `${outcomeLabel(o)} ${fmt(best(o))}`; }).join(" · ")}</div>
             {open === e.id && (
-              <table><thead><tr><th>Book</th><th>{e.away}</th><th>{e.home}</th></tr></thead><tbody>
-                {Object.entries(ml).map(([b, o]) => (
+              <table><thead><tr><th>Book</th>{outs.map((o) => <th key={`${o.name}${o.point}`}>{outcomeLabel(o)}</th>)}</tr></thead><tbody>
+                {books.map((b) => (
                   <tr key={b}><td>{b}</td>
-                    <td className={o.away === best("away") ? "best" : ""}>{fmt(o.away)}</td>
-                    <td className={o.home === best("home") ? "best" : ""}>{fmt(o.home)}</td></tr>
+                    {outs.map((o) => <td key={`${o.name}${o.point}`} className={o.prices[b] === best(o) ? "best" : ""}>{o.prices[b] == null ? "" : fmt(o.prices[b])}</td>)}</tr>
                 ))}
               </tbody></table>
             )}
@@ -159,7 +169,7 @@ function PositiveEV() {
   const pickBook = (b) => { setBook(b); localStorage.setItem("evBook", b); };
   const track = async (r) => {
     await fetch("/api/bets", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event: r.event, sport: r.sport, pick: r.pick, book: r.book, odds: r.odds,
+      body: JSON.stringify({ event: r.event, sport: r.sport, market: r.market, pick: r.pick, book: r.book, odds: r.odds,
         stake: +r.stake.toFixed(2) || 1, ev_pct: r.ev_pct }) });
     alert(`Tracked ${r.pick} @ ${r.book}`);
   };
@@ -177,9 +187,9 @@ function PositiveEV() {
             onBlur={(e) => +e.target.value !== bank.starting && setStart(+e.target.value)} /> {bank.profit >= 0 ? "+" : "-"}${Math.abs(bank.profit).toFixed(2)} P/L</span></span>}
         Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => setKelly(+e.target.value)} />
       </div>
-      <table><thead><tr><th>EV%</th><th>Pick</th><th>Event</th><th>Book</th><th>Odds</th><th>Fair</th><th>Stake</th><th></th></tr></thead><tbody>
+      <table><thead><tr><th>EV%</th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th><th>Fair</th><th>Stake</th><th></th></tr></thead><tbody>
         {(data || []).map((r, i) => (
-          <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{r.event}</td>
+          <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{MARKETS[r.market] || r.market}</td><td>{r.event}</td>
             <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td><td>${r.stake.toFixed(2)}</td>
             <td><button className="track" onClick={() => track(r)}>Track</button></td></tr>
         ))}
@@ -196,8 +206,8 @@ function Arbs() {
       <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} /></div>
       {(data || []).map((r, i) => (
         <div className="card" key={i}>
-          <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport}</span>
-          {r.legs.map((l) => <div key={l.book}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100</div>)}
+          <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
+          {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100</div>)}
         </div>
       ))}
     </>
