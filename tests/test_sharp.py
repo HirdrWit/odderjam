@@ -52,3 +52,18 @@ def test_api_ev_reports_sharps_and_filters_by_hold():
     assert rows and all(r["sharps"][0]["book"] == "Pinnacle" and r["sharp_hold_pct"] > 0 for r in rows)
     assert c.get("/api/ev", params={"min_ev": -100, "sharps": "Pinnacle:1", "max_hold": 0}).json() == []
     assert c.get("/api/ev", params={"method": "nope"}).status_code == 400
+
+
+def test_group_consensus_uses_only_sharps_pricing_every_side():
+    outcomes = [{"name": "Over", "point": 220.5, "prices": {"Pinnacle": -110, "Circa Sports": -115}},
+                {"name": "Under", "point": 220.5, "prices": {"Pinnacle": -110}}]
+    r = sharp.group_consensus(outcomes, {"Pinnacle": 1, "Circa Sports": 1})
+    assert [s["book"] for s in r["sharps"]] == ["Pinnacle"]
+    assert r["probs"] == pytest.approx([0.5, 0.5])
+    assert sharp.group_consensus(outcomes, {"Circa Sports": 1}) is None
+
+
+def test_api_ev_sharp_consensus_covers_spreads_and_totals():
+    rows = TestClient(app).get("/api/ev", params={"min_ev": -100, "sharps": "Pinnacle:1"}).json()
+    assert {"spreads", "totals"} <= {r["market"] for r in rows}
+    assert all(r["sharps"] for r in rows)

@@ -1,9 +1,10 @@
+from collections.abc import Iterator
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from .engine import arb as arbm, devig, ev, odds, sharp
+from .engine import arb as arbm, devig, ev, markets as mk, odds, sharp
 from .providers.books import SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
@@ -13,12 +14,29 @@ app.include_router(bets.router)
 app.include_router(bets.bankroll_router)
 
 
+def _us_markets(markets: dict) -> dict:
+    """Markets with prices filtered to US books; outcomes and markets left empty are dropped."""
+    out = {}
+    for key, outcomes in markets.items():
+        kept = [{**o, "prices": us_only(o["prices"])} for o in outcomes]
+        kept = [o for o in kept if o["prices"]]
+        if kept:
+            out[key] = kept
+    return out
+
+
 @app.get("/api/odds")
 def odds_screen(sport: str | None = None):
-    evs = get_snapshot()
-    shown = [{**e, "markets": {"moneyline": us_only(e["markets"]["moneyline"])}} for e in evs
+    shown = [{**e, "markets": _us_markets(e["markets"])} for e in get_snapshot()
              if not sport or e["sport"] == sport]
-    return [e for e in shown if e["markets"]["moneyline"]]
+    return [e for e in shown if e["markets"]]
+
+
+def _groups(e: dict) -> Iterator[tuple[str, dict]]:
+    """Yield (market_key, line_group) for every complete line group in an event."""
+    for key, outcomes in e["markets"].items():
+        for g in mk.line_groups(key, outcomes, e["home"], e["away"]):
+            yield key, g
 
 
 @app.get("/api/sharps")
@@ -30,7 +48,7 @@ def sharp_settings():
 
 @app.get("/api/ev")
 def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25,
-                sharps: str | None = None, max_hold: float | None = None):
+                sharps: str | None = None, max_hold: float | None = None, market: str | None = None):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
     more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price."""
     if method not in devig.METHODS:
@@ -40,44 +58,53 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     rows = []
     for e in get_snapshot():
-        ml = e["markets"]["moneyline"]
-        fair = sharp.consensus(ml, weights, method, max_hold)
-        if fair is None:
-            continue
-        for side in ("home", "away"):
-            fp = fair[side]
-            for book_name, o in ml.items():
-                if book_name not in US_BOOKS or (book and book_name != book):
-                    continue
-                v = ev.ev_pct(fp, o[side])
-                if v >= min_ev:
-                    rows.append({
-                        "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
-                        "pick": e[side], "book": book_name, "odds": o[side], "fair_prob": fp,
-                        "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
-                        "stake": bankroll * ev.kelly_fraction(fp, o[side], kelly),
-                        "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"],
-                    })
+        for key, g in _groups(e):
+            if market and key != market:
+                continue
+            # Only sharps pricing every side of this exact line can devig it.
+            fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold)
+            if fair is None:
+                continue
+            for o, fp in zip(g["outcomes"], fair["probs"]):
+                for book_name, price in o["prices"].items():
+                    if book_name not in US_BOOKS or (book and book_name != book):
+                        continue
+                    v = ev.ev_pct(fp, price)
+                    if v >= min_ev:
+                        rows.append({
+                            "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
+                            "market": key, "point": o["point"], "pick": mk.label(o), "book": book_name,
+                            "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
+                            "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
+                            "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"],
+                        })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 
 
 @app.get("/api/arbs")
-def arbs(min_profit: float = 0.0):
+def arbs(min_profit: float = 0.0, market: str | None = None):
     rows = []
     for e in get_snapshot():
-        ml = us_only(e["markets"]["moneyline"])
-        if len(ml) < 2:
-            continue
-        bh = max(ml.items(), key=lambda kv: kv[1]["home"])
-        ba = max(ml.items(), key=lambda kv: kv[1]["away"])
-        if bh[0] == ba[0]:
-            continue
-        r = arbm.arb([bh[1]["home"], ba[1]["away"]])
-        if r["profit_pct"] >= min_profit:
-            rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
-                         "legs": [{"pick": e["home"], "book": bh[0], "odds": bh[1]["home"], "stake": r["stakes"][0]},
-                                  {"pick": e["away"], "book": ba[0], "odds": ba[1]["away"], "stake": r["stakes"][1]}],
-                         "profit_pct": r["profit_pct"]})
+        for key, g in _groups(e):
+            if market and key != market:
+                continue
+            best = []
+            for o in g["outcomes"]:
+                us_prices = us_only(o["prices"])
+                if not us_prices:
+                    break
+                best.append((o, *max(us_prices.items(), key=lambda kv: kv[1])))
+            else:
+                if len({book for _, book, _ in best}) < 2:
+                    continue
+                result = arbm.arb([price for _, _, price in best])
+                if result["profit_pct"] >= min_profit:
+                    rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
+                                 "market": key, "point": g["point"],
+                                 "legs": [{"pick": mk.label(o), "point": o["point"], "book": book, "odds": price,
+                                           "stake": stake}
+                                          for (o, book, price), stake in zip(best, result["stakes"])],
+                                 "profit_pct": result["profit_pct"]})
     return sorted(rows, key=lambda r: -r["profit_pct"])
 
 
