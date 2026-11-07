@@ -16,12 +16,14 @@ DEFAULT_SHARP_WEIGHTS = "Pinnacle:1,Circa Sports:0.5,Novig:0.5,BetOnline.ag:0.25
 
 
 def sharp_weights_spec() -> str:
+    """Return the SHARP_WEIGHTS spec string: the env var, or the default."""
     return os.environ.get("SHARP_WEIGHTS", DEFAULT_SHARP_WEIGHTS)
 
 
 def max_sharp_hold() -> float:
     """Sharp books holding more than this (percent) are left out of the fair price."""
     return float(os.environ.get("MAX_SHARP_HOLD", "6"))
+
 
 US_BOOKS = {
     "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics",
