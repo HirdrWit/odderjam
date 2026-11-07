@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .engine import arb as arbm, devig, ev, markets as mk, odds
-from .providers.books import SHARP, US_BOOKS, us_only
+from .providers.books import SHARP, US_BOOKS, bet_link, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
 
@@ -18,7 +18,7 @@ def _us_markets(markets: dict) -> dict:
     """Markets with prices filtered to US books; outcomes and markets left empty are dropped."""
     out = {}
     for key, outcomes in markets.items():
-        kept = [{**o, "prices": us_only(o["prices"])} for o in outcomes]
+        kept = [{**o, "prices": us_only(o["prices"]), "links": us_only(o.get("links") or {})} for o in outcomes]
         kept = [o for o in kept if o["prices"]]
         if kept:
             out[key] = kept
@@ -60,7 +60,8 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                         rows.append({
                             "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                             "market": key, "point": o["point"], "pick": mk.label(o), "book": book_name,
-                            "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
+                            "odds": price, "link": bet_link(book_name, o),
+                            "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                             "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
                         })
     return sorted(rows, key=lambda r: -r["ev_pct"])
@@ -87,7 +88,7 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                     rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
                                  "market": key, "point": g["point"],
                                  "legs": [{"pick": mk.label(o), "point": o["point"], "book": book, "odds": price,
-                                           "stake": stake}
+                                           "link": bet_link(book, o), "stake": stake}
                                           for (o, book, price), stake in zip(best, result["stakes"])],
                                  "profit_pct": result["profit_pct"]})
     return sorted(rows, key=lambda r: -r["profit_pct"])
