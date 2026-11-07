@@ -23,7 +23,9 @@ def conn() -> sqlite3.Connection:
         id INTEGER PRIMARY KEY AUTOINCREMENT, placed_at TEXT NOT NULL, event TEXT, sport TEXT,
         market TEXT DEFAULT 'moneyline', pick TEXT NOT NULL, book TEXT, odds REAL NOT NULL,
         stake REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending', closing_odds REAL,
-        ev_pct REAL, notes TEXT)""")
+        ev_pct REAL, notes TEXT, is_bonus INTEGER NOT NULL DEFAULT 0)""")
+    if "is_bonus" not in {r["name"] for r in c.execute("PRAGMA table_info(bets)")}:
+        c.execute("ALTER TABLE bets ADD COLUMN is_bonus INTEGER NOT NULL DEFAULT 0")
     c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value REAL)")
     return c
 
@@ -40,12 +42,19 @@ class BetIn(BaseModel):
     closing_odds: float | None = None
     ev_pct: float | None = None
     notes: str = ""
+    is_bonus: bool = False  # bonus bet / free bet: stake is not cash and is not returned
 
 
 def profit(b) -> float:
+    """Cash P/L. A bonus bet pays winnings only when it wins and costs $0 when it loses."""
     if b["status"] == "won":
         return b["stake"] * (american_to_decimal(b["odds"]) - 1)
-    return -b["stake"] if b["status"] == "lost" else 0.0
+    return -cash_stake(b) if b["status"] == "lost" else 0.0
+
+
+def cash_stake(b) -> float:
+    """Real money put at risk: zero for a bonus bet."""
+    return 0.0 if b["is_bonus"] else b["stake"]
 
 
 def clv(b) -> float | None:
@@ -56,6 +65,7 @@ def clv(b) -> float | None:
 
 def out(b) -> dict:
     d = dict(b)
+    d["is_bonus"] = bool(b["is_bonus"])
     d["profit"] = profit(b)
     d["clv_pct"] = clv(b)
     return d
@@ -71,10 +81,10 @@ def list_bets():
 def add_bet(b: BetIn):
     with conn() as c:
         cur = c.execute(
-            """INSERT INTO bets (placed_at,event,sport,market,pick,book,odds,stake,status,closing_odds,ev_pct,notes)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO bets (placed_at,event,sport,market,pick,book,odds,stake,status,closing_odds,ev_pct,notes,
+               is_bonus) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (datetime.now(timezone.utc).isoformat(), b.event, b.sport, b.market, b.pick, b.book, b.odds,
-             b.stake, b.status, b.closing_odds, b.ev_pct, b.notes))
+             b.stake, b.status, b.closing_odds, b.ev_pct, b.notes, int(b.is_bonus)))
         return out(c.execute("SELECT * FROM bets WHERE id=?", (cur.lastrowid,)).fetchone())
 
 
@@ -83,9 +93,9 @@ def update_bet(bet_id: int, b: BetIn):
     with conn() as c:
         cur = c.execute(
             """UPDATE bets SET event=?,sport=?,market=?,pick=?,book=?,odds=?,stake=?,status=?,
-               closing_odds=?,ev_pct=?,notes=? WHERE id=?""",
+               closing_odds=?,ev_pct=?,notes=?,is_bonus=? WHERE id=?""",
             (b.event, b.sport, b.market, b.pick, b.book, b.odds, b.stake, b.status, b.closing_odds,
-             b.ev_pct, b.notes, bet_id))
+             b.ev_pct, b.notes, int(b.is_bonus), bet_id))
         if not cur.rowcount:
             raise HTTPException(404, "bet not found")
         return out(c.execute("SELECT * FROM bets WHERE id=?", (bet_id,)).fetchone())
@@ -104,7 +114,7 @@ def stats():
     with conn() as c:
         rows = c.execute("SELECT * FROM bets").fetchall()
     settled = [r for r in rows if r["status"] in ("won", "lost", "push")]
-    staked = sum(r["stake"] for r in settled)
+    staked = sum(cash_stake(r) for r in settled)
     net = sum(profit(r) for r in settled)
     decided = [r for r in settled if r["status"] in ("won", "lost")]
     clvs = [v for r in rows if (v := clv(r)) is not None]
@@ -114,7 +124,7 @@ def stats():
         for r in settled:
             x = g[r[key] or "—"]
             x["bets"] += 1
-            x["staked"] += r["stake"]
+            x["staked"] += cash_stake(r)
             x["profit"] += profit(r)
         return [{"name": k, **v, "roi_pct": v["profit"] / v["staked"] * 100 if v["staked"] else 0}
                 for k, v in sorted(g.items(), key=lambda kv: -kv[1]["profit"])]
@@ -145,7 +155,7 @@ def bankroll_info() -> dict:
     starting = row["value"] if row else 100.0
     pl = sum(profit(r) for r in rows)
     return {"starting": starting, "profit": pl, "current": starting + pl,
-            "pending_stake": sum(r["stake"] for r in rows if r["status"] == "pending")}
+            "pending_stake": sum(cash_stake(r) for r in rows if r["status"] == "pending")}
 
 
 bankroll_router = APIRouter(prefix="/api/bankroll")

@@ -13,6 +13,7 @@ function useStored(key, init) {
 function useApi(url, every = 60000) {
   const [data, setData] = useState(null);
   useEffect(() => {
+    if (!url) { setData(null); return; }
     let live = true;
     const load = () => fetch(url).then((r) => r.json()).then((d) => live && setData(d));
     load();
@@ -93,7 +94,7 @@ function OddsScreen() {
 
 const money = (n) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 const pct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
-const blank = { event: "", sport: "", pick: "", book: "", odds: "", stake: "", closing_odds: "", status: "pending" };
+const blank = { event: "", sport: "", pick: "", book: "", odds: "", stake: "", closing_odds: "", status: "pending", is_bonus: false };
 
 function Tracker() {
   const [tick, setTick] = useState(0);
@@ -129,11 +130,13 @@ function Tracker() {
         <input placeholder="Book" value={f.book} onChange={set("book")} />
         <input placeholder="Odds *" required type="number" value={f.odds} onChange={set("odds")} />
         <input placeholder="Stake *" required type="number" step="0.01" value={f.stake} onChange={set("stake")} />
+        <label className="chk" title="Bonus bet: stake is not returned, a loss costs $0">
+          <input type="checkbox" checked={f.is_bonus} onChange={(e) => setF({ ...f, is_bonus: e.target.checked })} /> Bonus bet</label>
         <button className="primary">Add bet</button>
       </form>
       <table><thead><tr><th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Odds</th><th>Stake</th><th>Close</th><th>CLV</th><th>Status</th><th>P/L</th><th></th></tr></thead><tbody>
         {(bets || []).map((b) => (
-          <tr key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}`}><td>{new Date(b.placed_at).toLocaleDateString()}</td><td>{b.pick}</td><td>{b.event}</td><td>{b.book}</td>
+          <tr key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}`}><td>{new Date(b.placed_at).toLocaleDateString()}</td><td>{b.pick}{b.is_bonus && <span className="mut" title="Bonus bet">· bonus</span>}</td><td>{b.event}</td><td>{b.book}</td>
             <td><input className="mini" type="number" defaultValue={b.odds}
               onBlur={(e) => e.target.value !== "" && +e.target.value !== b.odds && patch(b, { odds: e.target.value })} /></td>
             <td><input className="mini" type="number" step="0.01" defaultValue={b.stake}
@@ -214,7 +217,68 @@ function Arbs() {
   );
 }
 
-const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, Calculator: Calculators, Tracker };
+const PROMO_BOOKS = ["DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet"];
+const PROMOS = {
+  "bonus-bet": ["Bonus bet", "Stake is not returned. Bonus goes on the long side; hedge the other side with cash."],
+  "profit-boost": ["Profit boost", "Cash bet with winnings boosted. Max caps the extra winnings ($)."],
+  "second-chance": ["Second chance / no-sweat", "Cash bet; a loss is refunded as a bonus bet worth the assumed conversion rate."],
+};
+
+function Promos() {
+  const [kind, setKind] = useStored("promoKind", "bonus-bet");
+  const [book, setBook] = useStored("promoBook", "DraftKings");
+  const [amount, setAmount] = useStored("promoAmount", 100);
+  const [boost, setBoost] = useStored("promoBoost", 50);
+  const [maxBoost, setMaxBoost] = useStored("promoMaxBoost", "");
+  const [rate, setRate] = useStored("promoRate", 70);
+  const [market, setMarket] = useStored("promoMarket", "");
+  const q = new URLSearchParams({ book, amount, limit: 25 });
+  if (kind === "profit-boost") { q.set("boost_pct", boost); if (maxBoost !== "") q.set("max_boost", maxBoost); }
+  if (kind === "second-chance") q.set("refund_value", rate / 100);
+  if (market) q.set("market", market);
+  const data = useApi(amount > 0 ? `/api/promo/${kind}?${q}` : null);
+  const track = async (r) => {
+    for (const l of r.legs) {
+      const boosted = l.promo && r.boosted_odds != null;
+      await fetch("/api/bets", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: r.event, sport: r.sport, market: r.market, pick: l.pick, book: l.book,
+          odds: boosted ? Number(r.boosted_odds.toFixed(2)) : l.odds, stake: Number(l.stake.toFixed(2)), is_bonus: l.is_bonus,
+          notes: l.promo ? `${PROMOS[kind][0]}${boosted ? ` (posted ${fmt(l.odds)}, +${boost}%)` : ""}` : `${PROMOS[kind][0]} hedge` }) });
+    }
+    window.dispatchEvent(new Event("data-changed"));
+    alert(`Tracked both legs of ${r.event}`);
+  };
+  return (
+    <>
+      <div className="bar wrap">
+        <select value={kind} onChange={(e) => setKind(e.target.value)}>
+          {Object.entries(PROMOS).map(([k, [v]]) => <option key={k} value={k}>{v}</option>)}</select>
+        Book <select value={book} onChange={(e) => setBook(e.target.value)}>
+          {PROMO_BOOKS.map((b) => <option key={b}>{b}</option>)}</select>
+        Amount $ <input type="number" step="1" value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+        {kind === "profit-boost" && <>Boost % <input type="number" step="5" value={boost} onChange={(e) => setBoost(Number(e.target.value))} />
+          Max $ <input type="number" placeholder="none" value={maxBoost} onChange={(e) => setMaxBoost(e.target.value)} /></>}
+        {kind === "second-chance" && <>Bonus conversion % <input type="number" step="5" value={rate} onChange={(e) => setRate(Number(e.target.value))} /></>}
+        <select value={market} onChange={(e) => setMarket(e.target.value)}>
+          <option value="">All markets</option>
+          {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+      </div>
+      <p className="mut">{PROMOS[kind][1]}</p>
+      {(Array.isArray(data) ? data : []).map((r, i) => (
+        <div className="card calc" key={i}>
+          <b className={r.profit >= 0 ? "best" : "bad"}>{r.conversion_pct.toFixed(1)}%</b> {money(r.profit)} locked · {r.event}
+          <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
+          <button className="track" style={{ float: "right" }} onClick={() => track(r)}>Track</button>
+          {r.legs.map((l, j) => <div key={j}>{l.promo ? (l.is_bonus ? "Bonus" : "Promo") : "Hedge"}: {l.pick} {fmt(l.odds)}
+            {l.promo && r.boosted_odds != null && <span className="mut">→ {fmt(r.boosted_odds)}</span>} @ {l.book} — stake {money(l.stake)}</div>)}
+        </div>
+      ))}
+      {Array.isArray(data) && data.length === 0 && <p className="mut">No two-sided markets with a hedge at another book.</p>}
+    </>
+  );
+}
+
+const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, Promos, Calculator: Calculators, Tracker };
 function App() {
   const [tab, setTab] = useState(() => { try { const t = localStorage.getItem("tab"); return t in TABS ? t : "Odds Screen"; } catch { return "Odds Screen"; } });
   const go = (t) => { setTab(t); try { localStorage.setItem("tab", t); } catch {} };
