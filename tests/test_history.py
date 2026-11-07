@@ -13,8 +13,9 @@ START = datetime(2026, 11, 8, 18, 0, tzinfo=timezone.utc)
 
 def snap(fd_home, pin_home, pin_away, fd_away=-120):
     return [{"id": "evt1", "sport": "NFL", "home": "Chiefs", "away": "Bills", "start": START.isoformat(),
-             "markets": {"moneyline": {"FanDuel": {"home": fd_home, "away": fd_away},
-                                       "Pinnacle": {"home": pin_home, "away": pin_away}}}}]
+             "markets": {"moneyline": [
+                 {"name": "Chiefs", "point": None, "prices": {"FanDuel": fd_home, "Pinnacle": pin_home}},
+                 {"name": "Bills", "point": None, "prices": {"FanDuel": fd_away, "Pinnacle": pin_away}}]}}]
 
 
 @pytest.fixture
@@ -24,7 +25,7 @@ def client():
 
 def track(client, **kw):
     bet = {"event": "Bills @ Chiefs", "sport": "NFL", "pick": "Chiefs", "book": "FanDuel", "odds": 120,
-           "stake": 10, "event_id": "evt1", "market": "moneyline", "outcome": "home",
+           "stake": 10, "event_id": "evt1", "market": "moneyline", "outcome": "Chiefs",
            "event_start": START.isoformat().replace("+00:00", "Z"), **kw}
     return client.post("/api/bets", json=bet).json()
 
@@ -73,9 +74,9 @@ def test_history_endpoint_and_pruning(client, monkeypatch):
     history.record(snap(110, 100, -110), START - timedelta(hours=2))
     rows = client.get("/api/history/evt1?market=moneyline").json()
     assert len(rows) == 4  # the 3-day-old snapshot was pruned
-    assert {(r["book"], r["outcome"]) for r in rows} == {("FanDuel", "home"), ("FanDuel", "away"),
-                                                          ("Pinnacle", "home"), ("Pinnacle", "away")}
-    assert next(r for r in rows if r["book"] == "FanDuel" and r["outcome"] == "home")["price"] == 110
+    assert {(r["book"], r["outcome"]) for r in rows} == {("FanDuel", "Chiefs"), ("FanDuel", "Bills"),
+                                                          ("Pinnacle", "Chiefs"), ("Pinnacle", "Bills")}
+    assert next(r for r in rows if r["book"] == "FanDuel" and r["outcome"] == "Chiefs")["price"] == 110
     assert client.get("/api/history/evt1?market=spreads").json() == []
 
 
@@ -83,7 +84,7 @@ def test_fetches_are_recorded_and_ev_rows_carry_links(client):
     events = client.get("/api/odds").json()
     assert client.get(f"/api/history/{events[0]['id']}").json()  # mock snapshot was stored
     r = client.get("/api/ev?book=&min_ev=-100").json()[0]
-    assert {"event_id", "market", "outcome", "start"} <= r.keys()
+    assert {"event_id", "market", "outcome", "point", "start"} <= r.keys()
 
 
 def test_old_database_gets_new_columns(tmp_path, monkeypatch):
@@ -99,3 +100,19 @@ def test_old_database_gets_new_columns(tmp_path, monkeypatch):
     with db.conn() as c:
         cols = {r["name"] for r in c.execute("PRAGMA table_info(bets)")}
     assert {"event_id", "outcome", "point", "event_start", "closing_sharp_odds"} <= cols
+
+
+def test_sharp_close_pairs_opposite_spread_points(client):
+    spread = [{"id": "evt1", "sport": "NFL", "home": "Chiefs", "away": "Bills", "start": START.isoformat(),
+               "markets": {"spreads": [
+                   {"name": "Chiefs", "point": -3.5, "prices": {"FanDuel": -105, "Pinnacle": 100}},
+                   {"name": "Bills", "point": 3.5, "prices": {"FanDuel": -115, "Pinnacle": -110}},
+                   {"name": "Chiefs", "point": -2.5, "prices": {"Pinnacle": -130}},  # other line, ignored
+                   {"name": "Bills", "point": 2.5, "prices": {"Pinnacle": 110}}]}}]
+    history.record(spread, START - timedelta(minutes=10))
+    track(client, market="spreads", point=-3.5, pick="Chiefs -3.5", odds=-105)
+    assert history.capture_closing(now=START + timedelta(minutes=1)) == 1
+    got = client.get("/api/bets").json()[0]
+    assert got["closing_odds"] == -105
+    fair = devig.multiplicative([odds.american_to_prob(100), odds.american_to_prob(-110)])[0]
+    assert got["closing_sharp_odds"] == pytest.approx(odds.prob_to_american(fair))

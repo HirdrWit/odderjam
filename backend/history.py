@@ -40,11 +40,11 @@ def record(events: list[dict], fetched_at: datetime | None = None) -> int:
     """Store one snapshot (all books, all events) and prune rows older than ODDS_HISTORY_DAYS."""
     at = fetched_at or _now()
     stamp = ts(at)
-    rows = [(e["id"], market, outcome, None, book, price, stamp)
+    rows = [(e["id"], market, o["name"], o.get("point"), book, price, stamp)
             for e in events
-            for market, books in e.get("markets", {}).items()
-            for book, prices in books.items()
-            for outcome, price in prices.items()]
+            for market, outcomes in e.get("markets", {}).items()
+            for o in outcomes
+            for book, price in o["prices"].items()]
     with db.conn() as c:
         c.executemany("INSERT INTO odds_history (event_id,market,outcome,point,book,price,fetched_at) "
                       "VALUES (?,?,?,?,?,?,?)", rows)
@@ -67,16 +67,26 @@ def _last_price(c: sqlite3.Connection, bet: sqlite3.Row, book: str, outcome: str
     return r["price"] if r else None
 
 
+def _same_line(bet: sqlite3.Row) -> tuple[str, tuple]:
+    """SQL filter for the sharp rows on the bet's line. On spreads the other side hangs the
+    opposite point (home -3.5 pairs with away +3.5); totals and moneyline share one point."""
+    if bet["market"] == "spreads" and bet["point"] is not None:
+        return ("((outcome=? AND point=?) OR (outcome<>? AND point=?))",
+                (bet["outcome"], bet["point"], bet["outcome"], -bet["point"]))
+    return "point IS ?", (bet["point"],)
+
+
 def _sharp_close(c: sqlite3.Connection, bet: sqlite3.Row, before: str) -> float | None:
     """No-vig fair price (American) for the bet's outcome from the last pre-start sharp snapshot."""
-    r = c.execute("SELECT MAX(fetched_at) AS t FROM odds_history WHERE event_id=? AND market=? AND point IS ? "
+    line, args = _same_line(bet)
+    r = c.execute(f"SELECT MAX(fetched_at) AS t FROM odds_history WHERE event_id=? AND market=? AND {line} "
                   "AND book=? AND fetched_at < ?",
-                  (bet["event_id"], bet["market"], bet["point"], SHARP, before)).fetchone()
+                  (bet["event_id"], bet["market"], *args, SHARP, before)).fetchone()
     if not r["t"]:
         return None
     prices = {x["outcome"]: x["price"] for x in c.execute(
-        "SELECT outcome, price FROM odds_history WHERE event_id=? AND market=? AND point IS ? AND book=? "
-        "AND fetched_at=?", (bet["event_id"], bet["market"], bet["point"], SHARP, r["t"]))}
+        f"SELECT outcome, price FROM odds_history WHERE event_id=? AND market=? AND {line} AND book=? "
+        "AND fetched_at=?", (bet["event_id"], bet["market"], *args, SHARP, r["t"]))}
     if bet["outcome"] not in prices or len(prices) < 2:
         return None
     names = list(prices)
