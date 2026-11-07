@@ -63,7 +63,10 @@ def test_middle_ev_matches_hand_computation():
 
 def test_key_number_window_is_worth_more_in_nfl():
     on3 = middles.model_pmf("NFL", "spreads", 0)
-    hit = lambda la, lb: sum(p for k, p in on3.items() if la < k < lb)  # noqa: E731
+
+    def hit(la, lb):
+        return sum(p for k, p in on3.items() if la < k < lb)
+
     assert hit(2.5, 3.5) > 2 * hit(3.5, 4.5)
 
 

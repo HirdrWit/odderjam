@@ -1,4 +1,6 @@
-"""Middles: a low-line bet and a high-line bet on the same number, at different books.
+"""Middle bets: opposing legs on one number at different books.
+
+A middle pairs a low-line bet with a high-line bet on the same number.
 
 Both legs are expressed on one scoring variable ``x`` (the game total, or the home
 team's winning margin for spreads):

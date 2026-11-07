@@ -218,12 +218,15 @@ function Middles() {
   const [minWindow, setMinWindow] = useStored("midWindow", 0.5);
   const [maxCost, setMaxCost] = useStored("midCost", 5);
   const [market, setMarket] = useStored("midMarket", "");
-  const data = useApi(`/api/middles?min_window=${minWindow}${maxCost === "" ? "" : `&max_cost=${maxCost}`}${market ? `&market=${market}` : ""}`);
+  const params = new URLSearchParams({ min_window: minWindow });
+  if (maxCost !== "") params.set("max_cost", maxCost);
+  if (market) params.set("market", market);
+  const data = useApi(`/api/middles?${params}`);
   const track = async (r) => {
     for (const l of r.legs) {
       await fetch("/api/bets", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event: r.event, sport: r.sport, market: r.market, pick: l.pick, book: l.book, odds: l.odds,
-          stake: +l.stake.toFixed(2), ev_pct: r.ev_pct, notes: `middle ${r.legs.map((x) => x.pick).join(" / ")}` }) });
+          stake: Math.round(l.stake * 100) / 100, ev_pct: r.ev_pct, notes: `middle ${r.legs.map((x) => x.pick).join(" / ")}` }) });
     }
     alert(`Tracked both legs: ${r.legs.map((l) => `${l.pick} @ ${l.book}`).join(", ")}`);
   };
@@ -232,9 +235,12 @@ function Middles() {
       <div className="bar">
         Market <select value={market} onChange={(e) => setMarket(e.target.value)}>
           <option value="">All</option><option value="spreads">Spread</option><option value="totals">Total</option></select>
-        Min window <input type="number" step="0.5" min="0" value={minWindow} onChange={(e) => setMinWindow(+e.target.value)} />
+        Min window <input type="number" step="0.5" min="0" value={minWindow} onChange={(e) => { const v = Number(e.target.value); if (!Number.isNaN(v)) setMinWindow(v); }} />
         Max cost % <input type="number" step="0.5" min="0" placeholder="any" value={maxCost}
-          onChange={(e) => setMaxCost(e.target.value === "" ? "" : +e.target.value)} />
+          onChange={(e) => {
+            const v = e.target.value === "" ? "" : Number(e.target.value);
+            if (v === "" || !Number.isNaN(v)) setMaxCost(v);
+          }} />
       </div>
       <div className="mut small">Per $100 total stake, split so both misses cost the same. EV uses a normal model of the result (NFL margins weighted to key numbers).</div>
       <table><thead><tr><th>EV%</th><th>Event</th><th>Market</th><th>Window</th><th>Legs</th><th>Worst case</th><th>Win both</th><th>Hit %</th><th></th></tr></thead><tbody>

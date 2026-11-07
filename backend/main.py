@@ -1,10 +1,9 @@
 from collections.abc import Iterator
 from pathlib import Path
+from statistics import median
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-
-from statistics import median
 
 from .engine import arb as arbm, devig, ev, markets as mk, middles as mid, odds
 from .providers.books import SHARP, US_BOOKS, us_only
@@ -107,11 +106,16 @@ def _middle_sides(key: str, outcomes: list[dict], home: str) -> tuple[dict, dict
         if o.get("point") is None:
             continue
         if key == "totals":
-            side, line = (over if o["name"] == "Over" else under if o["name"] == "Under" else None), o["point"]
-        else:  # home -3.5 wins when margin > 3.5; away +4.5 wins when margin < 4.5
-            side, line = (over, -o["point"]) if o["name"] == home else (under, o["point"])
-        if side is None:
-            continue
+            if o["name"] == "Over":
+                side, line = over, o["point"]
+            elif o["name"] == "Under":
+                side, line = under, o["point"]
+            else:
+                continue
+        elif o["name"] == home:  # home -3.5 wins when margin > 3.5
+            side, line = over, -o["point"]
+        else:  # away +4.5 wins when margin < 4.5
+            side, line = under, o["point"]
         for book, price in us_only(o["prices"]).items():
             side.setdefault(line, []).append((price, book, o))
     return over, under
@@ -127,7 +131,12 @@ def _center(key: str, outcomes: list[dict], home: str) -> float:
 
 
 @app.get("/api/middles")
-def middles(min_window: float = 0.0, max_cost: float | None = None, market: str | None = None, stake: float = 100.0):
+def middles(
+    min_window: float = 0.0,
+    max_cost: float | None = None,
+    market: str | None = None,
+    stake: float = 100.0,
+) -> list[dict]:
     """Middles across books. `max_cost` caps the worst-case loss as a percent of total stake."""
     rows = []
     for e in get_snapshot():
@@ -144,7 +153,12 @@ def middles(min_window: float = 0.0, max_cost: float | None = None, market: str 
                     pairs = [(a, b) for a in overs for b in unders if a[1] != b[1]]
                     if not pairs:
                         continue
-                    (pa, ba, oa), (pb, bb, ob) = max(pairs, key=lambda ab: mid.middle(la, ab[0][0], lb, ab[1][0])["worst_case"])
+
+                    def worst_case(pair):
+                        (price_a, *_), (price_b, *_) = pair
+                        return mid.middle(la, price_a, lb, price_b)["worst_case"]
+
+                    (pa, ba, oa), (pb, bb, ob) = max(pairs, key=worst_case)
                     m = mid.middle(la, pa, lb, pb, stake)
                     cost_pct = max(-m["worst_case"], 0.0) / stake * 100
                     if max_cost is not None and cost_pct > max_cost:
