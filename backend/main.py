@@ -58,8 +58,8 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                     v = ev.ev_pct(fp, price)
                     if v >= min_ev:
                         rows.append({
-                            "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
-                            "market": key, "point": o["point"], "pick": mk.label(o), "book": book_name,
+                            "event": f'{e["away"]} @ {e["home"]}', "event_id": e["id"], "sport": e["sport"],
+                            "start": e["start"], "market": key, "selection": o["name"], "point": o["point"], "pick": mk.label(o), "book": book_name,
                             "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                             "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
                         })
@@ -84,9 +84,9 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                     continue
                 result = arbm.arb([price for _, _, price in best])
                 if result["profit_pct"] >= min_profit:
-                    rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
+                    rows.append({"event": f'{e["away"]} @ {e["home"]}', "event_id": e["id"], "sport": e["sport"],
                                  "market": key, "point": g["point"],
-                                 "legs": [{"pick": mk.label(o), "point": o["point"], "book": book, "odds": price,
+                                 "legs": [{"pick": mk.label(o), "selection": o["name"], "point": o["point"], "book": book, "odds": price,
                                            "stake": stake}
                                           for (o, book, price), stake in zip(best, result["stakes"])],
                                  "profit_pct": result["profit_pct"]})
