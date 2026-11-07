@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import Calculators from "./Calculators.jsx";
 
 const fmt = (o) => (o > 0 ? `+${Math.round(o)}` : `${Math.round(o)}`);
-const dec = (a) => (a > 0 ? 1 + a / 100 : 1 + 100 / -a);
 
 function useStored(key, init) {
   const [v, setV] = useState(() => { try { const x = localStorage.getItem(key); return x == null ? init : JSON.parse(x); } catch { return init; } });
@@ -204,21 +204,7 @@ function Arbs() {
   );
 }
 
-function Calc() {
-  const [a, setA] = useState(110), [b, setB] = useState(-105), [bank, setBank] = useState(100);
-  const inv = 1 / dec(a) + 1 / dec(b);
-  return (
-    <div className="card">
-      <div className="bar">Odds A <input type="number" value={a} onChange={(e) => setA(+e.target.value)} />
-        Odds B <input type="number" value={b} onChange={(e) => setB(+e.target.value)} />
-        Total stake <input type="number" value={bank} onChange={(e) => setBank(+e.target.value)} /></div>
-      <p>Profit: <b className={inv < 1 ? "best" : ""}>{((1 / inv - 1) * 100).toFixed(2)}%</b> (${(bank / inv - bank).toFixed(2)})</p>
-      <p>Stake A ${(bank / dec(a) / inv).toFixed(2)} · Stake B ${(bank / dec(b) / inv).toFixed(2)}</p>
-    </div>
-  );
-}
-
-const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, Calculator: Calc, Tracker };
+const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, Calculator: Calculators, Tracker };
 function App() {
   const [tab, setTab] = useState(() => { try { const t = localStorage.getItem("tab"); return t in TABS ? t : "Odds Screen"; } catch { return "Odds Screen"; } });
   const go = (t) => { setTab(t); try { localStorage.setItem("tab", t); } catch {} };

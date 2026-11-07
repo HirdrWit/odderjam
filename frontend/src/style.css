@@ -26,3 +26,12 @@ th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #222c38; 
 button.primary, button.track { background: #2a6df4; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
 button.x { background: none; border: 0; color: #8795a6; cursor: pointer; }
 input.mini { width: 60px; }
+.subnav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.subnav button { background: #161c24; color: inherit; border: 1px solid #2c3a4b; border-radius: 14px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+.subnav button.on, .subnav button:hover { background: #243040; border-color: #2a6df4; }
+.calc { cursor: default; } .calc h2 { font-size: 16px; margin: 0 0 12px; }
+.calc .bar { flex-wrap: wrap; align-items: flex-end; }
+.fld { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #8795a6; }
+.chk { display: flex; gap: 4px; align-items: center; } .chk input { width: auto; }
+.legs { margin: 10px 0; } .legs .bar { margin-bottom: 8px; }
+table.out { width: auto; min-width: 320px; } table.out td.mut { margin: 0; }
