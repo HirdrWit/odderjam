@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import * as c from "./calc.js";
+import { SizingBar, useSizing } from "./Sizing.jsx";
 
 const am = (o) => (Number.isFinite(o) ? (o > 0 ? `+${o.toFixed(0)}` : o.toFixed(0)) : "—");
 const usd = (n) => (Number.isFinite(n) ? `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}` : "—");
@@ -111,15 +112,33 @@ function Implied() {
   );
 }
 
+/** Rounded stakes for covering every outcome, with the profit if each one wins. */
+function SizedStakes({ odds, total, sz }) {
+  if (!(total > 0)) return null;
+  const r = c.sizeArb(odds, total, sz.round, sz.maxSide);
+  return (
+    <>
+      <table><thead><tr><th>Outcome</th><th>Odds</th><th>Exact stake</th><th>Rounded stake</th><th>Profit if wins</th></tr></thead><tbody>
+        {odds.map((o, i) => <tr key={i}><td>{i + 1}</td><td>{am(o)}</td><td className="mut">{usd(r.ideal_stakes[i])}</td><td>{usd(r.stakes[i])}</td>
+          <td className={sign(r.profits[i])}>{usd(r.profits[i])}</td></tr>)}</tbody></table>
+      <p className="mut">Rounded total {usd(r.total_stake)} · profit {usd(r.min_profit)} to {usd(r.max_profit)}{r.capped ? " · scaled down to max per side" : ""}</p>
+      {r.warning && <p className="bad">⚠ {r.warning}</p>}
+    </>
+  );
+}
+
 function Hold() {
-  const [odds, setOdds] = useState([-110, -110]);
+  const [odds, setOdds] = useState([-110, -110]), [total, setTotal] = useState(200);
+  const sz = useSizing();
   const valid = odds.every(okAm), h = valid ? c.hold(odds) : null;
   return (
     <>
+      <div className="bar"><Num label="Total stake $ (low-hold rollover)" value={total} set={setTotal} /><SizingBar s={sz} /></div>
       <OddsList odds={odds} setOdds={setOdds} label="Outcome" />
       {h && <Out rows={[["Hold (book margin)", pc(h.hold_pct), h.hold_pct <= 0 ? "best" : ""], ["Overround (vig)", pc(h.overround_pct)],
         ["Total implied", pc(h.total_implied * 100)]]} />}
       {h && h.hold_pct < 0 && <p className="best">Negative hold — this is an arbitrage.</p>}
+      {h && <SizedStakes odds={odds} total={total} sz={sz} />}
     </>
   );
 }
@@ -163,11 +182,19 @@ function RoundRobin() {
 
 function Bonus() {
   const [bonus, setBonus] = useState(100), [a, setA] = useState(250), [b, setB] = useState(-300);
-  const r = okAm(a) && okAm(b) && bonus > 0 ? c.bonusBetHedge(bonus, a, b) : null;
+  const sz = useSizing();
+  const ok = okAm(a) && okAm(b) && bonus > 0;
+  const r = ok ? c.bonusBetHedge(bonus, a, b) : null;
+  const s = ok ? c.sizeBonusHedge(bonus, a, b, sz.round, sz.maxSide) : null;
   return (
     <>
       <div className="bar"><Num label="Bonus bet $" value={bonus} set={setBonus} /><Num label="Bonus side odds" value={a} set={setA} /><Num label="Hedge side odds (cash)" value={b} set={setB} /></div>
-      {r && <Out rows={[["Hedge stake", usd(r.hedge_stake)], ["Guaranteed profit", usd(r.profit), sign(r.profit)], ["Conversion", pc(r.conversion_pct, 1), "best"]]} />}
+      <div className="bar"><SizingBar s={sz} /></div>
+      {r && <Out rows={[["Exact hedge stake", `${usd(r.hedge_stake)} (profit ${usd(r.profit)}, ${pc(r.conversion_pct, 1)})`],
+        ["Rounded hedge stake", `${usd(s.hedge_stake)}${s.capped ? " (capped at max per side)" : ""}`, "best"],
+        ["Profit if bonus side wins", usd(s.profit_if_bonus_wins), sign(s.profit_if_bonus_wins)],
+        ["Profit if hedge side wins", usd(s.profit_if_hedge_wins), sign(s.profit_if_hedge_wins)],
+        ["Conversion (worst case)", pc(s.conversion_pct, 1), sign(s.conversion_pct)]]} />}
       <p className="mut">Bonus bet stake is not returned on a win. Longer odds on the bonus side usually convert better.</p>
     </>
   );
@@ -175,15 +202,15 @@ function Bonus() {
 
 function Arb() {
   const [odds, setOdds] = useState([110, -105]), [total, setTotal] = useState(100);
+  const sz = useSizing();
   const valid = odds.every(okAm), r = valid ? c.arb(odds, total) : null;
   return (
     <>
-      <Num label="Total stake $" value={total} set={setTotal} />
+      <div className="bar"><Num label="Total stake $" value={total} set={setTotal} /><SizingBar s={sz} /></div>
       <OddsList odds={odds} setOdds={setOdds} max={3} label="Outcome" />
       {r && <>
-        <Out rows={[["Profit", `${pc(r.profit_pct)} (${usd(r.payout - total)})`, sign(r.profit_pct)], ["Payout (any outcome)", usd(r.payout)]]} />
-        <table><thead><tr><th>Outcome</th><th>Odds</th><th>Stake</th></tr></thead><tbody>
-          {odds.map((o, i) => <tr key={i}><td>{i + 1}</td><td>{am(o)}</td><td>{usd(r.stakes[i])}</td></tr>)}</tbody></table>
+        <Out rows={[["Profit (exact stakes)", `${pc(r.profit_pct)} (${usd(r.payout - total)})`, sign(r.profit_pct)], ["Payout (any outcome)", usd(r.payout)]]} />
+        <SizedStakes odds={odds} total={total} sz={sz} />
       </>}
     </>
   );
