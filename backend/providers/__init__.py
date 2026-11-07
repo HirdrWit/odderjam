@@ -12,6 +12,24 @@ from pathlib import Path
 # Versioned so a cache written in an older event shape is never read back.
 CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v2.json"
 _lock = threading.Lock()
+# Called with each newly fetched live snapshot (see on_fetch). Never causes a fetch itself.
+_listeners: list = []
+
+
+def on_fetch(fn) -> None:
+    """Register fn(events) to run after every successful live fetch."""
+    if fn not in _listeners:
+        _listeners.append(fn)
+
+
+def off_fetch(fn) -> None:
+    if fn in _listeners:
+        _listeners.remove(fn)
+
+
+def _fetched(data: list[dict]) -> None:
+    for fn in list(_listeners):
+        threading.Thread(target=fn, args=(data,), daemon=True).start()
 
 
 def _live() -> bool:
@@ -37,6 +55,15 @@ def cache_info() -> dict:
     return info
 
 
+def peek_snapshot() -> list[dict]:
+    """The latest snapshot already on hand (mock data or the disk cache). Never fetches."""
+    if not _live():
+        from .mock import snapshot
+        return snapshot()
+    with _lock:
+        return json.loads(CACHE.read_text()) if CACHE.exists() else []
+
+
 def get_snapshot(force: bool = False) -> list[dict]:
     if not _live():
         from .mock import snapshot
@@ -53,6 +80,7 @@ def get_snapshot(force: bool = False) -> list[dict]:
             raise
         if data:
             CACHE.write_text(json.dumps(data))
+            _fetched(data)
         elif CACHE.exists():
             return json.loads(CACHE.read_text())
         return data
