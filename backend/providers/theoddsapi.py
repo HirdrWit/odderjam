@@ -55,3 +55,26 @@ def snapshot() -> list[dict]:
             continue
         events.extend(parse_event(e, sport) for e in r.json())
     return events
+
+
+def scores(sports: list[str], days_from: int = 3) -> list[dict]:
+    """Recent and live games from /scores for our sport codes (e.g. ["NBA"]).
+
+    Costs 2 credits per sport with daysFrom set, so callers should only ask for sports they need.
+    Each game gets a "sport" key with our sport code.
+    """
+    key = os.environ["ODDS_API_KEY"]
+    games = []
+    for sport in sports:
+        k = ALL.get(sport)
+        if k is None:
+            continue
+        r = httpx.get(f"https://api.the-odds-api.com/v4/sports/{k}/scores",
+                      params={"apiKey": key, "daysFrom": days_from}, timeout=20)
+        if "x-requests-remaining" in r.headers:
+            META.write_text(json.dumps({"remaining": r.headers["x-requests-remaining"],
+                                        "used": r.headers.get("x-requests-used")}))
+        if r.status_code != 200:
+            continue
+        games.extend({**g, "sport": sport} for g in r.json())
+    return games

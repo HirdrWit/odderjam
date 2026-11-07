@@ -35,3 +35,28 @@ input.mini { width: 60px; }
 .chk { display: flex; gap: 4px; align-items: center; } .chk input { width: auto; }
 .legs { margin: 10px 0; } .legs .bar { margin-bottom: 8px; }
 table.out { width: auto; min-width: 320px; } table.out td.mut { margin: 0; }
+.spacer { flex: 1; }
+.filters input[type=date] { width: 130px; }
+button, a.btn, label.btn { background: #1d2530; color: inherit; border: 1px solid #2c3a4b; border-radius: 4px; padding: 5px 10px; cursor: pointer; font: inherit; text-decoration: none; }
+button:disabled { opacity: .6; }
+button.right { float: right; }
+.charts { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; margin-bottom: 14px; }
+.chart { cursor: default; margin: 0; }
+.plot { position: relative; margin-top: 8px; }
+.plot svg { display: block; width: 100%; height: 170px; }
+.plot .zero { stroke: #2c3a4b; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.plot .cross { stroke: #8795a6; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.plot .dot { position: absolute; width: 8px; height: 8px; margin: -6px 0 0 -6px; border-radius: 50%; background: #3b82f6; border: 2px solid #161c24; pointer-events: none; }
+.tip { position: absolute; top: 0; margin-left: 10px; background: #0f1419; border: 1px solid #2c3a4b; border-radius: 6px; padding: 6px 8px; font-size: 12px; pointer-events: none; white-space: nowrap; }
+.axis { display: flex; justify-content: space-between; font-size: 11px; margin: 4px 0 0; }
+.cal .bar { margin-bottom: 8px; gap: 6px; }
+.cal .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal .dow { margin: 0; text-align: center; font-size: 11px; }
+.cal .day { position: relative; aspect-ratio: 1.4; border-radius: 4px; background: #1d2530; font-size: 11px; color: #8795a6; padding: 2px 4px; }
+.cal .day.on { color: #e6e9ee; }
+.cal .day i { position: absolute; right: 4px; bottom: 1px; font-style: normal; font-weight: 700; }
+.cal .readout { margin: 8px 0 0; font-size: 12px; }
+.groups { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.toasts { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+.toast { background: #243040; border-left: 3px solid #3ddc84; border-radius: 6px; padding: 10px 14px; box-shadow: 0 4px 14px #0008; }
+.toast.err { border-left-color: #ff6b6b; }
