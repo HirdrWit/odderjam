@@ -2,8 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import main
-from backend.engine.markets import label, line_groups
+from backend.engine.markets import is_prop, label, line_groups
 from backend.providers import mock
+from backend.providers import theoddsapi
 from backend.providers.theoddsapi import parse_event
 
 
@@ -101,3 +102,98 @@ def test_arbs_never_mix_lines(monkeypatch):
     assert c.get("/api/arbs").json() == []
     rows = c.get("/api/ev", params={"min_ev": -100}).json()
     assert {(r["pick"], r["book"]) for r in rows} == {("Over 220.5", "DraftKings"), ("Under 220.5", "FanDuel")}
+
+
+def make_prop(name, player, point, **prices):
+    return {"name": name, "player": player, "point": point, "prices": prices}
+
+
+def test_prop_groups_split_by_player_and_line():
+    outs = [make_prop("Over", "P1", 0.5, X=-110), make_prop("Under", "P1", 0.5, Y=-110),
+            make_prop("Over", "P2", 0.5, X=-110), make_prop("Under", "P2", 1.5, Y=-110),  # P2 lines don't match
+            make_prop("Over", "P1", 1.5, X=150)]  # no Under at 1.5: incomplete
+    (g,) = line_groups("player_threes", outs, "A", "B")
+    assert (g["player"], g["point"]) == ("P1", 0.5)
+    assert [o["name"] for o in g["outcomes"]] == ["Over", "Under"]
+
+
+def test_yes_no_props():
+    outs = [make_prop("Yes", "P1", None, X=150), make_prop("No", "P1", None, X=-180)]
+    (g,) = line_groups("player_anytime_td", outs, "A", "B")
+    assert [o["name"] for o in g["outcomes"]] == ["Yes", "No"]
+
+
+def test_prop_label():
+    assert label(make_prop("Over", "LeBron James", 25.5)) == "LeBron James Over 25.5"
+
+
+def test_parse_odds_api_props():
+    e = {"id": "1", "home_team": "A", "away_team": "B", "commence_time": "t", "bookmakers": [
+        {"key": "draftkings", "title": "DraftKings", "markets": [
+            {"key": "player_threes", "outcomes": [
+                {"name": "Over", "description": "P1", "price": -150, "point": 0.5},
+                {"name": "Under", "description": "P1", "price": 120, "point": 0.5},
+                {"name": "Over", "description": "P2", "price": 110, "point": 0.5}]}]},
+        {"key": "fanduel", "title": "FanDuel", "markets": [
+            {"key": "player_threes", "outcomes": [{"name": "Over", "description": "P1", "price": -140, "point": 0.5}]}]},
+    ]}
+    m = parse_event(e, "NBA")["markets"]
+    assert make_prop("Over", "P1", 0.5, DraftKings=-150, FanDuel=-140) in m["player_threes"]
+    assert make_prop("Over", "P2", 0.5, DraftKings=110) in m["player_threes"]
+    assert len(m["player_threes"]) == 3
+
+
+def test_snapshot_fetches_props_per_event(monkeypatch):
+    calls = []
+
+    class Resp:
+        def __init__(self, body):
+            self.status_code, self.headers, self._body = 200, {}, body
+
+        def json(self):
+            return self._body
+
+    def fake_get(url, params, timeout):
+        calls.append((url, params["markets"]))
+        game = {"id": "g1", "home_team": "A", "away_team": "B", "commence_time": "t", "bookmakers": [
+            {"key": "draftkings", "title": "DraftKings", "markets": [
+                {"key": "player_points", "outcomes": [{"name": "Over", "description": "P1", "price": -110, "point": 20.5}]}
+                if "/events/" in url else
+                {"key": "h2h", "outcomes": [{"name": "A", "price": -110}, {"name": "B", "price": -110}]}]}]}
+        return Resp(game if "/events/" in url else [game])
+
+    monkeypatch.setenv("ODDS_API_KEY", "k")
+    monkeypatch.setattr(theoddsapi, "SPORTS", {"NBA": "basketball_nba"})
+    monkeypatch.setattr(theoddsapi, "PROP_MARKETS", ["player_points", "batter_hits"])
+    monkeypatch.setattr(theoddsapi.httpx, "get", fake_get)
+    (e,) = theoddsapi.snapshot()
+    assert set(e["markets"]) == {"moneyline", "player_points"}
+    assert calls[1] == ("https://api.the-odds-api.com/v4/sports/basketball_nba/events/g1/odds", "player_points")
+
+    monkeypatch.setattr(theoddsapi, "PROP_MARKETS", [])
+    calls.clear()
+    theoddsapi.snapshot()
+    assert len(calls) == 1  # props off: no per-event requests
+
+
+def test_mock_has_props_for_every_event():
+    for e in mock.snapshot(seed=1):
+        props = [k for k in e["markets"] if is_prop(k)]
+        assert props
+        assert len({o["player"] for k in props for o in e["markets"][k]}) >= 4
+
+
+def test_ev_and_arbs_include_props_unless_mainlines_only(client):
+    for path, params in (("/api/ev", {"min_ev": -100}), ("/api/arbs", {"min_profit": -100})):
+        rows = client.get(path, params=params).json()
+        prop_rows = [r for r in rows if is_prop(r["market"])]
+        assert prop_rows and all(r["player"] for r in prop_rows)
+        mainlines = client.get(path, params={**params, "props": "false"}).json()
+        assert mainlines and not any(is_prop(r["market"]) for r in mainlines)
+        assert all(r["player"] is None for r in mainlines)
+    assert any(is_prop(r["market"]) for r in client.get("/api/arbs").json())  # soft-book props yield real arbs
+
+
+def test_odds_screen_groups_props_under_event(client):
+    e = client.get("/api/odds", params={"sport": "NBA"}).json()[0]
+    assert e["markets"]["player_points"][0]["player"]

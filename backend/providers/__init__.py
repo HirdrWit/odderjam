@@ -29,7 +29,8 @@ def _fetch() -> list[dict]:
 
 def cache_info() -> dict:
     meta = CACHE.parent / ".odds_meta.json"
-    info = {"live": _live(), "age_seconds": None, "ttl_seconds": _ttl()}
+    from .theoddsapi import PROP_MARKETS
+    info = {"live": _live(), "age_seconds": None, "ttl_seconds": _ttl(), "prop_markets": PROP_MARKETS}
     if CACHE.exists():
         info["age_seconds"] = time.time() - CACHE.stat().st_mtime
     if meta.exists():

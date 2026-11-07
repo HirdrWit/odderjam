@@ -43,11 +43,19 @@ function RefreshBox() {
       {info.remaining != null && <div className="mut">API credits left: {info.remaining}</div>}
       {info.live && <button onClick={refresh} disabled={busy}>{busy ? "Refreshing…" : "Refresh odds"}</button>}
       {info.live && <div className="mut small">Each refresh spends API credits</div>}
+      {info.live && info.prop_markets?.length > 0 && (
+        <div className="bad small">Player props on ({info.prop_markets.length} markets): each refresh costs about {info.prop_markets.length * 2} more credits per game</div>)}
     </div>
   );
 }
 
 const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
+const isProp = (k) => /^(player|batter|pitcher)_/.test(k);
+// "player_points" -> "Points", "batter_total_bases" -> "Total Bases"
+const propName = (k) => k.replace(/^(player|batter|pitcher)_/, "").split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+const marketName = (k) => MARKETS[k] || (isProp(k) ? propName(k) : k);
+const PROP_FILTER = { include: "Include props", mainlines: "Mainlines only" };
+const propsParam = (f) => (f === "mainlines" ? "&props=false" : "");
 const pt = (p, total) => (p == null ? "" : total ? `${p}` : p > 0 ? `+${p}` : `${p}`);
 const outcomeLabel = (o) => `${o.name}${o.point == null ? "" : ` ${pt(o.point, o.name === "Over" || o.name === "Under")}`}`;
 
@@ -63,10 +71,11 @@ function OddsScreen() {
           {["", "NBA", "NFL", "MLB", "NHL"].map((s) => <option key={s} value={s}>{s || "All sports"}</option>)}
         </select>
         <select value={market} onChange={(e) => setMarket(e.target.value)}>
-          {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries({ ...MARKETS, props: "Player props" }).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </div>
-      {(data || []).filter((e) => e.markets[market]).map((e) => {
+      {market === "props" && (data || []).map((e) => <PropsCard key={e.id} e={e} open={open === e.id} toggle={() => setOpen(open === e.id ? null : e.id)} />)}
+      {market !== "props" && (data || []).filter((e) => e.markets[market]).map((e) => {
         const outs = e.markets[market];
         const books = [...new Set(outs.flatMap((o) => Object.keys(o.prices)))];
         const best = (o) => Math.max(...Object.values(o.prices));
@@ -88,6 +97,34 @@ function OddsScreen() {
         );
       })}
     </>
+  );
+}
+
+function PropsCard({ e, open, toggle }) {
+  const keys = Object.keys(e.markets).filter(isProp);
+  if (!keys.length) return null;
+  // One row per (prop, player, side, line); outcomes sorted so Over/Under at a line sit together.
+  const rows = keys.flatMap((k) => [...e.markets[k]]
+    .sort((a, b) => (a.player || "").localeCompare(b.player || "") || a.point - b.point || a.name.localeCompare(b.name))
+    .map((o) => ({ k, o })));
+  const books = [...new Set(rows.flatMap(({ o }) => Object.keys(o.prices)))];
+  const players = new Set(rows.map(({ o }) => o.player));
+  return (
+    <div className="card" onClick={toggle}>
+      <b>{e.away} @ {e.home}</b> <span className="mut">{e.sport} · {new Date(e.start).toLocaleString()}</span>
+      <div className="mut">{players.size} players · {keys.map(propName).join(", ")}</div>
+      {open && (
+        <table><thead><tr><th>Player</th><th>Prop</th><th>Pick</th>{books.map((b) => <th key={b}>{b}</th>)}</tr></thead><tbody>
+          {rows.map(({ k, o }) => {
+            const best = Math.max(...Object.values(o.prices));
+            return (
+              <tr key={`${k}${o.player}${o.name}${o.point}`}><td>{o.player}</td><td>{propName(k)}</td><td>{outcomeLabel(o)}</td>
+                {books.map((b) => <td key={b} className={o.prices[b] === best ? "best" : ""}>{o.prices[b] == null ? "" : fmt(o.prices[b])}</td>)}</tr>
+            );
+          })}
+        </tbody></table>
+      )}
+    </div>
   );
 }
 
@@ -160,6 +197,7 @@ function PositiveEV() {
   const [minEv, setMinEv] = useStored("evMin", 1);
   const [method, setMethod] = useStored("evMethod", "multiplicative");
   const [kelly, setKelly] = useStored("evKelly", 0.25);
+  const [props, setProps] = useStored("evProps", "include");
   const [book, setBook] = useState(() => localStorage.getItem("evBook") ?? "DraftKings");
   const bank = useApi("/api/bankroll", 30000);
   const setStart = async (v) => {
@@ -173,7 +211,7 @@ function PositiveEV() {
         stake: +r.stake.toFixed(2) || 1, ev_pct: r.ev_pct }) });
     alert(`Tracked ${r.pick} @ ${r.book}`);
   };
-  const data = useApi(`/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}`);
+  const data = useApi(`/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}${propsParam(props)}`);
   return (
     <>
       <div className="bar">
@@ -186,10 +224,11 @@ function PositiveEV() {
           <span className="mut">start $<input className="mini" type="number" defaultValue={bank.starting}
             onBlur={(e) => +e.target.value !== bank.starting && setStart(+e.target.value)} /> {bank.profit >= 0 ? "+" : "-"}${Math.abs(bank.profit).toFixed(2)} P/L</span></span>}
         Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => setKelly(+e.target.value)} />
+        <PropsFilter value={props} onChange={setProps} />
       </div>
       <table><thead><tr><th>EV%</th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th><th>Fair</th><th>Stake</th><th></th></tr></thead><tbody>
         {(data || []).map((r, i) => (
-          <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{MARKETS[r.market] || r.market}</td><td>{r.event}</td>
+          <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{marketName(r.market)}</td><td>{r.event}</td>
             <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td><td>${r.stake.toFixed(2)}</td>
             <td><button className="track" onClick={() => track(r)}>Track</button></td></tr>
         ))}
@@ -198,15 +237,25 @@ function PositiveEV() {
   );
 }
 
+function PropsFilter({ value, onChange }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {Object.entries(PROP_FILTER).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+    </select>
+  );
+}
+
 function Arbs() {
   const [min, setMin] = useStored("arbMin", 0);
-  const data = useApi(`/api/arbs?min_profit=${min}`);
+  const [props, setProps] = useStored("arbProps", "include");
+  const data = useApi(`/api/arbs?min_profit=${min}${propsParam(props)}`);
   return (
     <>
-      <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} /></div>
+      <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} />
+        <PropsFilter value={props} onChange={setProps} /></div>
       {(data || []).map((r, i) => (
         <div className="card" key={i}>
-          <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
+          <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {marketName(r.market)}</span>
           {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100</div>)}
         </div>
       ))}

@@ -32,22 +32,25 @@ def odds_screen(sport: str | None = None):
     return [e for e in shown if e["markets"]]
 
 
-def _groups(e: dict) -> Iterator[tuple[str, dict]]:
-    """Yield (market_key, line_group) for every complete line group in an event."""
+def _groups(e: dict, market: str | None = None, props: bool = True) -> Iterator[tuple[str, dict]]:
+    """Yield (market_key, line_group) for every complete line group in an event.
+
+    `market` keeps one market key only; `props=False` drops player props (mainlines only).
+    """
     for key, outcomes in e["markets"].items():
+        if (market and key != market) or (not props and mk.is_prop(key)):
+            continue
         for g in mk.line_groups(key, outcomes, e["home"], e["away"]):
             yield key, g
 
 
 @app.get("/api/ev")
 def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25,
-                market: str | None = None):
+                market: str | None = None, props: bool = True):
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     rows = []
     for e in get_snapshot():
-        for key, g in _groups(e):
-            if market and key != market:
-                continue
+        for key, g in _groups(e, market, props):
             if not all(SHARP in o["prices"] for o in g["outcomes"]):
                 continue  # need the sharp price on every side of this exact line to devig
             probs = devig.METHODS[method]([odds.american_to_prob(o["prices"][SHARP]) for o in g["outcomes"]])
@@ -59,7 +62,7 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                     if v >= min_ev:
                         rows.append({
                             "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
-                            "market": key, "point": o["point"], "pick": mk.label(o), "book": book_name,
+                            "market": key, "player": g["player"], "point": o["point"], "pick": mk.label(o), "book": book_name,
                             "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                             "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
                         })
@@ -67,12 +70,10 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
 
 
 @app.get("/api/arbs")
-def arbs(min_profit: float = 0.0, market: str | None = None):
+def arbs(min_profit: float = 0.0, market: str | None = None, props: bool = True):
     rows = []
     for e in get_snapshot():
-        for key, g in _groups(e):
-            if market and key != market:
-                continue
+        for key, g in _groups(e, market, props):
             best = []
             for o in g["outcomes"]:
                 us_prices = us_only(o["prices"])
@@ -85,7 +86,7 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                 result = arbm.arb([price for _, _, price in best])
                 if result["profit_pct"] >= min_profit:
                     rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
-                                 "market": key, "point": g["point"],
+                                 "market": key, "player": g["player"], "point": g["point"],
                                  "legs": [{"pick": mk.label(o), "point": o["point"], "book": book, "odds": price,
                                            "stake": stake}
                                           for (o, book, price), stake in zip(best, result["stakes"])],
