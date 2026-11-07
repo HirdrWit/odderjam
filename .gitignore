@@ -1,0 +1,14 @@
+.venv/
+node_modules/
+frontend/dist/
+__pycache__/
+.env
+.odds_cache.json
+.odds_meta.json
+.odderjam.db
+.venv.py312-bak/
+.pytest_cache/
+.claude/settings.local.json
+*.db
+*.pem
+*.key
