@@ -8,6 +8,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.json"
@@ -43,9 +44,7 @@ def _store(data: list[dict], min_gap: float = 0) -> None:
     """Save a fetched snapshot to the odds history and fill any closing lines now due.
     Skips the save if the newest stored snapshot is under min_gap seconds old.
     History problems must never stop odds from being served."""
-    from datetime import datetime, timedelta, timezone
-
-    from .. import history
+    from .. import history  # local import: history imports providers.books, which would be circular
     try:
         last = history.last_fetched_at()
         if min_gap and last and last > history.ts(datetime.now(timezone.utc) - timedelta(seconds=min_gap)):

@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -86,7 +87,6 @@ def test_fetches_are_recorded_and_ev_rows_carry_links(client):
 
 
 def test_old_database_gets_new_columns(tmp_path, monkeypatch):
-    import sqlite3
     path = tmp_path / "old.db"
     old = sqlite3.connect(path)
     old.execute("CREATE TABLE bets (id INTEGER PRIMARY KEY AUTOINCREMENT, placed_at TEXT NOT NULL, event TEXT, "

@@ -35,13 +35,14 @@ class BetIn(BaseModel):
     closing_sharp_odds: float | None = None
 
     def row(self) -> dict:
+        """Return the model as a dict with event_start normalised to UTC text."""
         d = self.model_dump()
         if d["event_start"]:
             d["event_start"] = history.ts(d["event_start"])
         return d
 
 
-FIELDS = ("event", "sport", "market", "pick", "book", "odds", "stake", "status", "closing_odds", "ev_pct",
+_FIELDS = ("event", "sport", "market", "pick", "book", "odds", "stake", "status", "closing_odds", "ev_pct",
           "notes", "event_id", "outcome", "point", "event_start", "closing_sharp_odds")
 
 
@@ -76,8 +77,8 @@ def list_bets():
 def add_bet(b: BetIn):
     d = b.row()
     with conn() as c:
-        cur = c.execute(f"INSERT INTO bets (placed_at,{','.join(FIELDS)}) VALUES (?{',?' * len(FIELDS)})",
-                        (datetime.now(timezone.utc).isoformat(), *(d[k] for k in FIELDS)))
+        cur = c.execute(f"INSERT INTO bets (placed_at,{','.join(_FIELDS)}) VALUES (?{',?' * len(_FIELDS)})",
+                        (datetime.now(timezone.utc).isoformat(), *(d[k] for k in _FIELDS)))
         return out(c.execute("SELECT * FROM bets WHERE id=?", (cur.lastrowid,)).fetchone())
 
 
@@ -85,8 +86,8 @@ def add_bet(b: BetIn):
 def update_bet(bet_id: int, b: BetIn):
     d = b.row()
     with conn() as c:
-        cur = c.execute(f"UPDATE bets SET {','.join(f'{k}=?' for k in FIELDS)} WHERE id=?",
-                        (*(d[k] for k in FIELDS), bet_id))
+        cur = c.execute(f"UPDATE bets SET {','.join(f'{k}=?' for k in _FIELDS)} WHERE id=?",
+                        (*(d[k] for k in _FIELDS), bet_id))
         if not cur.rowcount:
             raise HTTPException(404, "bet not found")
         return out(c.execute("SELECT * FROM bets WHERE id=?", (bet_id,)).fetchone())

@@ -12,6 +12,7 @@ _BET_COLUMNS = {
 
 
 def conn() -> sqlite3.Connection:
+    """Open the connection, create missing tables and indexes, and add any missing bets columns."""
     c = sqlite3.connect(DB)
     c.row_factory = sqlite3.Row
     c.execute("""CREATE TABLE IF NOT EXISTS bets (

@@ -5,6 +5,7 @@ Timestamps are stored as fixed-width UTC strings (see ts()) so they sort and
 compare correctly as text.
 """
 import os
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from . import db
@@ -30,6 +31,7 @@ def _keep_days() -> float:
 
 
 def last_fetched_at() -> str | None:
+    """Return the newest stored fetched_at stamp, or None if the table is empty."""
     with db.conn() as c:
         return c.execute("SELECT MAX(fetched_at) FROM odds_history").fetchone()[0]
 
@@ -51,20 +53,21 @@ def record(events: list[dict], fetched_at: datetime | None = None) -> int:
 
 
 def history(event_id: str, market: str = "moneyline") -> list[dict]:
+    """Return stored prices for one event and market, oldest first."""
     with db.conn() as c:
         return [dict(r) for r in c.execute(
             "SELECT outcome, point, book, price, fetched_at FROM odds_history "
             "WHERE event_id=? AND market=? ORDER BY fetched_at, book, outcome", (event_id, market))]
 
 
-def _last_price(c, bet, book: str, outcome: str, before: str) -> float | None:
+def _last_price(c: sqlite3.Connection, bet: sqlite3.Row, book: str, outcome: str, before: str) -> float | None:
     r = c.execute("SELECT price FROM odds_history WHERE event_id=? AND market=? AND outcome=? AND point IS ? "
                   "AND book=? AND fetched_at < ? ORDER BY fetched_at DESC LIMIT 1",
                   (bet["event_id"], bet["market"], outcome, bet["point"], book, before)).fetchone()
     return r["price"] if r else None
 
 
-def _sharp_close(c, bet, before: str) -> float | None:
+def _sharp_close(c: sqlite3.Connection, bet: sqlite3.Row, before: str) -> float | None:
     """No-vig fair price (American) for the bet's outcome from the last pre-start sharp snapshot."""
     r = c.execute("SELECT MAX(fetched_at) AS t FROM odds_history WHERE event_id=? AND market=? AND point IS ? "
                   "AND book=? AND fetched_at < ?",
