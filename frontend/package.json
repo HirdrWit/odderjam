@@ -2,7 +2,7 @@
   "name": "odderjam-ui",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "test": "node --test src/calc.test.js" },
+  "scripts": { "dev": "vite", "build": "vite build", "test": "node --test src/calc.test.js src/odds.test.js" },
   "dependencies": { "react": "^18.3.1", "react-dom": "^18.3.1" },
   "devDependencies": { "@vitejs/plugin-react": "^4.3.1", "vite": "^5.4.0" }
 }
