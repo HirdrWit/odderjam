@@ -33,18 +33,18 @@ def _half(x: float) -> float:
     return math.floor(x) + 0.5
 
 
-def _priced(p: float, b: str, rng: random.Random) -> tuple[int, int]:
+def _priced(p: float, book: str, rng: random.Random) -> tuple[int, int]:
     """Two-way prices for true probability p of side A, with book vig and noise."""
-    vig = 0.025 if b == "Pinnacle" else rng.uniform(0.04, 0.06)
-    noise = 0.0 if b == "Pinnacle" else rng.gauss(0, 0.025)
+    vig = 0.025 if book == "Pinnacle" else rng.uniform(0.04, 0.06)
+    noise = 0.0 if book == "Pinnacle" else rng.gauss(0, 0.025)
     pa = min(0.95, max(0.05, p + noise))
     return (_to_american(min(0.97, pa * (1 + vig / 2))),
             _to_american(min(0.97, (1 - pa) * (1 + vig / 2))))
 
 
-def _add(outcomes: dict, name: str, point: float | None, book: str, price: int) -> None:
-    o = outcomes.setdefault((name, point), {"name": name, "point": point, "prices": {}})
-    o["prices"][book] = price
+def _add(outcomes: dict[tuple[str, float | None], dict], name: str, point: float | None, book: str, price: int) -> None:
+    outcome = outcomes.setdefault((name, point), {"name": name, "point": point, "prices": {}})
+    outcome["prices"][book] = price
 
 
 def snapshot(seed: int | None = None) -> list[dict]:
@@ -64,27 +64,27 @@ def snapshot(seed: int | None = None) -> list[dict]:
             market_spread = _half(-margin) if fixed_spread is None else (-fixed_spread if margin > 0 else fixed_spread)
             market_total = _half(exp_total)
 
-            ml: dict = {}
-            spreads: dict = {}
-            totals: dict = {}
-            for b in BOOKS:
-                h, a = _priced(true_home, b, rng)
-                _add(ml, home, None, b, h)
-                _add(ml, away, None, b, a)
+            ml: dict[tuple[str, float | None], dict] = {}
+            spreads: dict[tuple[str, float | None], dict] = {}
+            totals: dict[tuple[str, float | None], dict] = {}
+            for book in BOOKS:
+                home_price, away_price = _priced(true_home, book, rng)
+                _add(ml, home, None, book, home_price)
+                _add(ml, away, None, book, away_price)
 
                 # Lines per book are stable for a game; prices move with rng.
-                lb = random.Random(f"{sport}{i}{b}")
-                shift = 0 if b == "Pinnacle" else lb.choice(LINE_SHIFTS)
-                hs = market_spread if fixed_spread is not None else market_spread + shift
-                h, a = _priced(1 - margin_dist.cdf(-hs), b, rng)  # home covers if margin + hs > 0
-                _add(spreads, home, hs, b, h)
-                _add(spreads, away, -hs, b, a)
+                book_rng = random.Random(f"{sport}{i}{book}")
+                spread_shift = 0 if book == "Pinnacle" else book_rng.choice(LINE_SHIFTS)
+                home_line = market_spread if fixed_spread is not None else market_spread + spread_shift
+                home_price, away_price = _priced(1 - margin_dist.cdf(-home_line), book, rng)  # home covers if margin + line > 0
+                _add(spreads, home, home_line, book, home_price)
+                _add(spreads, away, -home_line, book, away_price)
 
-                shift = 0 if b == "Pinnacle" else lb.choice(LINE_SHIFTS)
-                t = max(0.5, market_total + shift)
-                o, u = _priced(1 - total_dist.cdf(t), b, rng)
-                _add(totals, "Over", t, b, o)
-                _add(totals, "Under", t, b, u)
+                total_shift = 0 if book == "Pinnacle" else book_rng.choice(LINE_SHIFTS)
+                total_line = max(0.5, market_total + total_shift)
+                over, under = _priced(1 - total_dist.cdf(total_line), book, rng)
+                _add(totals, "Over", total_line, book, over)
+                _add(totals, "Under", total_line, book, under)
 
             events.append({
                 "id": f"{sport}-{i}", "sport": sport, "home": home, "away": away, "start": start.isoformat(),

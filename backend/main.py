@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -31,7 +32,7 @@ def odds_screen(sport: str | None = None):
     return [e for e in shown if e["markets"]]
 
 
-def _groups(e: dict):
+def _groups(e: dict) -> Iterator[tuple[str, dict]]:
     """Yield (market_key, line_group) for every complete line group in an event."""
     for key, outcomes in e["markets"].items():
         for g in mk.line_groups(key, outcomes, e["home"], e["away"]):
@@ -74,21 +75,21 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                 continue
             best = []
             for o in g["outcomes"]:
-                us = us_only(o["prices"])
-                if not us:
+                us_prices = us_only(o["prices"])
+                if not us_prices:
                     break
-                best.append((o, *max(us.items(), key=lambda kv: kv[1])))
+                best.append((o, *max(us_prices.items(), key=lambda kv: kv[1])))
             else:
-                if len({b for _, b, _ in best}) < 2:
+                if len({book for _, book, _ in best}) < 2:
                     continue
-                r = arbm.arb([price for _, _, price in best])
-                if r["profit_pct"] >= min_profit:
+                result = arbm.arb([price for _, _, price in best])
+                if result["profit_pct"] >= min_profit:
                     rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
                                  "market": key, "point": g["point"],
-                                 "legs": [{"pick": mk.label(o), "point": o["point"], "book": b, "odds": price,
+                                 "legs": [{"pick": mk.label(o), "point": o["point"], "book": book, "odds": price,
                                            "stake": stake}
-                                          for (o, b, price), stake in zip(best, r["stakes"])],
-                                 "profit_pct": r["profit_pct"]})
+                                          for (o, book, price), stake in zip(best, result["stakes"])],
+                                 "profit_pct": result["profit_pct"]})
     return sorted(rows, key=lambda r: -r["profit_pct"])
 
 

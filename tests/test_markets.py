@@ -7,13 +7,13 @@ from backend.providers import mock
 from backend.providers.theoddsapi import parse_event
 
 
-def oc(name, point, **prices):
+def make_outcome(name, point, **prices):
     return {"name": name, "point": point, "prices": prices}
 
 
 def test_spread_groups_pair_home_and_away_at_same_line():
-    outs = [oc("A", -3.5, X=-110), oc("B", 3.5, X=-110), oc("A", -4.5, Y=100), oc("B", 4.5, Y=-120),
-            oc("A", -2.5, Z=-130)]  # -2.5 has no away side: incomplete, skipped
+    outs = [make_outcome("A", -3.5, X=-110), make_outcome("B", 3.5, X=-110), make_outcome("A", -4.5, Y=100), make_outcome("B", 4.5, Y=-120),
+            make_outcome("A", -2.5, Z=-130)]  # -2.5 has no away side: incomplete, skipped
     groups = line_groups("spreads", outs, "A", "B")
     assert [g["point"] for g in groups] == [-4.5, -3.5]
     for g in groups:
@@ -23,24 +23,24 @@ def test_spread_groups_pair_home_and_away_at_same_line():
 
 
 def test_total_groups_only_match_same_point():
-    outs = [oc("Over", 220.5, X=-110), oc("Under", 221.5, Y=-110), oc("Under", 220.5, X=-110)]
+    outs = [make_outcome("Over", 220.5, X=-110), make_outcome("Under", 221.5, Y=-110), make_outcome("Under", 220.5, X=-110)]
     groups = line_groups("totals", outs, "A", "B")
     assert len(groups) == 1 and groups[0]["point"] == 220.5
     assert [o["name"] for o in groups[0]["outcomes"]] == ["Over", "Under"]
 
 
 def test_three_way_moneyline_requires_draw():
-    outs = [oc("A", None, X=200), oc("B", None, X=150), oc("Draw", None, X=220)]
+    outs = [make_outcome("A", None, X=200), make_outcome("B", None, X=150), make_outcome("Draw", None, X=220)]
     (g,) = line_groups("moneyline", outs, "A", "B")
     assert [o["name"] for o in g["outcomes"]] == ["A", "B", "Draw"]
     assert line_groups("moneyline", outs[:1] + outs[2:], "A", "B") == []
 
 
 def test_label():
-    assert label(oc("A", None)) == "A"
-    assert label(oc("A", -3.5)) == "A -3.5"
-    assert label(oc("B", 3.5)) == "B +3.5"
-    assert label(oc("Over", 220.5)) == "Over 220.5"
+    assert label(make_outcome("A", None)) == "A"
+    assert label(make_outcome("A", -3.5)) == "A -3.5"
+    assert label(make_outcome("B", 3.5)) == "B +3.5"
+    assert label(make_outcome("Over", 220.5)) == "Over 220.5"
 
 
 def test_parse_odds_api_event():
@@ -58,10 +58,10 @@ def test_parse_odds_api_event():
             {"key": "h2h", "outcomes": [{"name": "A", "price": -100}, {"name": "B", "price": 100}]}]},
     ]}
     m = parse_event(e, "NFL")["markets"]
-    assert m["moneyline"] == [oc("A", None, Pinnacle=-120), oc("B", None, Pinnacle=110)]
-    assert oc("A", -2.5, Pinnacle=-105) in m["spreads"] and oc("A", -3.5, DraftKings=-110) in m["spreads"]
+    assert m["moneyline"] == [make_outcome("A", None, Pinnacle=-120), make_outcome("B", None, Pinnacle=110)]
+    assert make_outcome("A", -2.5, Pinnacle=-105) in m["spreads"] and make_outcome("A", -3.5, DraftKings=-110) in m["spreads"]
     assert len(m["spreads"]) == 4  # different lines stay separate outcomes
-    assert m["totals"] == [oc("Over", 44.5, DraftKings=-110), oc("Under", 44.5, DraftKings=-110)]
+    assert m["totals"] == [make_outcome("Over", 44.5, DraftKings=-110), make_outcome("Under", 44.5, DraftKings=-110)]
 
 
 def test_mock_has_spreads_totals_with_books_at_different_lines():
@@ -85,7 +85,7 @@ def test_ev_and_arbs_return_spread_and_total_rows(client):
         assert all("point" in r for r in rows)
     for r in arbs:
         if r["market"] == "totals":
-            assert {l["point"] for l in r["legs"]} == {r["point"]}
+            assert {leg["point"] for leg in r["legs"]} == {r["point"]}
         if r["market"] == "spreads":
             home, away = r["legs"]
             assert home["point"] == r["point"] == -away["point"]
@@ -94,8 +94,8 @@ def test_ev_and_arbs_return_spread_and_total_rows(client):
 def test_arbs_never_mix_lines(monkeypatch):
     # Over 220.5 +150 and Under 221.5 +150 would "arb" only if the different lines were wrongly matched.
     ev = {"id": "x", "sport": "NBA", "home": "A", "away": "B", "start": "t", "markets": {"totals": [
-        oc("Over", 220.5, DraftKings=150, Pinnacle=-110), oc("Under", 220.5, FanDuel=-200, Pinnacle=-110),
-        oc("Over", 221.5, BetMGM=-200), oc("Under", 221.5, Caesars=150)]}}
+        make_outcome("Over", 220.5, DraftKings=150, Pinnacle=-110), make_outcome("Under", 220.5, FanDuel=-200, Pinnacle=-110),
+        make_outcome("Over", 221.5, BetMGM=-200), make_outcome("Under", 221.5, Caesars=150)]}}
     monkeypatch.setattr(main, "get_snapshot", lambda: [ev])
     c = TestClient(main.app)
     assert c.get("/api/arbs").json() == []

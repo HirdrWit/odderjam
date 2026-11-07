@@ -15,7 +15,7 @@ DRAW = "Draw"
 
 
 def line_key(market: str, outcome: dict, home: str) -> float | None:
-    """The line an outcome belongs to, from a single shared perspective.
+    """Return the line an outcome belongs to, from a single shared perspective.
 
     Spreads use the home team's point (home -3.5 pairs with away +3.5).
     Totals use the total itself. Moneyline has no line.
@@ -29,7 +29,7 @@ def line_key(market: str, outcome: dict, home: str) -> float | None:
 
 
 def required_names(market: str, outcomes: list[dict], home: str, away: str) -> list[str]:
-    """Outcome names that together make up one complete, mutually exclusive market."""
+    """Return the outcome names that together make up one complete, mutually exclusive market."""
     if market == "totals":
         return ["Over", "Under"]
     names = [home, away]
@@ -39,12 +39,12 @@ def required_names(market: str, outcomes: list[dict], home: str, away: str) -> l
 
 
 def line_groups(market: str, outcomes: list[dict], home: str, away: str) -> list[dict]:
-    """Complete line groups: [{"point": key, "outcomes": [outcome per required name]}].
+    """Return complete line groups: [{"point": key, "outcomes": [outcome per required name]}].
 
     Lines where not every side is offered are skipped.
     """
     names = required_names(market, outcomes, home, away)
-    by_line: dict = {}
+    by_line: dict[float | None, dict[str, dict]] = {}
     for o in outcomes:
         if o["name"] in names:
             by_line.setdefault(line_key(market, o, home), {})[o["name"]] = o
@@ -60,4 +60,7 @@ def label(outcome: dict) -> str:
     p = outcome.get("point")
     if p is None:
         return outcome["name"]
-    return f'{outcome["name"]} {p:+g}' if outcome["name"] not in ("Over", "Under") else f'{outcome["name"]} {p:g}'
+    name = outcome["name"]
+    if name in ("Over", "Under"):
+        return f"{name} {p:g}"
+    return f"{name} {p:+g}"
