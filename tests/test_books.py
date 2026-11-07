@@ -13,7 +13,8 @@ def test_us_filter():
 def test_api_hides_non_us_books():
     c = TestClient(app)
     for e in c.get("/api/odds").json():
-        assert "Pinnacle" not in e["markets"]["moneyline"]
+        for outcomes in e["markets"].values():
+            assert all("Pinnacle" not in o["prices"] for o in outcomes)
     for r in c.get("/api/ev").json():
         assert r["book"] != "Pinnacle"
     for r in c.get("/api/arbs").json():
