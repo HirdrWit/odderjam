@@ -1,10 +1,11 @@
 from collections.abc import Iterator
 from pathlib import Path
+from statistics import median
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .engine import arb as arbm, devig, ev, lowhold, markets as mk, odds
+from .engine import arb as arbm, devig, ev, lowhold, markets as mk, middles as mid, odds
 from .providers.books import SHARP, US_BOOKS, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
@@ -114,6 +115,86 @@ def low_hold(max_hold: float = 1.0, book: str | None = None, stake: float = 100.
             rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                          "market": key, "point": g["point"], "stake": stake, **pair})
     return sorted(rows, key=lambda r: r["hold_pct"])
+
+
+def _middle_sides(key: str, outcomes: list[dict], home: str) -> tuple[dict, dict]:
+    """Split a spreads/totals market into low-line ("over") and high-line ("under") legs.
+
+    Both are keyed by the line on one scoring variable (total, or home margin for spreads):
+    an over leg wins above its line, an under leg below. Values are [(price, book, outcome)].
+    """
+    over: dict[float, list] = {}
+    under: dict[float, list] = {}
+    for o in outcomes:
+        if o.get("point") is None:
+            continue
+        if key == "totals":
+            if o["name"] == "Over":
+                side, line = over, o["point"]
+            elif o["name"] == "Under":
+                side, line = under, o["point"]
+            else:
+                continue
+        elif o["name"] == home:  # home -3.5 wins when margin > 3.5
+            side, line = over, -o["point"]
+        else:  # away +4.5 wins when margin < 4.5
+            side, line = under, o["point"]
+        for book, price in us_only(o["prices"]).items():
+            side.setdefault(line, []).append((price, book, o))
+    return over, under
+
+
+def _center(key: str, outcomes: list[dict], home: str) -> float:
+    """Expected result: the sharp book's line if it has one, else the median line across books."""
+    sign = -1 if key == "spreads" else 1  # home point -3.5 means an expected home margin of +3.5
+    priced = [(sign * mk.line_key(key, o, home), o) for o in outcomes if o.get("point") is not None]
+    lines = [ln for ln, _ in priced]
+    sharp = [ln for ln, o in priced if SHARP in o["prices"]]
+    return median(sharp or lines)
+
+
+@app.get("/api/middles")
+def middles(
+    min_window: float = 0.0,
+    max_cost: float | None = None,
+    market: str | None = None,
+    stake: float = 100.0,
+) -> list[dict]:
+    """Middles across books. `max_cost` caps the worst-case loss as a percent of total stake."""
+    rows = []
+    for e in get_snapshot():
+        for key in ("spreads", "totals"):
+            if (market and key != market) or not e["markets"].get(key):
+                continue
+            outcomes = e["markets"][key]
+            over, under = _middle_sides(key, outcomes, e["home"])
+            pmf = mid.model_pmf(e["sport"], key, _center(key, outcomes, e["home"]))
+            for la, overs in over.items():
+                for lb, unders in under.items():
+                    if lb - la <= 0 or lb - la < min_window:
+                        continue
+                    pairs = [(a, b) for a in overs for b in unders if a[1] != b[1]]
+                    if not pairs:
+                        continue
+
+                    def worst_case(pair):
+                        (price_a, *_), (price_b, *_) = pair
+                        return mid.middle(la, price_a, lb, price_b)["worst_case"]
+
+                    (pa, ba, oa), (pb, bb, ob) = max(pairs, key=worst_case)
+                    m = mid.middle(la, pa, lb, pb, stake)
+                    cost_pct = max(-m["worst_case"], 0.0) / stake * 100
+                    if max_cost is not None and cost_pct > max_cost:
+                        continue
+                    rows.append({
+                        "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
+                        "market": key, "window": m["window"], "low": la, "high": lb,
+                        "legs": [{"pick": mk.label(o), "point": o["point"], "book": b, "odds": p, "stake": s}
+                                 for o, b, p, s in ((oa, ba, pa, m["stake_a"]), (ob, bb, pb, m["stake_b"]))],
+                        "win_both": m["win_both"], "worst_case": m["worst_case"], "cost_pct": cost_pct,
+                        **mid.middle_ev(m, la, pa, lb, pb, pmf),
+                    })
+    return sorted(rows, key=lambda r: -r["ev_pct"])
 
 
 @app.post("/api/refresh")
