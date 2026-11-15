@@ -119,7 +119,7 @@ function PositiveEV() {
     <>
       <div className="bar">
         Book <select value={book} onChange={(e) => pickBook(e.target.value)}>
-          {["DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet", ""].map((b) => <option key={b} value={b}>{b || "All books"}</option>)}</select>
+          {["DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet", "Kalshi", "Polymarket", "Novig", "ProphetX", ""].map((b) => <option key={b} value={b}>{b || "All books"}</option>)}</select>
         Min EV % <input type="number" step="0.5" value={minEv} onChange={(e) => setMinEv(+e.target.value)} />
         Devig <select value={method} onChange={(e) => setMethod(e.target.value)}>
           <option>multiplicative</option><option>power</option><option>worst_case</option></select>
@@ -172,7 +172,7 @@ function LowHold() {
       <div className="bar">
         Max hold % <input type="number" step="0.25" value={maxHold} onChange={(e) => setMaxHold(parseNumberInput(e.target.value, maxHold))} />
         One leg at <select value={book} onChange={(e) => setBook(e.target.value)}>
-          {["", "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet"].map((b) => <option key={b} value={b}>{b || "Any book"}</option>)}</select>
+          {["", "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet", "Kalshi", "Polymarket", "Novig", "ProphetX"].map((b) => <option key={b} value={b}>{b || "Any book"}</option>)}</select>
         Market <select value={market} onChange={(e) => setMarket(e.target.value)}>
           <option value="">All markets</option>{Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         Total stake $<input type="number" step="10" value={stake} onChange={(e) => setStake(parseNumberInput(e.target.value, stake))} />

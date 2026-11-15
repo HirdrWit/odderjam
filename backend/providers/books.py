@@ -9,6 +9,8 @@ US_BOOKS = {
     "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics",
     "ESPN BET", "theScore Bet", "Hard Rock Bet", "BetParx", "Bally Bet", "Borgata",
     "Unibet", "Fliff", "Novig", "SuperBook", "Circa Sports",
+    # Exchanges and prediction markets (no limits on winners). Prices are after each platform's fee.
+    "Kalshi", "Polymarket", "ProphetX",
 }
 _LOWER = {b.lower(): b for b in US_BOOKS}
 

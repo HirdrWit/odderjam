@@ -5,6 +5,7 @@ from pathlib import Path
 
 import httpx
 
+from ..engine.exchange import apply_commission, fee_for
 from .books import SHARP, us_name
 
 ALL = {"NBA": "basketball_nba", "NFL": "americanfootball_nfl", "MLB": "baseball_mlb", "NHL": "icehockey_nhl"}
@@ -26,6 +27,7 @@ def parse_event(e: dict, sport: str) -> dict:
         name = SHARP if bk["key"] == "pinnacle" else us_name(bk["title"])
         if name is None:
             continue  # not available to US bettors
+        fee = fee_for(name)  # exchanges quoted in American odds may take a commission on winnings
         for m in bk["markets"]:
             key = MARKET_KEYS.get(m["key"])
             if key is None:
@@ -34,7 +36,9 @@ def parse_event(e: dict, sport: str) -> dict:
             for o in m["outcomes"]:
                 point = o.get("point")
                 outcome = outcomes.setdefault((o["name"], point), {"name": o["name"], "point": point, "prices": {}})
-                outcome["prices"][name] = o["price"]
+                price = apply_commission(o["price"], fee)
+                if price is not None:
+                    outcome["prices"][name] = price
     return {"id": e["id"], "sport": sport, "home": e["home_team"], "away": e["away_team"],
             "start": e["commence_time"], "markets": {k: list(v.values()) for k, v in markets.items()}}
 

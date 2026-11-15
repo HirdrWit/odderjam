@@ -23,8 +23,9 @@ def _ttl() -> float:
 
 
 def _fetch() -> list[dict]:
+    from .exchanges import enrich
     from .theoddsapi import snapshot
-    return snapshot()
+    return enrich(snapshot())
 
 
 def cache_info() -> dict:
