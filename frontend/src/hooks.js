@@ -40,3 +40,38 @@ export function useApi(url, every = 60000) {
   }, [url]);
   return data;
 }
+
+// Parlay slip, shared across tabs through localStorage.
+const SLIP_KEY = 'parlaySlip';
+
+/** Stable identity of a slip leg. */
+export const legKey = (l) => `${l.event_id}|${l.market}|${l.name}|${l.point}`;
+
+function readSlip() {
+  try {
+    return JSON.parse(localStorage.getItem(SLIP_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+/** Returns the parlay slip and helpers; every instance stays in sync via the slip-changed event. */
+export function useSlip() {
+  const [slip, setSlip] = useState(readSlip);
+  useEffect(() => {
+    const load = () => setSlip(readSlip());
+    window.addEventListener('slip-changed', load);
+    return () => window.removeEventListener('slip-changed', load);
+  }, []);
+  const save = (n) => {
+    try {
+      localStorage.setItem(SLIP_KEY, JSON.stringify(n));
+    } catch {
+      // Storage full or disabled; the slip is lost on reload.
+    }
+    window.dispatchEvent(new Event('slip-changed'));
+  };
+  const has = (l) => slip.some((x) => legKey(x) === legKey(l));
+  const toggle = (l) => save(has(l) ? slip.filter((x) => legKey(x) !== legKey(l)) : [...readSlip(), l]);
+  return { slip, has, toggle, clear: () => save([]) };
+}

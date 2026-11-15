@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useStored, useApi } from './hooks.js';
+import { useStored, useApi, useSlip } from './hooks.js';
 import { FORMATS, formatOdds, outcomeLabel, lineGroups, groupStats, mainGroup, filterEvents, allBooks } from './odds.js';
 
 const MARKET_LABELS = { moneyline: 'Moneyline', spreads: 'Spread', totals: 'Total' };
@@ -18,7 +18,7 @@ function holdClass(h) {
   return h > 5 ? 'bad' : '';
 }
 
-function LineTable({ group, books, format }) {
+function LineTable({ group, books, format, legOf, slip }) {
   const s = groupStats(group, books);
   return (
     <table className="odds">
@@ -30,7 +30,9 @@ function LineTable({ group, books, format }) {
             <td className="best">{s.best[i] ? <>{formatOdds(s.best[i].price, format)} <span className="mut small">{s.best[i].book}</span></> : '—'}</td>
             <td className="mut">{formatOdds(s.fair[i], format) || '—'}</td>
             {books.map((b) => (
-              <td key={b} className={o.prices[b] != null && s.best[i] && o.prices[b] === s.best[i].price ? 'best' : ''}>
+              <td key={b}
+                className={`${o.prices[b] != null && s.best[i] && o.prices[b] === s.best[i].price ? 'best' : ''}${slip.has(legOf(o)) ? ' inslip' : ''}`}
+                onClick={() => o.prices[b] != null && slip.toggle(legOf(o))}>
                 {formatOdds(o.prices[b], format)}
               </td>
             ))}
@@ -65,6 +67,7 @@ export default function OddsScreen() {
   const [open, setOpen] = useState(null);
   const [eventMarket, setEventMarket] = useState({});
   const [showBooks, setShowBooks] = useState(false);
+  const slip = useSlip();
   const data = useApi(`/api/odds${sport ? `?sport=${sport}` : ''}`) || [];
 
   const books = allBooks(data);
@@ -114,7 +117,11 @@ export default function OddsScreen() {
                     <button key={k} className={k === m ? 'on' : ''} onClick={() => setEventMarket({ ...eventMarket, [e.id]: k })}>{marketLabel(k)}</button>
                   ))}
                 </div>
-                {groups.map((g) => <LineTable key={String(g.point)} group={g} books={shown} format={format} />)}
+                <div className="mut small">Click a price to add it to the parlay slip.</div>
+                {groups.map((g) => (
+                  <LineTable key={String(g.point)} group={g} books={shown} format={format} slip={slip}
+                    legOf={(o) => ({ event_id: e.id, event: `${e.away} @ ${e.home}`, sport: e.sport, market: m, name: o.name, point: o.point, pick: outcomeLabel(o) })} />
+                ))}
               </div>
             )}
           </div>

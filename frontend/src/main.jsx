@@ -5,6 +5,7 @@ import Calculators from "./Calculators.jsx";
 import OddsScreen from "./OddsScreen.jsx";
 import Tracker from "./Tracker.jsx";
 import { Toaster, postJson, toast, useApi, useStored } from "./hooks.jsx";
+import { useSlip, legKey } from "./hooks.js";
 
 const fmt = (o) => (o > 0 ? `+${Math.round(o)}` : `${Math.round(o)}`);
 
@@ -34,6 +35,7 @@ function RefreshBox() {
 
 const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
 const money = (n) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
+const pct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 
 function PositiveEV() {
   const [minEv, setMinEv] = useStored("evMin", 1);
@@ -53,6 +55,7 @@ function PositiveEV() {
     res.ok ? toast(`Tracked ${r.pick} @ ${r.book}`) : toast("Could not track bet", "err");
     window.dispatchEvent(new Event("data-changed"));
   };
+  const { has, toggle } = useSlip();
   const cfg = useApi("/api/sharps", 600000);
   const [weights, setWeights] = useStored("evSharpWeights", null);
   const [maxHold, setMaxHold] = useStored("evMaxHold", null);
@@ -90,7 +93,8 @@ function PositiveEV() {
             <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td>
             <td className="mut small">{r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(" · ")}</td>
             <td>${r.stake.toFixed(2)}</td>
-            <td><button className="track" onClick={() => track(r)}>Track</button></td></tr>
+            <td><button className="track" onClick={() => track(r)}>Track</button>{" "}
+              <button className={has(r) ? "track on" : "track"} title="Add to parlay slip" onClick={() => toggle(r)}>{has(r) ? "✓ Slip" : "+ Slip"}</button></td></tr>
         ))}
       </tbody></table>
     </>
@@ -117,6 +121,71 @@ function Arbs() {
           {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100</div>)}
         </div>
       ))}
+    </>
+  );
+}
+
+function Parlay() {
+  const { slip, toggle, clear } = useSlip();
+  const [method] = useStored("evMethod", "multiplicative");
+  const [kelly, setKelly] = useStored("evKelly", 0.25);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const legs = slip.map(({ event_id, market, name, point }) => ({ event_id, market, name, point }));
+  const body = JSON.stringify({ legs, method, kelly });
+  useEffect(() => {
+    if (legs.length < 2) { setRes(null); setErr(null); return; }
+    let live = true;
+    const load = () => fetch("/api/parlay", { method: "POST", headers: { "Content-Type": "application/json" }, body })
+      .then(async (r) => { const d = await r.json(); if (!live) return; if (r.ok) { setRes(d); setErr(null); } else { setRes(null); setErr(d.detail); } });
+    load();
+    window.addEventListener("data-changed", load);
+    return () => { live = false; window.removeEventListener("data-changed", load); };
+  }, [body]);
+  const track = async (b) => {
+    const picks = res.legs.map((l) => l.pick);
+    await fetch("/api/bets", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: [...new Set(res.legs.map((l) => l.event))].join(" / "),
+        sport: [...new Set(res.legs.map((l) => l.sport))].join("/"), market: "parlay",
+        pick: `${picks.length}-leg parlay: ${picks.join(" + ")}`, book: b.book, odds: Math.round(b.odds),
+        stake: +(b.stake ?? 0).toFixed(2) || 1, ev_pct: b.ev_pct,
+        notes: res.legs.map((l, i) => `${l.pick} (${l.event}) ${fmt(b.leg_odds[i])}`).join("; ") }) });
+    alert(`Tracked parlay @ ${b.book}`);
+  };
+  return (
+    <>
+      <div className="bar">
+        Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => setKelly(+e.target.value)} />
+        <span className="mut">Devig: {method} (set on +EV tab)</span>
+        {slip.length > 0 && <button className="x" onClick={clear}>Clear slip</button>}
+      </div>
+      {slip.length === 0 && <div className="mut">Add legs with "+ Slip" on the +EV tab, or click a price on the Odds Screen.</div>}
+      {slip.map((l, i) => {
+        const f = res?.legs[i]?.fair_prob;
+        return <div className="card calc" key={legKey(l)}>
+          <button className="x" onClick={() => toggle(l)}>✕</button> <b>{l.pick}</b> <span className="mut">{MARKETS[l.market] || l.market} · {l.event}</span>
+          {f != null && <span className="mut">fair {(f * 100).toFixed(1)}%</span>}
+          {res && f == null && <span className="mut">no sharp price for this line — EV unknown</span>}
+        </div>;
+      })}
+      {slip.length === 1 && <div className="mut">Add at least one more leg.</div>}
+      {err && <div className="bad">{typeof err === "string" ? err : "Could not price this parlay"}</div>}
+      {res && <>
+        <div className="bar">
+          Fair <b>{res.fair_odds == null ? "—" : fmt(res.fair_odds)}</b>
+          {res.fair_prob != null && <span className="mut">{(res.fair_prob * 100).toFixed(2)}% · legs treated as independent</span>}
+        </div>
+        {res.same_game && <div className="bad">Same-game legs: correlation is not modelled, and books without same-game parlays are blocked.</div>}
+        {res.books.length === 0 && <div className="mut">No book offers every leg at these lines.</div>}
+        <table><thead><tr><th>Book</th><th>Odds</th><th>EV%</th><th>Stake</th><th>Legs</th><th></th></tr></thead><tbody>
+          {res.books.map((b) => (
+            <tr key={b.book} className={b.blocked ? "blocked" : ""}><td>{b.book}</td><td>{fmt(b.odds)}</td>
+              <td className={b.ev_pct > 0 ? "best" : b.ev_pct < 0 ? "bad" : ""}>{pct(b.ev_pct)}</td>
+              <td>{b.stake == null ? "—" : money(b.stake)}</td><td className="mut">{b.leg_odds.map(fmt).join(" × ")}</td>
+              <td>{b.blocked ? <span className="mut">No SGP</span> : <button className="track" onClick={() => track(b)}>Track</button>}</td></tr>
+          ))}
+        </tbody></table>
+      </>}
     </>
   );
 }
@@ -198,7 +267,7 @@ function Middles() {
   );
 }
 
-const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, "Low Hold": LowHold, Middles, Calculator: Calculators, Tracker };
+const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Parlay, Arbitrage: Arbs, "Low Hold": LowHold, Middles, Calculator: Calculators, Tracker };
 function App() {
   const [tab, setTab] = useState(() => { try { const t = localStorage.getItem("tab"); return t in TABS ? t : "Odds Screen"; } catch { return "Odds Screen"; } });
   const go = (t) => { setTab(t); try { localStorage.setItem("tab", t); } catch {} };
