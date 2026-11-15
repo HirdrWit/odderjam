@@ -1,6 +1,8 @@
 """The Odds API v4 adapter (h2h, spreads, totals). Needs ODDS_API_KEY."""
 import json
 import os
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -16,16 +18,21 @@ MARKETS = [m.strip() for m in os.environ.get("ODDS_MARKETS", "h2h,spreads,totals
 MARKET_KEYS = {"h2h": "moneyline", "spreads": "spreads", "totals": "totals"}
 
 
+REGIONS = ["us", "eu"]
+
 META = Path(__file__).resolve().parent.parent.parent / ".odds_meta.json"
 
 
 def parse_event(e: dict, sport: str) -> dict:
     """Convert one Odds API event into our event shape."""
     markets: dict[str, dict[tuple[str, float | None], dict]] = {}
+    updated: dict[str, str] = {}
     for bk in e["bookmakers"]:
         name = SHARP if bk["key"] == "pinnacle" else us_name(bk["title"])
         if name is None:
             continue  # not available to US bettors
+        if bk.get("last_update"):
+            updated[name] = bk["last_update"]
         for m in bk["markets"]:
             key = MARKET_KEYS.get(m["key"])
             if key is None:
@@ -36,22 +43,24 @@ def parse_event(e: dict, sport: str) -> dict:
                 outcome = outcomes.setdefault((o["name"], point), {"name": o["name"], "point": point, "prices": {}})
                 outcome["prices"][name] = o["price"]
     return {"id": e["id"], "sport": sport, "home": e["home_team"], "away": e["away_team"],
-            "start": e["commence_time"], "markets": {k: list(v.values()) for k, v in markets.items()}}
+            "start": e["commence_time"], "markets": {k: list(v.values()) for k, v in markets.items()}, "updated": updated}
 
 
 def fetch_cost() -> int:
-    return 0
+    """Credits one snapshot() costs: sports x regions x markets."""
+    return len(SPORTS) * len(REGIONS) * len(MARKETS)
 
 
 def snapshot(live_only: bool = False, now: float | None = None) -> list[dict]:
+    """Fetch all sports. With live_only, only events that have already started (commenceTimeTo=now)."""
     key = os.environ["ODDS_API_KEY"]
+    params = {"apiKey": key, "regions": ",".join(REGIONS), "markets": ",".join(MARKETS), "oddsFormat": "american"}
+    if live_only:
+        ts = time.time() if now is None else now
+        params["commenceTimeTo"] = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     events = []
     for sport, k in SPORTS.items():
-        r = httpx.get(
-            f"https://api.the-odds-api.com/v4/sports/{k}/odds",
-            params={"apiKey": key, "regions": "us,eu", "markets": ",".join(MARKETS), "oddsFormat": "american"},
-            timeout=20,
-        )
+        r = httpx.get(f"https://api.the-odds-api.com/v4/sports/{k}/odds", params=dict(params), timeout=20)
         if "x-requests-remaining" in r.headers:
             META.write_text(json.dumps({"remaining": r.headers["x-requests-remaining"],
                                         "used": r.headers.get("x-requests-used")}))

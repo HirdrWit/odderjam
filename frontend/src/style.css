@@ -41,3 +41,7 @@ button.chip { background: #1d2530; color: inherit; border: 1px solid #2c3a4b; bo
 table.odds { font-size: 13px; } table.odds th, table.odds td { padding: 5px 8px; white-space: nowrap; }
 table.odds tr.foot td { border-bottom: 0; }
 .card .mut.small, table.odds .mut { margin-left: 2px; }
+.badge.live { display: inline-block; background: #e5484d; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 1px 6px; border-radius: 8px; vertical-align: middle; }
+h3.section { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #8795a6; margin: 16px 0 8px; }
+.livebox { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #222c38; padding-top: 8px; }
+.livebox input[type=number] { width: 70px; }

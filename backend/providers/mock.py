@@ -1,6 +1,7 @@
 """Seeded mock odds so every tool works offline."""
 import math
 import random
+import time
 from datetime import datetime, timedelta, timezone
 from statistics import NormalDist
 
@@ -48,15 +49,24 @@ def _add(outcomes: dict[tuple[str, float | None], dict], name: str, point: float
 
 
 def snapshot(seed: int | None = None, now: float | None = None) -> list[dict]:
-    """Return events: {id, sport, home, away, start, markets:{key:[{name, point, prices:{book:price}}]}}"""
-    rng = random.Random(seed if seed is not None else int(datetime.now().timestamp() // 30))
+    """Return events: {id, sport, home, away, start, markets:{key:[{name, point, prices:{book:price}}]}, updated:{book:iso}}
+
+    Game 0 of each sport is in progress. `updated` holds each book's last price time.
+    """
+    now = time.time() if now is None else now
+    rng = random.Random(seed if seed is not None else int(now // 30))
+    now_dt = datetime.fromtimestamp(now, timezone.utc)
     events = []
     for sport, games in GAMES.items():
         margin_sd, (tlo, thi), total_sd, fixed_spread = SPORT_MODEL[sport]
         for i, (home, away) in enumerate(games):
             rs = random.Random(f"{sport}{i}")
             true_home = rs.uniform(0.3, 0.7)
-            start = datetime.now(timezone.utc) + timedelta(hours=rs.randint(2, 48))
+            in_play = i == 0
+            if in_play:
+                start = now_dt - timedelta(hours=rs.uniform(0.25, 1.5))
+            else:
+                start = now_dt + timedelta(hours=rs.randint(2, 48))
             margin = NormalDist(0, margin_sd).inv_cdf(true_home)  # expected home margin
             margin_dist = NormalDist(margin, margin_sd)
             exp_total = rs.uniform(tlo, thi)
@@ -86,9 +96,13 @@ def snapshot(seed: int | None = None, now: float | None = None) -> list[dict]:
                 _add(totals, "Over", total_line, book, over)
                 _add(totals, "Under", total_line, book, under)
 
+            max_age = 40 if in_play else 900  # live prices move fast; pre-game ones sit
+            updated = {book: datetime.fromtimestamp(now - rng.uniform(0, max_age), timezone.utc).isoformat()
+                       for book in BOOKS}
             events.append({
                 "id": f"{sport}-{i}", "sport": sport, "home": home, "away": away, "start": start.isoformat(),
                 "markets": {"moneyline": list(ml.values()), "spreads": list(spreads.values()),
                             "totals": list(totals.values())},
+                "updated": updated,
             })
     return events

@@ -4,12 +4,13 @@ from pathlib import Path
 from statistics import median
 
 from fastapi import FastAPI
+from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 
-from .engine import arb as arbm, devig, ev, lowhold, markets as mk, middles as mid, odds
+from .engine import arb as arbm, devig, ev, live as _live_mod, lowhold, markets as mk, middles as mid, odds
 from .providers.books import SHARP, US_BOOKS, us_only
 from .routes import bets
-from .providers import cache_info, get_snapshot
+from .providers import cache_info, get_snapshot, live_config, live_status, set_live
 
 app = FastAPI(title="odderjam")
 app.include_router(bets.router)
@@ -27,11 +28,44 @@ def _us_markets(markets: dict) -> dict:
     return out
 
 
+def _now() -> float:
+    return time.time()
+
+
+def _shown_books(markets: dict) -> set[str]:
+    return {b for outcomes in markets.values() for o in outcomes for b in o["prices"]}
+
+
 @app.get("/api/odds")
-def odds_screen(sport: str | None = None):
-    shown = [{**e, "markets": _us_markets(e["markets"])} for e in get_snapshot()
-             if not sport or e["sport"] == sport]
-    return [e for e in shown if e["markets"]]
+def odds_screen(sport: str | None = None, live: bool | None = None):
+    now = _now()
+    rows = []
+    for e in get_snapshot():
+        if sport and e["sport"] != sport:
+            continue
+        is_live = _live_mod.is_live(e, now)
+        if live is not None and is_live != live:
+            continue
+        markets = _us_markets(e["markets"])
+        if not markets:
+            continue
+        rows.append({**e, "markets": markets, "live": is_live,
+                     "price_age_seconds": _live_mod.price_age(e.get("updated", {}), _shown_books(markets), now)})
+    return rows
+
+
+def _freshness(e: dict, books, now: float) -> dict | None:
+    """Row fields for a tool row on event `e` priced at `books`; None if the row must be dropped.
+
+    With live mode on, a live event's row is dropped when any of its prices is older than
+    max_price_age (or has no timestamp): a stale in-play price is a phantom edge. Pre-game rows are kept.
+    """
+    is_live = _live_mod.is_live(e, now)
+    age = _live_mod.price_age(e.get("updated", {}), books, now)
+    cfg = live_config()
+    if cfg["enabled"] and is_live and _live_mod.is_stale(age, cfg["max_price_age"]):
+        return None
+    return {"event_id": e["id"], "live": is_live, "price_age_seconds": age}
 
 
 def _groups(e: dict) -> Iterator[tuple[str, dict]]:
@@ -45,6 +79,7 @@ def _groups(e: dict) -> Iterator[tuple[str, dict]]:
 def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25,
                 market: str | None = None):
     bankroll = max(bets.bankroll_info()["current"], 0.0)
+    now = _now()
     rows = []
     for e in get_snapshot():
         for key, g in _groups(e):
@@ -58,18 +93,22 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                     if book_name not in US_BOOKS or (book and book_name != book):
                         continue
                     v = ev.ev_pct(fp, price)
-                    if v >= min_ev:
+                    if v < min_ev:
+                        continue
+                    fresh = _freshness(e, [book_name, SHARP], now)
+                    if fresh is not None:
                         rows.append({
                             "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                             "market": key, "point": o["point"], "pick": mk.label(o), "book": book_name,
                             "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
-                            "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
+                            "stake": bankroll * ev.kelly_fraction(fp, price, kelly), **fresh,
                         })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 
 
 @app.get("/api/arbs")
 def arbs(min_profit: float = 0.0, market: str | None = None):
+    now = _now()
     rows = []
     for e in get_snapshot():
         for key, g in _groups(e):
@@ -85,13 +124,16 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                 if len({book for _, book, _ in best}) < 2:
                     continue
                 result = arbm.arb([price for _, _, price in best])
-                if result["profit_pct"] >= min_profit:
+                if result["profit_pct"] < min_profit:
+                    continue
+                fresh = _freshness(e, [book for _, book, _ in best], now)
+                if fresh is not None:
                     rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
                                  "market": key, "point": g["point"],
                                  "legs": [{"pick": mk.label(o), "point": o["point"], "book": book, "odds": price,
                                            "stake": stake}
                                           for (o, book, price), stake in zip(best, result["stakes"])],
-                                 "profit_pct": result["profit_pct"]})
+                                 "profit_pct": result["profit_pct"], **fresh})
     return sorted(rows, key=lambda r: -r["profit_pct"])
 
 
@@ -101,6 +143,7 @@ def low_hold(max_hold: float = 1.0, book: str | None = None, stake: float = 100.
 
     With ``book`` set, one leg must be at that book. Sorted by hold, lowest first.
     """
+    now = _now()
     rows = []
     for e in get_snapshot():
         for key, g in _groups(e):
@@ -111,10 +154,13 @@ def low_hold(max_hold: float = 1.0, book: str | None = None, stake: float = 100.
             pair = lowhold.best_pair(us_only(a["prices"]), us_only(b["prices"]), book or None, stake)
             if pair is None or pair["hold_pct"] > max_hold:
                 continue
+            fresh = _freshness(e, [leg["book"] for leg in pair["legs"]], now)
+            if fresh is None:
+                continue
             for o, leg in zip(g["outcomes"], pair["legs"]):
                 leg.update(pick=mk.label(o), point=o["point"])
             rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
-                         "market": key, "point": g["point"], "stake": stake, **pair})
+                         "market": key, "point": g["point"], "stake": stake, **pair, **fresh})
     return sorted(rows, key=lambda r: r["hold_pct"])
 
 
@@ -162,6 +208,7 @@ def middles(
     stake: float = 100.0,
 ) -> list[dict]:
     """Middles across books. `max_cost` caps the worst-case loss as a percent of total stake."""
+    now = _now()
     rows = []
     for e in get_snapshot():
         for key in ("spreads", "totals"):
@@ -187,29 +234,42 @@ def middles(
                     cost_pct = max(-m["worst_case"], 0.0) / stake * 100
                     if max_cost is not None and cost_pct > max_cost:
                         continue
+                    fresh = _freshness(e, [ba, bb], now)
+                    if fresh is None:
+                        continue
                     rows.append({
                         "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                         "market": key, "window": m["window"], "low": la, "high": lb,
                         "legs": [{"pick": mk.label(o), "point": o["point"], "book": b, "odds": p, "stake": s}
                                  for o, b, p, s in ((oa, ba, pa, m["stake_a"]), (ob, bb, pb, m["stake_b"]))],
                         "win_both": m["win_both"], "worst_case": m["worst_case"], "cost_pct": cost_pct,
-                        **mid.middle_ev(m, la, pa, lb, pb, pmf),
+                        **mid.middle_ev(m, la, pa, lb, pb, pmf), **fresh,
                     })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 
 
-def _now() -> float:
-    return time.time()
+class LiveSettings(BaseModel):
+    """Live-mode settings; every field optional, only those sent are changed."""
+    enabled: bool | None = None
+    interval_seconds: float | None = Field(default=None, gt=0)
+    credits_per_hour: float | None = Field(default=None, ge=0)
+    max_price_age: float | None = Field(default=None, gt=0)
+
+
+def _live_payload() -> dict:
+    now = _now()
+    return {**live_status(), "live_events": sum(_live_mod.is_live(e, now) for e in get_snapshot())}
 
 
 @app.get("/api/live")
 def live_get():
-    return {}
+    return _live_payload()
 
 
 @app.post("/api/live")
-def live_post(body: dict):
-    return {}
+def live_post(body: LiveSettings):
+    set_live(**body.model_dump(exclude_none=True))
+    return _live_payload()
 
 
 @app.post("/api/refresh")

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useStored, useApi } from './hooks.js';
-import { FORMATS, formatOdds, outcomeLabel, lineGroups, groupStats, mainGroup, filterEvents, allBooks } from './odds.js';
+import {
+  FORMATS, formatOdds, outcomeLabel, lineGroups, groupStats, mainGroup, filterEvents, allBooks, ageText, splitLive,
+} from './odds.js';
 
 const MARKET_LABELS = { moneyline: 'Moneyline', spreads: 'Spread', totals: 'Total' };
 const ORDER = Object.keys(MARKET_LABELS);
@@ -43,6 +45,38 @@ function LineTable({ group, books, format }) {
   );
 }
 
+function EventCard({ e, market, eventMarket, setEventMarket, books, format, isOpen, toggle }) {
+  const m = eventMarket[e.id] && e.markets[eventMarket[e.id]] ? eventMarket[e.id] : market;
+  const outs = e.markets[m] || [];
+  const groups = lineGroups(m, outs, e.home, e.away);
+  const main = mainGroup(groups, books);
+  const ms = main && groupStats(main, books);
+  return (
+    <div className="card" onClick={toggle}>
+      {e.live && <><span className="badge live">LIVE</span> </>}
+      <b>{e.away} @ {e.home}</b> <span className="mut">{e.sport} · {new Date(e.start).toLocaleString()}</span>
+      <div className="mut">
+        {!main ? `No ${marketLabel(m).toLowerCase()} odds` : <>
+          {marketLabel(m)} best: {main.outcomes.map((o, i) => `${outcomeLabel(o)} ${ms.best[i] ? formatOdds(ms.best[i].price, format) : '—'}`).join(' · ')}
+          {' · '}hold <span className={holdClass(ms.holdPct)}>{holdText(ms.holdPct)}</span>
+          {groups.length > 1 && ` · ${groups.length} lines`}
+        </>}
+        {' · '}prices {ageText(e.price_age_seconds)} old
+      </div>
+      {isOpen && (
+        <div onClick={(ev) => ev.stopPropagation()} className="detail">
+          <div className="subnav">
+            {Object.keys(e.markets).map((k) => (
+              <button key={k} className={k === m ? 'on' : ''} onClick={() => setEventMarket({ ...eventMarket, [e.id]: k })}>{marketLabel(k)}</button>
+            ))}
+          </div>
+          {groups.map((g) => <LineTable key={String(g.point)} group={g} books={books} format={format} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BookPicker({ books, hidden, setHidden }) {
   const toggle = (b) => {
     setHidden(hidden.includes(b) ? hidden.filter((x) => x !== b) : [...hidden, b]);
@@ -71,6 +105,7 @@ export default function OddsScreen() {
   const shown = books.filter((b) => !hidden.includes(b));
   const markets = [...new Set([...ORDER, ...data.flatMap((e) => Object.keys(e.markets))])];
   const events = filterEvents(data, query);
+  const { live, upcoming } = splitLive(events);
 
   return (
     <>
@@ -90,36 +125,15 @@ export default function OddsScreen() {
       </div>
       {!shown.length && <div className="mut">No books selected.</div>}
       {events.length === 0 && data.length > 0 && <div className="mut">No events match “{query}”.</div>}
-      {shown.length > 0 && events.map((e) => {
-        const m = eventMarket[e.id] && e.markets[eventMarket[e.id]] ? eventMarket[e.id] : market;
-        const outs = e.markets[m] || [];
-        const groups = lineGroups(m, outs, e.home, e.away);
-        const main = mainGroup(groups, shown);
-        const ms = main && groupStats(main, shown);
-        const isOpen = open === e.id;
-        return (
-          <div className="card" key={e.id} onClick={() => setOpen(isOpen ? null : e.id)}>
-            <b>{e.away} @ {e.home}</b> <span className="mut">{e.sport} · {new Date(e.start).toLocaleString()}</span>
-            <div className="mut">
-              {!main ? `No ${marketLabel(m).toLowerCase()} odds` : <>
-                {marketLabel(m)} best: {main.outcomes.map((o, i) => `${outcomeLabel(o)} ${ms.best[i] ? formatOdds(ms.best[i].price, format) : '—'}`).join(' · ')}
-                {' · '}hold <span className={holdClass(ms.holdPct)}>{holdText(ms.holdPct)}</span>
-                {groups.length > 1 && ` · ${groups.length} lines`}
-              </>}
-            </div>
-            {isOpen && (
-              <div onClick={(ev) => ev.stopPropagation()} className="detail">
-                <div className="subnav">
-                  {Object.keys(e.markets).map((k) => (
-                    <button key={k} className={k === m ? 'on' : ''} onClick={() => setEventMarket({ ...eventMarket, [e.id]: k })}>{marketLabel(k)}</button>
-                  ))}
-                </div>
-                {groups.map((g) => <LineTable key={String(g.point)} group={g} books={shown} format={format} />)}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {shown.length > 0 && [['Live', live], ['Upcoming', upcoming]].map(([title, list]) => list.length > 0 && (
+        <React.Fragment key={title}>
+          <h3 className="section">{title}</h3>
+          {list.map((e) => (
+            <EventCard key={e.id} e={e} market={market} eventMarket={eventMarket} setEventMarket={setEventMarket}
+              books={shown} format={format} isOpen={open === e.id} toggle={() => setOpen(open === e.id ? null : e.id)} />
+          ))}
+        </React.Fragment>
+      ))}
     </>
   );
 }

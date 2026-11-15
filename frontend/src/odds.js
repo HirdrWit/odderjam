@@ -129,10 +129,13 @@ export function allBooks(events) {
 
 /** Compact price age, e.g. "12s", "4m", "1.5h"; "—" when unknown. */
 export function ageText(seconds) {
-  return '';
+  if (seconds == null) return '—';
+  if (seconds < 90) return `${Math.round(seconds)}s`;
+  if (seconds < 5400) return `${Math.round(seconds / 60)}m`;
+  return `${(seconds / 3600).toFixed(1)}h`;
 }
 
 /** Split events into { live, upcoming } by their live flag, keeping order. */
 export function splitLive(events) {
-  return { live: [], upcoming: [] };
+  return { live: events.filter((e) => e.live), upcoming: events.filter((e) => !e.live) };
 }

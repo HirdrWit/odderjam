@@ -9,11 +9,16 @@ import threading
 import time
 from pathlib import Path
 
-# Versioned so a cache written in an older event shape is never read back.
-CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v2.json"
+# Versioned so a cache written in an older event shape is never read back (v3: events carry "updated").
+CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v3.json"
 LIVE_CACHE = CACHE.parent / ".odds_cache.live.json"
 BUDGET_FILE = CACHE.parent / ".odds_cache.budget.json"
 _lock = threading.Lock()
+
+# Live (in-play) refresh settings. Off by default: every live fetch spends API credits.
+LIVE_DEFAULTS = {"enabled": False, "interval_seconds": 30.0, "credits_per_hour": 60.0, "max_price_age": 60.0}
+_live_config = dict(LIVE_DEFAULTS)
+_budget = None
 
 
 def _live() -> bool:
@@ -34,36 +39,93 @@ def _now() -> float:
 
 
 def _fetch_live() -> list[dict]:
-    return []
+    from .theoddsapi import snapshot
+    return snapshot(live_only=True)
 
 
 def _fetch_cost() -> int:
-    return 0
+    from .theoddsapi import fetch_cost
+    return fetch_cost()
 
 
 def _remaining() -> float | None:
-    return None
+    """API credits left on the key, from the last response headers; None if unknown."""
+    try:
+        return float(cache_info().get("remaining"))
+    except (TypeError, ValueError):
+        return None
 
 
 def live_config() -> dict:
-    return {"enabled": False}
+    return dict(_live_config)
 
 
 def set_live(**changes) -> dict:
+    """Update known live settings (unknown keys are ignored) and return the new config."""
+    for k, v in changes.items():
+        if k in LIVE_DEFAULTS and v is not None:
+            _live_config[k] = v
+    if _budget is not None:
+        _budget.credits_per_hour = _live_config["credits_per_hour"]
     return live_config()
 
 
 def reset_live() -> None:
-    pass
+    """Restore default live settings and drop the in-memory budget (reloaded from BUDGET_FILE on next use)."""
+    global _budget
+    _live_config.clear()
+    _live_config.update(LIVE_DEFAULTS)
+    _budget = None
 
 
 def budget():
-    from ..engine.live import Budget
-    return Budget(0)
+    """The live-refresh credit budget, loaded once from BUDGET_FILE so spend survives a restart."""
+    global _budget
+    if _budget is None:
+        from ..engine.live import Budget
+        spent = []
+        if BUDGET_FILE.exists():
+            try:
+                spent = json.loads(BUDGET_FILE.read_text())
+            except (OSError, ValueError):
+                spent = []
+        _budget = Budget(_live_config["credits_per_hour"], spent)
+        _budget.prune(time.time())
+    return _budget
 
 
-def live_status() -> dict:
-    return {}
+def _record_spend(cost: float, now: float) -> None:
+    b = budget()
+    b.record(cost, now)
+    b.prune(now)
+    BUDGET_FILE.write_text(json.dumps([list(x) for x in b.spent]))
+
+
+def _last_spend() -> float | None:
+    spent = budget().spent
+    return max(ts for ts, _ in spent) if spent else None
+
+
+def _next_refresh_in(now: float) -> float | None:
+    """Seconds until a live fetch is allowed by both the interval and the budget; None if never."""
+    wait_budget = budget().next_allowed(_fetch_cost(), now)
+    if wait_budget is None:
+        return None
+    last = _last_spend()
+    wait_interval = 0.0 if last is None else max(0.0, last + _live_config["interval_seconds"] - now)
+    return max(wait_budget, wait_interval)
+
+
+def live_status(now: float | None = None) -> dict:
+    from ..engine import live
+    now = _now() if now is None else now
+    cfg = live_config()
+    cost = _fetch_cost()
+    rate = live.planned_rate(cost, cfg["interval_seconds"], cfg["credits_per_hour"])
+    remaining = _remaining()
+    return {**cfg, "cost_per_fetch": cost, "used_last_hour": budget().used(now), "planned_rate": rate,
+            "remaining": remaining, "projected_hours": live.projected_hours(remaining, rate),
+            "next_refresh_in": _next_refresh_in(now)}
 
 
 def cache_info() -> dict:
@@ -76,22 +138,57 @@ def cache_info() -> dict:
     return info
 
 
+def _overlay(base: list[dict], live_events: list[dict]) -> list[dict]:
+    """Replace base events with their live version (same id) and append live-only events."""
+    by_id = {e["id"]: e for e in live_events}
+    out = [by_id.pop(e["id"], e) for e in base]
+    return out + [e for e in live_events if e["id"] in by_id]
+
+
+def _refresh_live(now: float) -> None:
+    """Fetch in-play odds if the interval has passed and the budget allows. Caller holds _lock."""
+    last = _last_spend()
+    if last is not None and now - last < _live_config["interval_seconds"]:
+        return
+    cost = _fetch_cost()
+    if not budget().can_spend(cost, now):
+        return
+    try:
+        data = _fetch_live()
+    except Exception:
+        return  # keep serving the previous live prices
+    LIVE_CACHE.write_text(json.dumps(data))
+    _record_spend(cost, now)
+
+
+def _pregame(force: bool) -> list[dict]:
+    """Pre-game snapshot from the disk cache, refetched when older than the TTL. Caller holds _lock."""
+    fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < _ttl()
+    if fresh and not force:
+        return json.loads(CACHE.read_text())
+    try:
+        data = _fetch()
+    except Exception:
+        if CACHE.exists():  # keep serving stale data rather than failing
+            return json.loads(CACHE.read_text())
+        raise
+    if data:
+        CACHE.write_text(json.dumps(data))
+    elif CACHE.exists():
+        return json.loads(CACHE.read_text())
+    return data
+
+
 def get_snapshot(force: bool = False, now: float | None = None) -> list[dict]:
     if not _live():
         from .mock import snapshot
-        return snapshot()
+        return snapshot(now=now)
+    now = _now() if now is None else now
     with _lock:
-        fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < _ttl()
-        if fresh and not force:
-            return json.loads(CACHE.read_text())
-        try:
-            data = _fetch()
-        except Exception:
-            if CACHE.exists():  # keep serving stale data rather than failing
-                return json.loads(CACHE.read_text())
-            raise
-        if data:
-            CACHE.write_text(json.dumps(data))
-        elif CACHE.exists():
-            return json.loads(CACHE.read_text())
+        data = _pregame(force)
+        if not _live_config["enabled"]:
+            return data
+        _refresh_live(now)
+        if LIVE_CACHE.exists():
+            data = _overlay(data, json.loads(LIVE_CACHE.read_text()))
         return data

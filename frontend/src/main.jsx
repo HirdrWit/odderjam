@@ -4,10 +4,54 @@ import "./style.css";
 import Calculators from "./Calculators.jsx";
 import OddsScreen from "./OddsScreen.jsx";
 import { useStored, useApi } from "./hooks.js";
+import { ageText } from "./odds.js";
 
 const fmt = (o) => (o > 0 ? `+${Math.round(o)}` : `${Math.round(o)}`);
 
 const age = (s) => s == null ? "never" : s < 90 ? `${Math.round(s)}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${(s / 3600).toFixed(1)}h ago`;
+
+const num = (n, d = 0) => (n == null ? "—" : n.toFixed(d));
+
+/** Live-mode toggle and credit budget: GET/POST /api/live; while on, refetches the tables every interval. */
+function LiveBox() {
+  const [st, setSt] = useState(null);
+  const load = () => fetch("/api/live").then((r) => r.json()).then(setSt);
+  useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
+  const every = st?.enabled ? Math.max(10, st.interval_seconds) * 1000 : null;
+  useEffect(() => {
+    if (!every) return undefined;
+    const t = setInterval(() => { window.dispatchEvent(new Event("data-changed")); load(); }, every);
+    return () => clearInterval(t);
+  }, [every]);
+  const save = async (change) => {
+    const r = await fetch("/api/live", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change) });
+    if (r.ok) setSt(await r.json()); else load();  // invalid input: show the unchanged settings
+  };
+  const field = (k, label, min) => (
+    <label className="fld">{label}
+      <input key={`${k}-${st[k]}`} type="number" min={min} defaultValue={st[k]}
+        onBlur={(e) => e.target.value !== "" && +e.target.value !== st[k] && save({ [k]: +e.target.value })} /></label>
+  );
+  if (!st) return null;
+  return (
+    <div className="livebox">
+      <label className="chk"><input type="checkbox" checked={st.enabled} onChange={(e) => save({ enabled: e.target.checked })} /> Live mode
+        {st.live_events > 0 && <span className="mut small">({st.live_events} live)</span>}</label>
+      {st.enabled && <>
+        {field("credits_per_hour", "Credits/hour cap", 0)}
+        {field("interval_seconds", "Refresh every (s)", 5)}
+        {field("max_price_age", "Max price age (s)", 1)}
+        <div className="mut small">burn {num(st.planned_rate)}/h · used {num(st.used_last_hour)} last hour
+          {st.projected_hours != null && ` · ~${num(st.projected_hours, 1)}h left`}</div>
+      </>}
+    </div>
+  );
+}
+
+/** Live/price-age tag shown next to the event name in the tool tables. */
+function LiveTag({ r }) {
+  return <>{r.live && <span className="badge live">LIVE</span>} <span className="mut small">{ageText(r.price_age_seconds)}</span></>;
+}
 
 function RefreshBox() {
   const [info, setInfo] = useState(null);
@@ -27,6 +71,7 @@ function RefreshBox() {
       {info.remaining != null && <div className="mut">API credits left: {info.remaining}</div>}
       {info.live && <button onClick={refresh} disabled={busy}>{busy ? "Refreshing…" : "Refresh odds"}</button>}
       {info.live && <div className="mut small">Each refresh spends API credits</div>}
+      <LiveBox />
     </div>
   );
 }
@@ -130,7 +175,7 @@ function PositiveEV() {
       </div>
       <table><thead><tr><th>EV%</th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th><th>Fair</th><th>Stake</th><th></th></tr></thead><tbody>
         {(data || []).map((r, i) => (
-          <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{MARKETS[r.market] || r.market}</td><td>{r.event}</td>
+          <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{MARKETS[r.market] || r.market}</td><td>{r.event} <LiveTag r={r} /></td>
             <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td><td>${r.stake.toFixed(2)}</td>
             <td><button className="track" onClick={() => track(r)}>Track</button></td></tr>
         ))}
@@ -147,7 +192,7 @@ function Arbs() {
       <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} /></div>
       {(data || []).map((r, i) => (
         <div className="card" key={i}>
-          <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
+          <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <LiveTag r={r} /> <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
           {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100</div>)}
         </div>
       ))}
@@ -179,7 +224,7 @@ function LowHold() {
       </div>
       <table><thead><tr><th>Hold</th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr></thead><tbody>
         {(data || []).map((r, i) => (
-          <tr key={i}><td className={r.hold_pct <= 0 ? "best" : ""}>{r.hold_pct.toFixed(2)}%</td><td>{r.event} <span className="mut">{r.sport}</span></td>
+          <tr key={i}><td className={r.hold_pct <= 0 ? "best" : ""}>{r.hold_pct.toFixed(2)}%</td><td>{r.event} <LiveTag r={r} /> <span className="mut">{r.sport}</span></td>
             <td>{MARKETS[r.market] || r.market}</td>
             <td>{r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>)}</td>
             <td className={r.expected_loss <= 0 ? "best" : "bad"}>{money(r.expected_loss)}</td></tr>
@@ -221,7 +266,7 @@ function Middles() {
       <table><thead><tr><th>EV%</th><th>Event</th><th>Market</th><th>Window</th><th>Legs</th><th>Worst case</th><th>Win both</th><th>Hit %</th><th></th></tr></thead><tbody>
         {(data || []).map((r, i) => (
           <tr key={i}><td className={r.ev_pct >= 0 ? "best" : "bad"}>{r.ev_pct.toFixed(1)}%</td>
-            <td>{r.event} <span className="mut">{r.sport}</span></td><td>{MARKETS[r.market] || r.market}</td><td>{r.window}</td>
+            <td>{r.event} <LiveTag r={r} /> <span className="mut">{r.sport}</span></td><td>{MARKETS[r.market] || r.market}</td><td>{r.window}</td>
             <td>{r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>)}</td>
             <td className={r.worst_case >= 0 ? "best" : "bad"}>{money(r.worst_case)}</td>
             <td className="best">{money(r.win_both)}</td><td>{(r.hit_prob * 100).toFixed(1)}%</td>
