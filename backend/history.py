@@ -72,7 +72,7 @@ def _same_line(bet: sqlite3.Row) -> tuple[str, tuple]:
     opposite point (home -3.5 pairs with away +3.5); totals and moneyline share one point."""
     if bet["market"] == "spreads" and bet["point"] is not None:
         return ("((outcome=? AND point=?) OR (outcome<>? AND point=?))",
-                (bet["outcome"], bet["point"], bet["outcome"], -bet["point"]))
+                (bet["selection"], bet["point"], bet["selection"], -bet["point"]))
     return "point IS ?", (bet["point"],)
 
 
@@ -87,11 +87,11 @@ def _sharp_close(c: sqlite3.Connection, bet: sqlite3.Row, before: str) -> float 
     prices = {x["outcome"]: x["price"] for x in c.execute(
         f"SELECT outcome, price FROM odds_history WHERE event_id=? AND market=? AND {line} AND book=? "
         "AND fetched_at=?", (bet["event_id"], bet["market"], *args, SHARP, r["t"]))}
-    if bet["outcome"] not in prices or len(prices) < 2:
+    if bet["selection"] not in prices or len(prices) < 2:
         return None
     names = list(prices)
     fair = devig.multiplicative([odds.american_to_prob(prices[n]) for n in names])
-    return odds.prob_to_american(fair[names.index(bet["outcome"])])
+    return odds.prob_to_american(fair[names.index(bet["selection"])])
 
 
 def capture_closing(now: datetime | None = None) -> int:
@@ -101,13 +101,13 @@ def capture_closing(now: datetime | None = None) -> int:
     cutoff = ts(now or _now())
     updated = 0
     with db.conn() as c:
-        bets = c.execute("SELECT * FROM bets WHERE event_id IS NOT NULL AND outcome IS NOT NULL "
+        bets = c.execute("SELECT * FROM bets WHERE event_id IS NOT NULL AND selection IS NOT NULL "
                          "AND event_start IS NOT NULL AND event_start <= ? "
                          "AND (closing_odds IS NULL OR closing_sharp_odds IS NULL)", (cutoff,)).fetchall()
         for b in bets:
             close = b["closing_odds"]
             if close is None and b["book"]:
-                close = _last_price(c, b, b["book"], b["outcome"], b["event_start"])
+                close = _last_price(c, b, b["book"], b["selection"], b["event_start"])
             sharp = b["closing_sharp_odds"]
             if sharp is None:
                 sharp = _sharp_close(c, b, b["event_start"])

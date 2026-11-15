@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Versioned so a cache written in an older event shape is never read back.
-CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v2.json"
+CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v3.json"
 _lock = threading.Lock()
 log = logging.getLogger(__name__)
 MOCK_HISTORY_SECONDS = 300  # mock odds change every call; only keep one snapshot per 5 minutes
@@ -78,3 +78,11 @@ def get_snapshot(force: bool = False) -> list[dict]:
         elif CACHE.exists():
             return json.loads(CACHE.read_text())
         return data
+
+
+def get_scores(sports: list[str]) -> list[dict]:
+    """Final/live scores for auto-settling bets. Live API only: spends credits on every call."""
+    if not _live():
+        raise RuntimeError("auto-settle needs ODDS_API_KEY (live scores)")
+    from .theoddsapi import scores
+    return scores(sports)

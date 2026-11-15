@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 
-from .books import SHARP, us_name
+from .books import REFERENCE_ONLY, us_name
 
 ALL = {"NBA": "basketball_nba", "NFL": "americanfootball_nfl", "MLB": "baseball_mlb", "NHL": "icehockey_nhl"}
 # Each sport costs (regions x markets) credits per fetch. Pick sports in season via ODDS_SPORTS
@@ -16,14 +16,31 @@ MARKETS = [m.strip() for m in os.environ.get("ODDS_MARKETS", "h2h,spreads,totals
 MARKET_KEYS = {"h2h": "moneyline", "spreads": "spreads", "totals": "totals"}
 
 
+# Some deep links contain a {state} placeholder (e.g. BetMGM). Set ODDS_STATE (e.g. "nj") to fill it;
+# without it those links are dropped and the UI falls back to the book's homepage.
+STATE = os.environ.get("ODDS_STATE", "").strip().lower()
+
 META = Path(__file__).resolve().parent.parent.parent / ".odds_meta.json"
+
+
+def _link(*candidates: str | None) -> str | None:
+    """First usable link: outcome beats market beats bookmaker."""
+    for url in candidates:
+        if not url:
+            continue
+        if "{state}" in url:
+            if not STATE:
+                continue
+            url = url.replace("{state}", STATE)
+        return url
+    return None
 
 
 def parse_event(e: dict, sport: str) -> dict:
     """Convert one Odds API event into our event shape."""
     markets: dict[str, dict[tuple[str, float | None], dict]] = {}
     for bk in e["bookmakers"]:
-        name = SHARP if bk["key"] == "pinnacle" else us_name(bk["title"])
+        name = REFERENCE_ONLY.get(bk["key"]) or us_name(bk["title"])
         if name is None:
             continue  # not available to US bettors
         for m in bk["markets"]:
@@ -35,6 +52,9 @@ def parse_event(e: dict, sport: str) -> dict:
                 point = o.get("point")
                 outcome = outcomes.setdefault((o["name"], point), {"name": o["name"], "point": point, "prices": {}})
                 outcome["prices"][name] = o["price"]
+                link = _link(o.get("link"), m.get("link"), bk.get("link"))
+                if link:
+                    outcome.setdefault("links", {})[name] = link
     return {"id": e["id"], "sport": sport, "home": e["home_team"], "away": e["away_team"],
             "start": e["commence_time"], "markets": {k: list(v.values()) for k, v in markets.items()}}
 
@@ -45,7 +65,8 @@ def snapshot() -> list[dict]:
     for sport, k in SPORTS.items():
         r = httpx.get(
             f"https://api.the-odds-api.com/v4/sports/{k}/odds",
-            params={"apiKey": key, "regions": "us,eu", "markets": ",".join(MARKETS), "oddsFormat": "american"},
+            params={"apiKey": key, "regions": "us,eu", "markets": ",".join(MARKETS), "oddsFormat": "american",
+                    "includeLinks": "true"},
             timeout=20,
         )
         if "x-requests-remaining" in r.headers:
@@ -55,3 +76,26 @@ def snapshot() -> list[dict]:
             continue
         events.extend(parse_event(e, sport) for e in r.json())
     return events
+
+
+def scores(sports: list[str], days_from: int = 3) -> list[dict]:
+    """Recent and live games from /scores for our sport codes (e.g. ["NBA"]).
+
+    Costs 2 credits per sport with daysFrom set, so callers should only ask for sports they need.
+    Each game gets a "sport" key with our sport code.
+    """
+    key = os.environ["ODDS_API_KEY"]
+    games = []
+    for sport in sports:
+        k = ALL.get(sport)
+        if k is None:
+            continue
+        r = httpx.get(f"https://api.the-odds-api.com/v4/sports/{k}/scores",
+                      params={"apiKey": key, "daysFrom": days_from}, timeout=20)
+        if "x-requests-remaining" in r.headers:
+            META.write_text(json.dumps({"remaining": r.headers["x-requests-remaining"],
+                                        "used": r.headers.get("x-requests-used")}))
+        if r.status_code != 200:
+            continue
+        games.extend({**g, "sport": sport} for g in r.json())
+    return games

@@ -25,7 +25,7 @@ def client():
 
 def track(client, **kw):
     bet = {"event": "Bills @ Chiefs", "sport": "NFL", "pick": "Chiefs", "book": "FanDuel", "odds": 120,
-           "stake": 10, "event_id": "evt1", "market": "moneyline", "outcome": "Chiefs",
+           "stake": 10, "event_id": "evt1", "market": "moneyline", "selection": "Chiefs",
            "event_start": START.isoformat().replace("+00:00", "Z"), **kw}
     return client.post("/api/bets", json=bet).json()
 
@@ -84,7 +84,7 @@ def test_fetches_are_recorded_and_ev_rows_carry_links(client):
     events = client.get("/api/odds").json()
     assert client.get(f"/api/history/{events[0]['id']}").json()  # mock snapshot was stored
     r = client.get("/api/ev?book=&min_ev=-100").json()[0]
-    assert {"event_id", "market", "outcome", "point", "start"} <= r.keys()
+    assert {"event_id", "market", "selection", "point", "start"} <= r.keys()
 
 
 def test_old_database_gets_new_columns(tmp_path, monkeypatch):
@@ -99,7 +99,7 @@ def test_old_database_gets_new_columns(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB", path)
     with db.conn() as c:
         cols = {r["name"] for r in c.execute("PRAGMA table_info(bets)")}
-    assert {"event_id", "outcome", "point", "event_start", "closing_sharp_odds"} <= cols
+    assert {"event_id", "selection", "point", "event_start", "closing_sharp_odds"} <= cols
 
 
 def test_sharp_close_pairs_opposite_spread_points(client):

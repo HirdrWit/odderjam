@@ -6,8 +6,8 @@ DB = Path(__file__).resolve().parent.parent / ".odderjam.db"
 
 # Columns added after the first release; existing databases get them via ALTER TABLE.
 _BET_COLUMNS = {
-    "event_id": "TEXT", "outcome": "TEXT", "point": "REAL", "event_start": "TEXT",
-    "closing_sharp_odds": "REAL",
+    "strategy": "TEXT", "event_id": "TEXT", "selection": "TEXT", "point": "REAL", "settled_at": "TEXT",
+    "event_start": "TEXT", "closing_sharp_odds": "REAL",
 }
 
 
