@@ -56,3 +56,11 @@ def get_snapshot(force: bool = False) -> list[dict]:
         elif CACHE.exists():
             return json.loads(CACHE.read_text())
         return data
+
+
+def get_scores(sports: list[str]) -> list[dict]:
+    """Final/live scores for auto-settling bets. Live API only: spends credits on every call."""
+    if not _live():
+        raise RuntimeError("auto-settle needs ODDS_API_KEY (live scores)")
+    from .theoddsapi import scores
+    return scores(sports)
