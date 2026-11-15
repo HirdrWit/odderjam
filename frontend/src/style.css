@@ -36,6 +36,9 @@ input.mini { width: 60px; }
 .chk { display: flex; gap: 4px; align-items: center; } .chk input { width: auto; }
 .legs { margin: 10px 0; } .legs .bar { margin-bottom: 8px; }
 table.out { width: auto; min-width: 320px; } table.out td.mut { margin: 0; }
+td.inslip { outline: 2px solid #2a6df4; outline-offset: -2px; }
+button.track.on { background: #3ddc84; color: #0f1419; }
+tr.blocked td { opacity: .5; }
 .spacer { flex: 1; }
 .filters input[type=date] { width: 130px; }
 button, a.btn, label.btn { background: #1d2530; color: inherit; border: 1px solid #2c3a4b; border-radius: 4px; padding: 5px 10px; cursor: pointer; font: inherit; text-decoration: none; }

@@ -70,3 +70,10 @@ def bet_link(book: str, outcome: dict | None = None) -> str | None:
     """Best link for betting an outcome at a book: the deep link if known, else the book's homepage."""
     link = ((outcome or {}).get("links") or {}).get(book)
     return link or BOOK_URLS.get(book)
+
+
+# Books that offer same-game parlays. Others reject two legs from one event.
+SGP_BOOKS = {
+    "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics",
+    "ESPN BET", "theScore Bet", "Hard Rock Bet", "BetParx", "Bally Bet", "Borgata", "Unibet", "Fliff",
+}
