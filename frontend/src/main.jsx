@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import Calculators from "./Calculators.jsx";
 import OddsScreen from "./OddsScreen.jsx";
+import { SizingBar, sizingQuery, useSizing } from "./Sizing.jsx";
 import Tracker from "./Tracker.jsx";
 import { Toaster, postJson, toast, useApi, useStored } from "./hooks.jsx";
 import { useSlip, legKey } from "./hooks.js";
@@ -46,6 +47,7 @@ function PositiveEV() {
   const [kelly, setKelly] = useStored("evKelly", 0.25);
   const [book, setBook] = useState(() => localStorage.getItem("evBook") ?? "DraftKings");
   const bank = useApi("/api/bankroll", 30000);
+  const sz = useSizing();
   const setStart = async (v) => {
     await fetch("/api/bankroll", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starting: v }) });
     window.dispatchEvent(new Event("data-changed"));
@@ -67,7 +69,7 @@ function PositiveEV() {
   const setWeight = (b, v) => setWeights({ ...w, [b]: v });
   const sharpSpec = w ? Object.entries(w).filter(([, v]) => v > 0).map(([b, v]) => `${b}:${v}`).join(",") : null;
   const data = useApi(cfg && `/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}`
-    + `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${hold}`);
+    + `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${hold}${sizingQuery(sz)}`);
   return (
     <>
       <div className="bar">
@@ -80,6 +82,7 @@ function PositiveEV() {
           <span className="mut">start $<input className="mini" type="number" defaultValue={bank.starting}
             onBlur={(e) => +e.target.value !== bank.starting && setStart(+e.target.value)} /> {bank.profit >= 0 ? "+" : "-"}${Math.abs(bank.profit).toFixed(2)} P/L</span></span>}
         Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => setKelly(+e.target.value)} />
+        <SizingBar s={sz} />
       </div>
       {cfg && w && (
         <div className="bar wrap">
@@ -95,7 +98,7 @@ function PositiveEV() {
           <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{MARKETS[r.market] || r.market}</td><td>{r.event}</td>
             <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td>
             <td className="mut small">{r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(" · ")}</td>
-            <td>${r.stake.toFixed(2)}</td>
+            <td title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>{money(r.stake)}</td>
             <td><BetLink href={r.link} /> <button className="track" onClick={() => track(r)}>Track</button>{" "}
               <button className={has(r) ? "track on" : "track"} title="Add to parlay slip" onClick={() => toggle(r)}>{has(r) ? "✓ Slip" : "+ Slip"}</button></td></tr>
         ))}
@@ -106,22 +109,28 @@ function PositiveEV() {
 
 function Arbs() {
   const [min, setMin] = useStored("arbMin", 0);
-  const data = useApi(`/api/arbs?min_profit=${min}`);
+  const sz = useSizing();
+  const bank = useApi("/api/bankroll", 30000);
+  const data = useApi(`/api/arbs?min_profit=${min}${sizingQuery(sz, true)}`);
   const track = async (r) => {
     const res = await Promise.all(r.legs.map((l) => postJson("/api/bets", { event: r.event, event_id: r.event_id,
       sport: r.sport, market: r.market, pick: l.pick, selection: l.selection, point: l.point, book: l.book,
       odds: l.odds, stake: +l.stake.toFixed(2), strategy: "arb" })));
-    res.every((x) => x.ok) ? toast(`Tracked ${r.legs.length} legs of ${r.event} ($100 total)`) : toast("Could not track every leg", "err");
+    res.every((x) => x.ok) ? toast(`Tracked ${r.legs.length} legs of ${r.event} (${money(r.total_stake)} total)`) : toast("Could not track every leg", "err");
     window.dispatchEvent(new Event("data-changed"));
   };
   return (
     <>
-      <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} /></div>
+      <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} />
+        <SizingBar s={sz} showTotal totalHint={bank ? bank.current.toFixed(0) : "bankroll"} /></div>
       {(data || []).map((r, i) => (
         <div className="card" key={i}>
           <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
           <button className="track right" onClick={() => track(r)}>Track legs</button>
-          {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100 <BetLink href={l.link} /></div>)}
+          {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake <b>{money(l.stake)}</b> <BetLink href={l.link} />{" "}
+            <span className="mut">· profit if wins <span className={l.profit_if_wins >= 0 ? "best" : "bad"}>{money(l.profit_if_wins)}</span></span></div>)}
+          <div className="mut">Total {money(r.total_stake)} · profit {money(r.min_profit)} to {money(r.max_profit)}{r.capped ? " · scaled down to max per side" : ""}</div>
+          {r.warning && <div className="bad">⚠ {r.warning}</div>}
         </div>
       ))}
     </>
