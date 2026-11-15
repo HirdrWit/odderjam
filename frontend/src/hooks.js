@@ -24,6 +24,7 @@ export function useStored(key, init) {
 export function useApi(url, every = 60000) {
   const [data, setData] = useState(null);
   useEffect(() => {
+    if (!url) return undefined;
     let live = true;
     const load = () => fetch(url).then((r) => r.json()).then((d) => {
       if (live) setData(d);
