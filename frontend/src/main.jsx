@@ -26,8 +26,8 @@ function LiveBox() {
   }, [every]);
   const save = async (change) => {
     const r = await fetch("/api/live", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change) });
-    setSaves((n) => n + 1);
-    if (r.ok) setSt(await r.json()); else load();  // invalid input: show the unchanged settings
+    if (r.ok) setSt(await r.json());
+    else { setSaves((n) => n + 1); load(); }  // rejected: remount the inputs to show the unchanged settings
   };
   const field = (k, label, min) => (
     <label className="fld">{label}

@@ -4,7 +4,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from statistics import median
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 
@@ -16,6 +18,13 @@ from .providers import cache_info, get_snapshot, live_config, live_status, set_l
 app = FastAPI(title="odderjam")
 app.include_router(bets.router)
 app.include_router(bets.bankroll_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """422 without echoing the input: a NaN or infinite input would make the error body invalid JSON."""
+    detail = [{k: v for k, v in e.items() if k in ("type", "loc", "msg")} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": detail})
 
 
 def _us_markets(markets: dict) -> dict:
@@ -273,7 +282,7 @@ def live_get():
 @app.post("/api/live")
 def live_post(body: LiveSettings):
     changes = body.model_dump(exclude_none=True)
-    # Checked here, not with allow_inf_nan: FastAPI's 422 body echoes the input, and inf is not valid JSON.
+    # +inf passes gt=0/ge=0 and would lift the cap; reject it here.
     if any(isinstance(v, float) and not math.isfinite(v) for v in changes.values()):
         raise HTTPException(422, "settings must be finite numbers")
     set_live(**changes)

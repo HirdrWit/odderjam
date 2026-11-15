@@ -82,3 +82,12 @@ def test_live_row_with_untimed_leg_is_stale(client, monkeypatch):
     assert client.get("/api/arbs").json()[0]["price_age_seconds"] is None
     providers.set_live(enabled=True, max_price_age=60)
     assert client.get("/api/arbs").json() == []
+
+
+@pytest.mark.parametrize("raw", ['{"credits_per_hour": -1e999}', '{"interval_seconds": NaN}',
+                                 '{"credits_per_hour": NaN}', '{"interval_seconds": -Infinity}', '{"enabled": NaN}',
+                                 '{"max_price_age": Infinity}'])
+def test_live_settings_reject_nan_and_negative_inf(client, raw):
+    r = client.post("/api/live", content=raw, headers={"Content-Type": "application/json"})
+    assert r.status_code == 422
+    assert client.get("/api/live").json()["credits_per_hour"] == providers.LIVE_DEFAULTS["credits_per_hour"]
