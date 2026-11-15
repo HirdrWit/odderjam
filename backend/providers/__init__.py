@@ -11,6 +11,8 @@ from pathlib import Path
 
 # Versioned so a cache written in an older event shape is never read back.
 CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v2.json"
+LIVE_CACHE = CACHE.parent / ".odds_cache.live.json"
+BUDGET_FILE = CACHE.parent / ".odds_cache.budget.json"
 _lock = threading.Lock()
 
 
@@ -27,6 +29,43 @@ def _fetch() -> list[dict]:
     return snapshot()
 
 
+def _now() -> float:
+    return time.time()
+
+
+def _fetch_live() -> list[dict]:
+    return []
+
+
+def _fetch_cost() -> int:
+    return 0
+
+
+def _remaining() -> float | None:
+    return None
+
+
+def live_config() -> dict:
+    return {"enabled": False}
+
+
+def set_live(**changes) -> dict:
+    return live_config()
+
+
+def reset_live() -> None:
+    pass
+
+
+def budget():
+    from ..engine.live import Budget
+    return Budget(0)
+
+
+def live_status() -> dict:
+    return {}
+
+
 def cache_info() -> dict:
     meta = CACHE.parent / ".odds_meta.json"
     info = {"live": _live(), "age_seconds": None, "ttl_seconds": _ttl()}
@@ -37,7 +76,7 @@ def cache_info() -> dict:
     return info
 
 
-def get_snapshot(force: bool = False) -> list[dict]:
+def get_snapshot(force: bool = False, now: float | None = None) -> list[dict]:
     if not _live():
         from .mock import snapshot
         return snapshot()

@@ -126,3 +126,13 @@ export function allBooks(events) {
   }
   return [...s];
 }
+
+/** Compact price age, e.g. "12s", "4m", "1.5h"; "—" when unknown. */
+export function ageText(seconds) {
+  return '';
+}
+
+/** Split events into { live, upcoming } by their live flag, keeping order. */
+export function splitLive(events) {
+  return { live: [], upcoming: [] };
+}

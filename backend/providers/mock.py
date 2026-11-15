@@ -47,7 +47,7 @@ def _add(outcomes: dict[tuple[str, float | None], dict], name: str, point: float
     outcome["prices"][book] = price
 
 
-def snapshot(seed: int | None = None) -> list[dict]:
+def snapshot(seed: int | None = None, now: float | None = None) -> list[dict]:
     """Return events: {id, sport, home, away, start, markets:{key:[{name, point, prices:{book:price}}]}}"""
     rng = random.Random(seed if seed is not None else int(datetime.now().timestamp() // 30))
     events = []

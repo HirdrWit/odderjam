@@ -1,3 +1,4 @@
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from statistics import median
@@ -195,6 +196,20 @@ def middles(
                         **mid.middle_ev(m, la, pa, lb, pb, pmf),
                     })
     return sorted(rows, key=lambda r: -r["ev_pct"])
+
+
+def _now() -> float:
+    return time.time()
+
+
+@app.get("/api/live")
+def live_get():
+    return {}
+
+
+@app.post("/api/live")
+def live_post(body: dict):
+    return {}
 
 
 @app.post("/api/refresh")

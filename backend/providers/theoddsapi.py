@@ -39,7 +39,11 @@ def parse_event(e: dict, sport: str) -> dict:
             "start": e["commence_time"], "markets": {k: list(v.values()) for k, v in markets.items()}}
 
 
-def snapshot() -> list[dict]:
+def fetch_cost() -> int:
+    return 0
+
+
+def snapshot(live_only: bool = False, now: float | None = None) -> list[dict]:
     key = os.environ["ODDS_API_KEY"]
     events = []
     for sport, k in SPORTS.items():
