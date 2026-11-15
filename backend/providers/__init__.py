@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 # Versioned so a cache written in an older event shape is never read back.
-CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v2.json"
+CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v3.json"
 _lock = threading.Lock()
 
 

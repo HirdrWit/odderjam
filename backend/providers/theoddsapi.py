@@ -16,7 +16,24 @@ MARKETS = [m.strip() for m in os.environ.get("ODDS_MARKETS", "h2h,spreads,totals
 MARKET_KEYS = {"h2h": "moneyline", "spreads": "spreads", "totals": "totals"}
 
 
+# Some deep links contain a {state} placeholder (e.g. BetMGM). Set ODDS_STATE (e.g. "nj") to fill it;
+# without it those links are dropped and the UI falls back to the book's homepage.
+STATE = os.environ.get("ODDS_STATE", "").strip().lower()
+
 META = Path(__file__).resolve().parent.parent.parent / ".odds_meta.json"
+
+
+def _link(*candidates: str | None) -> str | None:
+    """First usable link: outcome beats market beats bookmaker."""
+    for url in candidates:
+        if not url:
+            continue
+        if "{state}" in url:
+            if not STATE:
+                continue
+            url = url.replace("{state}", STATE)
+        return url
+    return None
 
 
 def parse_event(e: dict, sport: str) -> dict:
@@ -35,6 +52,9 @@ def parse_event(e: dict, sport: str) -> dict:
                 point = o.get("point")
                 outcome = outcomes.setdefault((o["name"], point), {"name": o["name"], "point": point, "prices": {}})
                 outcome["prices"][name] = o["price"]
+                link = _link(o.get("link"), m.get("link"), bk.get("link"))
+                if link:
+                    outcome.setdefault("links", {})[name] = link
     return {"id": e["id"], "sport": sport, "home": e["home_team"], "away": e["away_team"],
             "start": e["commence_time"], "markets": {k: list(v.values()) for k, v in markets.items()}}
 
@@ -45,7 +65,8 @@ def snapshot() -> list[dict]:
     for sport, k in SPORTS.items():
         r = httpx.get(
             f"https://api.the-odds-api.com/v4/sports/{k}/odds",
-            params={"apiKey": key, "regions": "us,eu", "markets": ",".join(MARKETS), "oddsFormat": "american"},
+            params={"apiKey": key, "regions": "us,eu", "markets": ",".join(MARKETS), "oddsFormat": "american",
+                    "includeLinks": "true"},
             timeout=20,
         )
         if "x-requests-remaining" in r.headers:
