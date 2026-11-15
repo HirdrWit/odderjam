@@ -2,26 +2,10 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import Calculators from "./Calculators.jsx";
+import OddsScreen from "./OddsScreen.jsx";
+import { useStored, useApi } from "./hooks.js";
 
 const fmt = (o) => (o > 0 ? `+${Math.round(o)}` : `${Math.round(o)}`);
-
-function useStored(key, init) {
-  const [v, setV] = useState(() => { try { const x = localStorage.getItem(key); return x == null ? init : JSON.parse(x); } catch { return init; } });
-  return [v, (n) => { setV(n); try { localStorage.setItem(key, JSON.stringify(n)); } catch {} }];
-}
-
-function useApi(url, every = 60000) {
-  const [data, setData] = useState(null);
-  useEffect(() => {
-    let live = true;
-    const load = () => fetch(url).then((r) => r.json()).then((d) => live && setData(d));
-    load();
-    const t = setInterval(load, every);
-    window.addEventListener("data-changed", load);
-    return () => { live = false; clearInterval(t); window.removeEventListener("data-changed", load); };
-  }, [url]);
-  return data;
-}
 
 const age = (s) => s == null ? "never" : s < 90 ? `${Math.round(s)}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${(s / 3600).toFixed(1)}h ago`;
 
@@ -51,49 +35,6 @@ function RefreshBox() {
 const BetLink = ({ href }) => (href ? <a className="bet" href={href} target="_blank" rel="noopener noreferrer">Bet</a> : null);
 
 const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
-const pt = (p, total) => (p == null ? "" : total ? `${p}` : p > 0 ? `+${p}` : `${p}`);
-const outcomeLabel = (o) => `${o.name}${o.point == null ? "" : ` ${pt(o.point, o.name === "Over" || o.name === "Under")}`}`;
-
-function OddsScreen() {
-  const [sport, setSport] = useStored("oddsSport", "");
-  const [market, setMarket] = useStored("oddsMarket", "moneyline");
-  const data = useApi(`/api/odds${sport ? `?sport=${sport}` : ""}`);
-  const [open, setOpen] = useState(null);
-  return (
-    <>
-      <div className="bar">
-        <select value={sport} onChange={(e) => setSport(e.target.value)}>
-          {["", "NBA", "NFL", "MLB", "NHL"].map((s) => <option key={s} value={s}>{s || "All sports"}</option>)}
-        </select>
-        <select value={market} onChange={(e) => setMarket(e.target.value)}>
-          {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-      </div>
-      {(data || []).filter((e) => e.markets[market]).map((e) => {
-        const outs = e.markets[market];
-        const books = [...new Set(outs.flatMap((o) => Object.keys(o.prices)))];
-        const best = (o) => Math.max(...Object.values(o.prices));
-        const bestBy = (name) => outs.filter((o) => o.name === name).reduce((a, o) => (!a || best(o) > best(a) ? o : a), null);
-        const names = [...new Set(outs.map((o) => o.name))];
-        return (
-          <div className="card" key={e.id} onClick={() => setOpen(open === e.id ? null : e.id)}>
-            <b>{e.away} @ {e.home}</b> <span className="mut">{e.sport} · {new Date(e.start).toLocaleString()}</span>
-            <div className="mut">Best: {names.map((n) => { const o = bestBy(n); return `${outcomeLabel(o)} ${fmt(best(o))}`; }).join(" · ")}</div>
-            {open === e.id && (
-              <table><thead><tr><th>Book</th>{outs.map((o) => <th key={`${o.name}${o.point}`}>{outcomeLabel(o)}</th>)}</tr></thead><tbody>
-                {books.map((b) => (
-                  <tr key={b}><td>{b}</td>
-                    {outs.map((o) => <td key={`${o.name}${o.point}`} className={o.prices[b] === best(o) ? "best" : ""}>{o.prices[b] == null ? "" : fmt(o.prices[b])}</td>)}</tr>
-                ))}
-              </tbody></table>
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
 const money = (n) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 const pct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 const blank = { event: "", sport: "", pick: "", book: "", odds: "", stake: "", closing_odds: "", status: "pending" };
@@ -217,7 +158,84 @@ function Arbs() {
   );
 }
 
-const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, Calculator: Calculators, Tracker };
+/** Parses a number input's text, returning `fallback` when it is not a valid number. */
+function parseNumberInput(value, fallback) {
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function LowHold() {
+  const [maxHold, setMaxHold] = useStored("lhMax", 1);
+  const [book, setBook] = useStored("lhBook", "");
+  const [stake, setStake] = useStored("lhStake", 100);
+  const [market, setMarket] = useStored("lhMarket", "");
+  const data = useApi(`/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${market ? `&market=${market}` : ""}`);
+  return (
+    <>
+      <div className="bar">
+        Max hold % <input type="number" step="0.25" value={maxHold} onChange={(e) => setMaxHold(parseNumberInput(e.target.value, maxHold))} />
+        One leg at <select value={book} onChange={(e) => setBook(e.target.value)}>
+          {["", "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics", "ESPN BET", "Hard Rock Bet"].map((b) => <option key={b} value={b}>{b || "Any book"}</option>)}</select>
+        Market <select value={market} onChange={(e) => setMarket(e.target.value)}>
+          <option value="">All markets</option>{Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        Total stake $<input type="number" step="10" value={stake} onChange={(e) => setStake(parseNumberInput(e.target.value, stake))} />
+      </div>
+      <table><thead><tr><th>Hold</th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr></thead><tbody>
+        {(data || []).map((r, i) => (
+          <tr key={i}><td className={r.hold_pct <= 0 ? "best" : ""}>{r.hold_pct.toFixed(2)}%</td><td>{r.event} <span className="mut">{r.sport}</span></td>
+            <td>{MARKETS[r.market] || r.market}</td>
+            <td>{r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>)}</td>
+            <td className={r.expected_loss <= 0 ? "best" : "bad"}>{money(r.expected_loss)}</td></tr>
+        ))}
+      </tbody></table>
+    </>
+  );
+}
+
+function Middles() {
+  const [minWindow, setMinWindow] = useStored("midWindow", 0.5);
+  const [maxCost, setMaxCost] = useStored("midCost", 5);
+  const [market, setMarket] = useStored("midMarket", "");
+  const params = new URLSearchParams({ min_window: minWindow });
+  if (maxCost !== "") params.set("max_cost", maxCost);
+  if (market) params.set("market", market);
+  const data = useApi(`/api/middles?${params}`);
+  const track = async (r) => {
+    for (const l of r.legs) {
+      await fetch("/api/bets", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: r.event, sport: r.sport, market: r.market, pick: l.pick, book: l.book, odds: l.odds,
+          stake: Math.round(l.stake * 100) / 100, ev_pct: r.ev_pct, notes: `middle ${r.legs.map((x) => x.pick).join(" / ")}` }) });
+    }
+    alert(`Tracked both legs: ${r.legs.map((l) => `${l.pick} @ ${l.book}`).join(", ")}`);
+  };
+  return (
+    <>
+      <div className="bar">
+        Market <select value={market} onChange={(e) => setMarket(e.target.value)}>
+          <option value="">All</option><option value="spreads">Spread</option><option value="totals">Total</option></select>
+        Min window <input type="number" step="0.5" min="0" value={minWindow} onChange={(e) => { const v = Number(e.target.value); if (!Number.isNaN(v)) setMinWindow(v); }} />
+        Max cost % <input type="number" step="0.5" min="0" placeholder="any" value={maxCost}
+          onChange={(e) => {
+            const v = e.target.value === "" ? "" : Number(e.target.value);
+            if (v === "" || !Number.isNaN(v)) setMaxCost(v);
+          }} />
+      </div>
+      <div className="mut small">Per $100 total stake, split so both misses cost the same. EV uses a normal model of the result (NFL margins weighted to key numbers).</div>
+      <table><thead><tr><th>EV%</th><th>Event</th><th>Market</th><th>Window</th><th>Legs</th><th>Worst case</th><th>Win both</th><th>Hit %</th><th></th></tr></thead><tbody>
+        {(data || []).map((r, i) => (
+          <tr key={i}><td className={r.ev_pct >= 0 ? "best" : "bad"}>{r.ev_pct.toFixed(1)}%</td>
+            <td>{r.event} <span className="mut">{r.sport}</span></td><td>{MARKETS[r.market] || r.market}</td><td>{r.window}</td>
+            <td>{r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>)}</td>
+            <td className={r.worst_case >= 0 ? "best" : "bad"}>{money(r.worst_case)}</td>
+            <td className="best">{money(r.win_both)}</td><td>{(r.hit_prob * 100).toFixed(1)}%</td>
+            <td><button className="track" onClick={() => track(r)}>Track</button></td></tr>
+        ))}
+      </tbody></table>
+    </>
+  );
+}
+
+const TABS = { "Odds Screen": OddsScreen, "+EV": PositiveEV, Arbitrage: Arbs, "Low Hold": LowHold, Middles, Calculator: Calculators, Tracker };
 function App() {
   const [tab, setTab] = useState(() => { try { const t = localStorage.getItem("tab"); return t in TABS ? t : "Odds Screen"; } catch { return "Odds Screen"; } });
   const go = (t) => { setTab(t); try { localStorage.setItem("tab", t); } catch {} };
