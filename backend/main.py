@@ -1,9 +1,10 @@
+import math
 import time
 from collections.abc import Iterator
 from pathlib import Path
 from statistics import median
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 
@@ -61,7 +62,10 @@ def _freshness(e: dict, books, now: float) -> dict | None:
     max_price_age (or has no timestamp): a stale in-play price is a phantom edge. Pre-game rows are kept.
     """
     is_live = _live_mod.is_live(e, now)
-    age = _live_mod.price_age(e.get("updated", {}), books, now)
+    updated = e.get("updated", {})
+    age = _live_mod.price_age(updated, books, now)
+    if any(b not in updated for b in books):
+        age = None  # a leg without a timestamp makes the row's age unknown
     cfg = live_config()
     if cfg["enabled"] and is_live and _live_mod.is_stale(age, cfg["max_price_age"]):
         return None
@@ -268,7 +272,11 @@ def live_get():
 
 @app.post("/api/live")
 def live_post(body: LiveSettings):
-    set_live(**body.model_dump(exclude_none=True))
+    changes = body.model_dump(exclude_none=True)
+    # Checked here, not with allow_inf_nan: FastAPI's 422 body echoes the input, and inf is not valid JSON.
+    if any(isinstance(v, float) and not math.isfinite(v) for v in changes.values()):
+        raise HTTPException(422, "settings must be finite numbers")
+    set_live(**changes)
     return _live_payload()
 
 

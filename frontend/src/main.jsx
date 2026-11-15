@@ -15,6 +15,7 @@ const num = (n, d = 0) => (n == null ? "—" : n.toFixed(d));
 /** Live-mode toggle and credit budget: GET/POST /api/live; while on, refetches the tables every interval. */
 function LiveBox() {
   const [st, setSt] = useState(null);
+  const [saves, setSaves] = useState(0);  // remounts the inputs so a rejected value is replaced
   const load = () => fetch("/api/live").then((r) => r.json()).then(setSt);
   useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
   const every = st?.enabled ? Math.max(10, st.interval_seconds) * 1000 : null;
@@ -25,11 +26,12 @@ function LiveBox() {
   }, [every]);
   const save = async (change) => {
     const r = await fetch("/api/live", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change) });
+    setSaves((n) => n + 1);
     if (r.ok) setSt(await r.json()); else load();  // invalid input: show the unchanged settings
   };
   const field = (k, label, min) => (
     <label className="fld">{label}
-      <input key={`${k}-${st[k]}`} type="number" min={min} defaultValue={st[k]}
+      <input key={`${k}-${st[k]}-${saves}`} type="number" min={min} defaultValue={st[k]}
         onBlur={(e) => e.target.value !== "" && +e.target.value !== st[k] && save({ [k]: +e.target.value })} /></label>
   );
   if (!st) return null;

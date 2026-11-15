@@ -138,9 +138,14 @@ def cache_info() -> dict:
     return info
 
 
-def _overlay(base: list[dict], live_events: list[dict]) -> list[dict]:
-    """Replace base events with their live version (same id) and append live-only events."""
-    by_id = {e["id"]: e for e in live_events}
+def _overlay(base: list[dict], live_events: list[dict], now: float) -> list[dict]:
+    """Replace base events with their live version (same id) and append live-only events.
+
+    Live-cache events that are no longer in play are dropped: their prices are in-game prices
+    from a game that has ended, and would otherwise show as pre-game rows.
+    """
+    from ..engine.live import is_live
+    by_id = {e["id"]: e for e in live_events if is_live(e, now)}
     out = [by_id.pop(e["id"], e) for e in base]
     return out + [e for e in live_events if e["id"] in by_id]
 
@@ -153,12 +158,14 @@ def _refresh_live(now: float) -> None:
     cost = _fetch_cost()
     if not budget().can_spend(cost, now):
         return
+    # Count the spend before fetching: a fetch that fails part-way has still been charged for the
+    # sports it reached, and recording it also stops a failing fetch being retried on every request.
+    _record_spend(cost, now)
     try:
         data = _fetch_live()
     except Exception:
         return  # keep serving the previous live prices
     LIVE_CACHE.write_text(json.dumps(data))
-    _record_spend(cost, now)
 
 
 def _pregame(force: bool) -> list[dict]:
@@ -190,5 +197,5 @@ def get_snapshot(force: bool = False, now: float | None = None) -> list[dict]:
             return data
         _refresh_live(now)
         if LIVE_CACHE.exists():
-            data = _overlay(data, json.loads(LIVE_CACHE.read_text()))
+            data = _overlay(data, json.loads(LIVE_CACHE.read_text()), now)
         return data
