@@ -33,6 +33,9 @@ function RefreshBox() {
   );
 }
 
+// "Bet" button: opens the sportsbook (deep link to the bet when the feed has one) in a new tab.
+const BetLink = ({ href }) => (href ? <a className="bet" href={href} target="_blank" rel="noopener noreferrer">Bet</a> : null);
+
 const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
 const money = (n) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 const pct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
@@ -93,7 +96,7 @@ function PositiveEV() {
             <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td>
             <td className="mut small">{r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(" · ")}</td>
             <td>${r.stake.toFixed(2)}</td>
-            <td><button className="track" onClick={() => track(r)}>Track</button>{" "}
+            <td><BetLink href={r.link} /> <button className="track" onClick={() => track(r)}>Track</button>{" "}
               <button className={has(r) ? "track on" : "track"} title="Add to parlay slip" onClick={() => toggle(r)}>{has(r) ? "✓ Slip" : "+ Slip"}</button></td></tr>
         ))}
       </tbody></table>
@@ -118,7 +121,7 @@ function Arbs() {
         <div className="card" key={i}>
           <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
           <button className="track right" onClick={() => track(r)}>Track legs</button>
-          {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100</div>)}
+          {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake ${l.stake.toFixed(2)} of $100 <BetLink href={l.link} /></div>)}
         </div>
       ))}
     </>

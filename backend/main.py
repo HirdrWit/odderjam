@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .engine import arb as arbm, devig, ev, lowhold, markets as mk, middles as mid, odds, parlay as pm, sharp
-from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
+from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, bet_link, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
 
@@ -21,7 +21,7 @@ def _us_markets(markets: dict) -> dict:
     """Markets with prices filtered to US books; outcomes and markets left empty are dropped."""
     out = {}
     for key, outcomes in markets.items():
-        kept = [{**o, "prices": us_only(o["prices"])} for o in outcomes]
+        kept = [{**o, "prices": us_only(o["prices"]), "links": us_only(o.get("links") or {})} for o in outcomes]
         kept = [o for o in kept if o["prices"]]
         if kept:
             out[key] = kept
@@ -78,7 +78,8 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                             "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
                             "start": e["start"], "market": key, "name": o["name"], "selection": o["name"],
                             "point": o["point"], "pick": mk.label(o), "book": book_name,
-                            "odds": price, "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
+                            "odds": price, "link": bet_link(book_name, o),
+                            "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                             "stake": bankroll * ev.kelly_fraction(fp, price, kelly),
                             "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"],
                         })
@@ -106,7 +107,7 @@ def arbs(min_profit: float = 0.0, market: str | None = None):
                     rows.append({"event": f'{e["away"]} @ {e["home"]}', "event_id": e["id"], "sport": e["sport"],
                                  "market": key, "point": g["point"],
                                  "legs": [{"pick": mk.label(o), "selection": o["name"], "point": o["point"], "book": book, "odds": price,
-                                           "stake": stake}
+                                           "link": bet_link(book, o), "stake": stake}
                                           for (o, book, price), stake in zip(best, result["stakes"])],
                                  "profit_pct": result["profit_pct"]})
     return sorted(rows, key=lambda r: -r["profit_pct"])
