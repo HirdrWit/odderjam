@@ -1,9 +1,5 @@
-import React, { useState } from "react";
-
-export function useStored(key, init) {
-  const [v, setV] = useState(() => { try { const x = localStorage.getItem(key); return x == null ? init : JSON.parse(x); } catch { return init; } });
-  return [v, (n) => { setV(n); try { localStorage.setItem(key, JSON.stringify(n)); } catch {} }];
-}
+import React from "react";
+import { useStored } from "./hooks.js";
 
 export const INCREMENTS = [0, 1, 5, 10];
 
