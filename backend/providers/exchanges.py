@@ -9,7 +9,7 @@ Enrichment is opt-in: set ``EXCHANGES`` to a comma list such as ``Kalshi,Polymar
 """
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 
@@ -22,7 +22,10 @@ log = logging.getLogger(__name__)
 
 
 def _ts(s: str) -> datetime:
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        raise ValueError(f"timestamp without a UTC offset: {s}")
+    return dt
 
 
 def _sides(quote: dict, e: dict) -> dict[str, str] | None:
@@ -38,21 +41,43 @@ def _sides(quote: dict, e: dict) -> dict[str, str] | None:
     return mapping
 
 
-def merge_quotes(events: list[dict], quotes: list[dict], tolerance_hours: float = 12) -> list[dict]:
-    """Add each quote's prices to its matching event's moneyline outcomes (events are updated in place)."""
-    for q in quotes:
-        start = _ts(q["start"])
-        best = None
-        for e in events:
-            if e["sport"] != q["sport"]:
-                continue
-            mapping = _sides(q, e)
-            gap = abs((_ts(e["start"]) - start).total_seconds()) / 3600
-            if mapping and gap <= tolerance_hours and (best is None or gap < best[0]):
-                best = (gap, e, mapping)
-        if best is None:
+def _match(q: dict, events: list[dict], tolerance_hours: float) -> tuple[float, dict, dict] | None:
+    """(gap hours, event, name mapping) for the event closest to the quote's game start, or None."""
+    start = _ts(q["start"])
+    lag = timedelta(hours=float(q.get("lag_hours", 0.0)))
+    best = None
+    for e in events:
+        if e["sport"] != q["sport"]:
             continue
-        _, e, mapping = best
+        mapping = _sides(q, e)
+        if not mapping:
+            continue
+        gap = abs((_ts(e["start"]) + lag - start).total_seconds()) / 3600
+        if gap <= tolerance_hours and (best is None or gap < best[0]):
+            best = (gap, e, mapping)
+    return best
+
+
+def merge_quotes(events: list[dict], quotes: list[dict], tolerance_hours: float = 12) -> list[dict]:
+    """Add each quote's prices to its matching event's moneyline outcomes (events are updated in place).
+
+    If two quotes from one book land on the same event, the one closest in time wins. A malformed
+    quote is skipped.
+    """
+    placed: dict[tuple[str, int], tuple[float, dict, dict, dict]] = {}
+    for q in quotes:
+        try:
+            m = _match(q, events, tolerance_hours)
+        except (ValueError, TypeError, KeyError) as exc:
+            log.warning("exchange quote skipped: %s", exc)
+            continue
+        if m is None:
+            continue
+        gap, e, mapping = m
+        key = (q["book"], id(e))
+        if key not in placed or gap < placed[key][0]:
+            placed[key] = (gap, e, q, mapping)
+    for _, e, q, mapping in placed.values():
         outcomes = e["markets"].setdefault("moneyline", [])
         for name, price in q["prices"].items():
             team = mapping[name]
@@ -75,7 +100,7 @@ def collect(platforms: list[str], sports: set[str], client: httpx.Client) -> lis
         for sport in sorted(sports & mod.SPORTS):
             try:
                 quotes.extend(mod.parse(mod.fetch(sport, client), sport, fee))
-            except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+            except Exception as exc:  # noqa: BLE001 - third-party payloads; never fail the sportsbook snapshot
                 log.warning("exchange %s %s skipped: %s", name, sport, exc)
     return quotes
 

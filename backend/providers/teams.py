@@ -5,6 +5,7 @@ Exchanges abbreviate team names ("Los Angeles L", "Boston", "Lakers"); books use
 the other, in order. "Los Angeles C" therefore does not match "Los Angeles Lakers".
 """
 import re
+import unicodedata
 
 # City abbreviations exchanges use, expanded before matching.
 ALIASES = {
@@ -16,7 +17,8 @@ ALIASES = {
 
 def tokens(name: str) -> list[str]:
     """Lowercased words with punctuation removed and city abbreviations expanded."""
-    words = re.sub(r"[^a-z0-9 ]", " ", name.lower()).split()
+    folded = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()  # Montréal -> Montreal
+    words = re.sub(r"[^a-z0-9 ]", " ", folded.lower()).split()
     return " ".join(ALIASES.get(w, w) for w in words).split()
 
 

@@ -14,6 +14,9 @@ BOOK = "Kalshi"
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
 SERIES = {"NBA": "KXNBAGAME", "NFL": "KXNFLGAME", "MLB": "KXMLBGAME", "NHL": "KXNHLGAME"}
 SPORTS = set(SERIES)
+# Hours from first pitch/tip-off to expected settlement, used when a market only carries
+# expected_expiration_time, so matching compares like with like (doubleheaders, back-to-backs).
+GAME_HOURS = {"NBA": 2.5, "NFL": 3.25, "MLB": 3.0, "NHL": 2.5}
 OPEN = {"active", "open"}
 MAX_PAGES = 10
 
@@ -47,7 +50,9 @@ def parse(payload: dict, sport: str, fee: dict) -> list[dict]:
         if len(markets) != 2:
             continue
         a, b = markets
-        start = a.get("occurrence_datetime") or a.get("expected_expiration_time")
+        start, lag = a.get("occurrence_datetime"), 0.0
+        if not start:
+            start, lag = a.get("expected_expiration_time"), GAME_HOURS.get(sport, 3.0)
         if not start:
             continue  # close_time can be weeks after the game, too loose to match on
         prices = {}
@@ -56,7 +61,8 @@ def parse(payload: dict, sport: str, fee: dict) -> list[dict]:
             if price is not None:
                 prices[team["yes_sub_title"]] = price
         if len(prices) == 2:
-            quotes.append({"book": BOOK, "sport": sport, "start": _iso(start), "prices": prices})
+            # ``start`` is the market's timestamp; ``lag_hours`` is how far it trails the game start.
+            quotes.append({"book": BOOK, "sport": sport, "start": _iso(start), "lag_hours": lag, "prices": prices})
     return quotes
 
 

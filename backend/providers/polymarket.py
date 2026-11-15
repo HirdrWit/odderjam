@@ -26,7 +26,10 @@ def _iso(ts: str) -> str:
     ts = ts.strip().replace(" ", "T").replace("Z", "+00:00")
     if len(ts) >= 3 and ts[-3] in "+-" and ts[-3:].lstrip("+-").isdigit():
         ts += ":00"
-    return datetime.fromisoformat(ts).isoformat()
+    dt = datetime.fromisoformat(ts)
+    if dt.tzinfo is None:
+        raise ValueError(f"timestamp without a UTC offset: {ts}")
+    return dt.isoformat()
 
 
 def _asks(m: dict) -> list[float]:
@@ -46,13 +49,16 @@ def parse(payload: list, sport: str, fee: dict) -> list[dict]:
         for m in e.get("markets", []):
             if m.get("sportsMarketType") != "moneyline" or m.get("closed") or m.get("active") is False:
                 continue
-            names, asks = _list(m.get("outcomes")), _asks(m)
-            start = m.get("gameStartTime") or e.get("startTime")
-            if len(names) != 2 or len(asks) != 2 or not start:
-                continue
-            prices = {n: contract_to_american(round(a * 100, 4), fee) for n, a in zip(names, asks)}
-            if all(p is not None for p in prices.values()):
-                quotes.append({"book": BOOK, "sport": sport, "start": _iso(start), "prices": prices})
+            try:
+                names, asks = _list(m.get("outcomes")), _asks(m)
+                start = m.get("gameStartTime") or e.get("startTime")
+                if len(names) != 2 or len(asks) != 2 or not start:
+                    continue
+                prices = {n: contract_to_american(round(a * 100, 4), fee) for n, a in zip(names, asks)}
+                if all(p is not None for p in prices.values()):
+                    quotes.append({"book": BOOK, "sport": sport, "start": _iso(start), "prices": prices})
+            except (ValueError, TypeError):
+                continue  # one malformed market never drops the rest
     return quotes
 
 
