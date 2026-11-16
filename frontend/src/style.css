@@ -128,3 +128,5 @@ nav button.link, .welcome button.link { text-decoration: underline; }
 .help-converter { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
 .help dt { font-weight: 600; margin-top: 10px; }
 .help dd { margin: 2px 0 0; }
+.info { color: #8795a6; font-size: 10px; cursor: help; }
+.row-example { margin-top: 8px; }

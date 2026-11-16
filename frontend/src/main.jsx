@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 
 import './style.css';
 import {Calculators} from './Calculators.jsx';
+import {RowExample, Th} from './ColumnHelp.jsx';
 import {Glossary} from './Glossary.jsx';
 import {Help} from './Help.jsx';
 import {GOTO_EVENT} from './help.js';
@@ -14,7 +15,7 @@ import {Term} from './Term.jsx';
 import {NAV_GROUPS, NAV_SUBTITLES} from './navgroups.js';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
-import {arbsEmptyText, lowHoldEmptyText, sharpEmptyText} from './empty.js';
+import {arbsEmptyText, evEmptyText, lowHoldEmptyText, middlesEmptyText, sharpEmptyText} from './empty.js';
 import {legKey, useSlip} from './hooks.js';
 import {slipPriceText} from './slip.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
@@ -299,6 +300,8 @@ function ApiError({data}) {
   return <div className="bad">{text}</div>;
 }
 
+const ROW_FMT = {odds: (o) => formatOdds(o), money: (m) => formatMoney(m)};
+
 function EmptyState({text}) {
   return text ? <div className="mut">{text}</div> : null;
 }
@@ -406,8 +409,10 @@ function PositiveEv() {
       <table>
         <thead>
           <tr>
-            <th><Term id="ev">EV%</Term></th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th>
-            <th><Term id="fair-odds">Fair</Term></th><th>Sharps (<Term id="hold">hold</Term>)</th><th>Stake</th><th></th>
+            <Th tab="+EV" label="EV%" /><Th tab="+EV" label="Pick" /><Th tab="+EV" label="Market" />
+            <Th tab="+EV" label="Event" /><Th tab="+EV" label="Book" /><Th tab="+EV" label="Odds" />
+            <Th tab="+EV" label="Fair" /><Th tab="+EV" label="Sharps (hold)" /><Th tab="+EV" label="Stake" />
+            <th aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -439,6 +444,8 @@ function PositiveEv() {
           ))}
         </tbody>
       </table>
+      <EmptyState text={evEmptyText(data, minEv)} />
+      <RowExample tab="+EV" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
 }
@@ -519,6 +526,7 @@ function Arbs() {
       </div>
       <ApiError data={data} />
       <EmptyState text={arbsEmptyText(data, min)} />
+      <RowExample tab="Arbitrage" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
       {(Array.isArray(data) ? data : []).map((r, i) => (
         <ArbCard key={i} arb={r} onTrack={() => {
           track(r);
@@ -845,7 +853,10 @@ function LowHold() {
       <ApiError data={data} />
       <table>
         <thead>
-          <tr><th><Term id="hold">Hold</Term></th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr>
+          <tr>
+            <Th tab="Low Hold" label="Hold" /><Th tab="Low Hold" label="Event" /><Th tab="Low Hold" label="Market" />
+            <Th tab="Low Hold" label="Legs" /><Th tab="Low Hold" label="Exp. loss" />
+          </tr>
         </thead>
         <tbody>
           {(Array.isArray(data) ? data : []).map((r, i) => (
@@ -864,6 +875,7 @@ function LowHold() {
         </tbody>
       </table>
       <EmptyState text={lowHoldEmptyText(data, maxHold)} />
+      <RowExample tab="Low Hold" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
 }
@@ -924,8 +936,9 @@ function Middles() {
       <table>
         <thead>
           <tr>
-            <th><Term id="ev">EV%</Term></th><th>Event</th><th>Market</th><th>Window</th><th>Legs</th><th>Worst case</th>
-            <th>Win both</th><th>Hit %</th><th></th>
+            <Th tab="Middles" label="EV%" /><Th tab="Middles" label="Event" /><Th tab="Middles" label="Market" />
+            <Th tab="Middles" label="Window" /><Th tab="Middles" label="Legs" /><Th tab="Middles" label="Worst case" />
+            <Th tab="Middles" label="Win both" /><Th tab="Middles" label="Hit %" /><th aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -950,6 +963,8 @@ function Middles() {
           ))}
         </tbody>
       </table>
+      <EmptyState text={middlesEmptyText(data, minWindow, maxCost)} />
+      <RowExample tab="Middles" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
 }
@@ -1170,8 +1185,10 @@ function SharpMoney() {
       <table>
         <thead>
           <tr>
-            <th>Event</th><th>Side</th><th>Exchange</th><th>Volume</th><th>× usual</th>
-            <th>Spike price</th><th>Books paying more</th>
+            <Th tab="Sharp Money" label="Event" /><Th tab="Sharp Money" label="Side" />
+            <Th tab="Sharp Money" label="Exchange" /><Th tab="Sharp Money" label="Volume" />
+            <Th tab="Sharp Money" label="× usual" /><Th tab="Sharp Money" label="Spike price" />
+            <Th tab="Sharp Money" label="Books paying more" />
           </tr>
         </thead>
         <tbody>
@@ -1195,6 +1212,7 @@ function SharpMoney() {
         </tbody>
       </table>
       <EmptyState text={sharpEmptyText(data, k, windowMin)} />
+      <RowExample tab="Sharp Money" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
 }

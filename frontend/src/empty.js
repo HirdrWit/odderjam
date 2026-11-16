@@ -47,6 +47,29 @@ export function sharpEmptyText(data, k, windowMin) {
 }
 
 /**
+ * @param {*} data The /api/ev response.
+ * @param {number} minEv Min EV %.
+ * @return {?string}
+ */
+export function evEmptyText(data, minEv) {
+  if (!isEmptyList(data)) return null;
+  return `No bets with an edge of ${minEv}% or more right now. Lower Min EV %, pick All books, or refresh odds.`;
+}
+
+/**
+ * @param {*} data The /api/middles response.
+ * @param {number} minWindow Min window.
+ * @param {(number|string)} maxCost Max cost %, '' for any.
+ * @return {?string}
+ */
+export function middlesEmptyText(data, minWindow, maxCost) {
+  if (!isEmptyList(data)) return null;
+  const cost = maxCost === '' ? '' : ` and cost at most ${maxCost}%`;
+  return `No middles (two bets that can both win) with a window of at least ${minWindow}${cost} right now. ` +
+      'Lower Min window, raise Max cost %, or refresh odds.';
+}
+
+/**
  * @param {*} data The unfiltered /api/bets response.
  * @return {?string}
  */
