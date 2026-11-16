@@ -49,12 +49,13 @@ def test_size_arb_max_per_side_scales_down():
 
 
 def test_size_arb_picks_best_rebalance():
-    """The chosen rounding is never worse (worst-case %) than any other floor/ceil combination."""
+    """The chosen rounding is never worse (worst-case %) than any other floor/ceil combination within the total."""
     odds, total, inc = [250, -200, 400], 137, 5
     r = sizing.size_arb(odds, total, inc)
     dec = [american_to_decimal(a) for a in odds]
     options = [(s // inc * inc, s // inc * inc + inc) for s in r["ideal_stakes"]]
-    best = max(min(s * d for s, d in zip(c, dec)) / sum(c) - 1 for c in itertools.product(*options) if all(c))
+    best = max(min(s * d for s, d in zip(c, dec)) / sum(c) - 1 for c in itertools.product(*options)
+               if all(c) and sum(c) <= total)
     assert r["min_profit_pct"] == pytest.approx(best * 100)
 
 
@@ -74,7 +75,8 @@ def test_size_arb_never_silently_loses():
         r = sizing.size_arb([a, b], total, inc)
         if r["ideal_profit_pct"] >= 0:
             assert r["rounding_loss"] == (r["min_profit"] < -1e-9)
-            assert (r["warning"] is not None) == r["rounding_loss"]
+            # Every warning is explained: a rounding loss, or stakes over the total (odderjam-37).
+            assert (r["warning"] is not None) == (r["rounding_loss"] or r["over_total"])
 
 
 def test_low_hold_has_no_rounding_warning():

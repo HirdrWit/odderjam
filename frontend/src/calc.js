@@ -590,7 +590,8 @@ function isBetter(a, b) {
  * @return {{stakes: !Array<number>, idealStakes: !Array<number>,
  *     totalStake: number, profits: !Array<number>, minProfit: number,
  *     maxProfit: number, minProfitPct: number, idealProfitPct: number,
- *     capped: boolean, roundingLoss: boolean, warning: ?string}}
+ *     capped: boolean, roundingLoss: boolean, overTotal: boolean,
+ *     warning: ?string}}
  */
 export function sizeArb(american, total, increment = 1, maxPerSide = null) {
   const decimals = american.map((a) => americanToDecimal(a));
@@ -634,6 +635,7 @@ export function sizeArb(american, total, increment = 1, maxPerSide = null) {
     idealProfitPct: ideal.profitPct,
     capped: scale < 1,
     roundingLoss,
+    overTotal: false,
     warning,
   };
 }

@@ -82,6 +82,7 @@ def size_arb(american_odds: list[float], total: float, increment: float | None =
         "ideal_profit_pct": ideal["profit_pct"],
         "capped": scale < 1.0,
         "rounding_loss": rounding_loss,
+        "over_total": False,
         "warning": (f"Rounded stakes lose up to ${-lo:.2f} on one outcome; use a smaller increment"
                     if rounding_loss else None),
     }
