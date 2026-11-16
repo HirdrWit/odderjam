@@ -1,0 +1,105 @@
+/**
+ * @fileoverview Plain-English definitions for betting jargon (no React), tested
+ * in glossary.test.js. Every `<Term id="...">` must have an entry here.
+ */
+
+/** @const {!Array<{id: string, label: string, definition: string, example: string}>} */
+export const GLOSSARY = [
+  {
+    id: 'ev', label: '+EV',
+    definition: 'Positive expected value: a bet that pays more than its true chance of winning says it should.',
+    example: 'A bet that wins 50% of the time but pays +110 earns money over many bets.',
+  },
+  {
+    id: 'edge', label: 'Edge',
+    definition: 'How much better the price you get is than the true price, as a percent of your stake.',
+    example: 'A 3% edge means you expect to win about $3 for every $100 staked.',
+  },
+  {
+    id: 'fair-odds', label: 'Fair odds',
+    definition: 'The odds with the sportsbook\'s margin removed: what the price would be if nobody took a cut.',
+    example: 'A 50/50 coin flip has fair odds of +100, even if books offer -110.',
+  },
+  {
+    id: 'devig', label: 'Devig (no-vig)',
+    definition: 'Removing the sportsbook\'s margin from a set of prices to find the true chances.',
+    example: '-110 on both sides adds up to 104.8%; devigged, each side is 50%.',
+  },
+  {
+    id: 'vig', label: 'Vig',
+    definition: 'Short for vigorish: the cut a sportsbook builds into its prices.',
+    example: 'Betting -110 on both sides of a coin flip, the vig is about 4.5%.',
+  },
+  {
+    id: 'hold', label: 'Hold',
+    definition: 'The percentage a sportsbook keeps built into its prices. Lower is better for you.',
+    example: 'A 4% hold means the book keeps about $4 of every $100 bet across both sides.',
+  },
+  {
+    id: 'sharp-book', label: 'Sharp book',
+    definition: 'A sportsbook with low margins that welcomes skilled bettors, so its prices are close to the truth.',
+    example: 'If a sharp book prices a team at 55% and your book at 50%, your book is likely too generous.',
+  },
+  {
+    id: 'kelly', label: 'Kelly',
+    definition: 'A formula that sizes your bet by your edge and the odds. Many people bet a fraction of it to be safe.',
+    example: 'Quarter Kelly on a full-Kelly stake of $40 is $10.',
+  },
+  {
+    id: 'clv', label: 'CLV',
+    definition: 'Closing line value: how your price compares to the final price before the game starts. Beating it is a good sign.',
+    example: 'You bet +120 and the line closes at +105, so you beat the close.',
+  },
+  {
+    id: 'hedge', label: 'Hedge',
+    definition: 'Betting the other side to lock in a profit or cut your risk on an existing bet.',
+    example: 'You hold a futures bet at +1000; a bet on the rival side guarantees a profit either way.',
+  },
+  {
+    id: 'arb', label: 'Arb (arbitrage)',
+    definition: 'Betting every outcome at different books so you win whichever outcome happens.',
+    example: 'Team A at +110 at one book and Team B at +110 at another: bet both for a sure profit.',
+  },
+  {
+    id: 'middle', label: 'Middle',
+    definition: 'Betting both sides of a line at different numbers so that both bets can win if the result lands between them.',
+    example: 'Over 45.5 at one book and under 47.5 at another: a final total of 46 or 47 wins both.',
+  },
+  {
+    id: 'american-odds', label: 'American odds',
+    definition: 'Prices shown as +/- numbers: negative is what you stake to win $100, positive is what $100 wins.',
+    example: '-150 means stake $150 to win $100; +150 means $100 wins $150.',
+  },
+  {
+    id: 'decimal-odds', label: 'Decimal odds',
+    definition: 'Prices shown as the total payout per $1 staked, stake included.',
+    example: '2.50 means $10 returns $25, which is $15 profit.',
+  },
+];
+
+/**
+ * @param {string} id
+ * @return {{id: string, label: string, definition: string, example: string}|undefined}
+ */
+export function findEntry(id) {
+  return GLOSSARY.find((e) => e.id === id);
+}
+
+/** @return {!Array<{id: string, label: string, definition: string, example: string}>} Entries A to Z. */
+export function sortedEntries() {
+  return [...GLOSSARY].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Left edge for a tooltip centred on its anchor but kept inside the viewport.
+ * @param {{left: number, width: number}} anchor Anchor rect.
+ * @param {number} tipWidth
+ * @param {number} viewportWidth
+ * @param {number} margin Minimum gap to the viewport edge.
+ * @return {number} Viewport x of the tooltip's left edge.
+ */
+export function tooltipLeft(anchor, tipWidth, viewportWidth, margin) {
+  const centred = anchor.left + anchor.width / 2 - tipWidth / 2;
+  const max = viewportWidth - tipWidth - margin;
+  return Math.max(margin, Math.min(centred, max));
+}

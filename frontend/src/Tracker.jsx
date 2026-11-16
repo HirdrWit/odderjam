@@ -1,5 +1,6 @@
 import {useState} from 'react';
 
+import {Term} from './Term.jsx';
 import {errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {formatOdds} from './odds.js';
 import {PROFIT, betFormError, calendarWeeks, filterQuery, plColor, scaleSeries} from './tracker.js';
@@ -437,7 +438,7 @@ export function Tracker() {
         <thead>
           <tr>
             <th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Type</th><th>Odds</th>
-            <th>Stake</th><th>Close</th><th>CLV</th>
+            <th>Stake</th><th>Close</th><th><Term id="clv">CLV</Term></th>
             <th title="CLV vs the sharp no-vig closing line">Sharp CLV</th>
             <th>Status</th><th>P/L</th><th></th>
           </tr>

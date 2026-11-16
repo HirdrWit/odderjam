@@ -1,5 +1,6 @@
 import {useState} from 'react';
 
+import {Term} from './Term.jsx';
 import {INTRO_COPY, introDismissed, setIntroDismissed} from './intro.js';
 
 function store() {
@@ -8,6 +9,31 @@ function store() {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Wraps the first use of each glossary phrase in a Term tooltip.
+ * @param {string} text
+ * @return {!Array<string|!Object>}
+ */
+function withTerms(text) {
+  const seen = new Set();
+  return text.split(/(\+EV|\bedge\b|\bArbitrage\b)/).map((part, i) => {
+    if (seen.has(part)) return part;
+    if (part === '+EV') {
+      seen.add(part);
+      return <Term id="ev" key={i}>+EV</Term>;
+    }
+    if (part === 'edge') {
+      seen.add(part);
+      return <Term id="edge" key={i}>edge</Term>;
+    }
+    if (part === 'Arbitrage') {
+      seen.add(part);
+      return <Term id="arb" key={i}>Arbitrage</Term>;
+    }
+    return part;
+  });
 }
 
 /**
@@ -34,7 +60,7 @@ export function TabIntro({tab}) {
   }
   return (
     <div className="intro" role="note">
-      <p>{copy.what} {copy.how}</p>
+      <p>{withTerms(`${copy.what} ${copy.how}`)}</p>
       <button type="button" onClick={() => {
         set(true);
       }}>Got it</button>

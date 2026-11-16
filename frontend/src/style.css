@@ -107,3 +107,10 @@ nav button.link, .welcome button.link { text-decoration: underline; }
   .nav-group h2 { width: 100%; margin: 4px 0; }
   .welcome { margin: 8px; }
 }
+
+.term { position: relative; border-bottom: 1px dotted #8795a6; cursor: help; }
+.term:focus-visible { outline: 2px solid #2a6df4; outline-offset: 2px; }
+.term-tip { position: absolute; top: 100%; z-index: 20; margin-top: 4px; width: 260px; max-width: calc(100vw - 16px); box-sizing: border-box; padding: 8px 10px; background: #0f1419; border: 1px solid #2c3a4b; border-radius: 6px; box-shadow: 0 4px 14px #0008; font: 12px/1.4 system-ui, sans-serif; font-weight: 400; text-transform: none; letter-spacing: normal; color: #e6e9ee; white-space: normal; text-align: left; cursor: default; }
+.term-tip i { display: block; margin-top: 4px; color: #8795a6; }
+.glossary dt { font-weight: 600; margin-top: 12px; }
+.glossary dd { margin: 2px 0 0; }
