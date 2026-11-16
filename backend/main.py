@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from contextlib import asynccontextmanager
 from math import prod
 from pathlib import Path
 from statistics import median
@@ -8,15 +8,25 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import history
-from .engine import arb as arbm, devig, ev, lowhold, markets as mk, middles as mid, odds, parlay as pm, promo, sharp, sizing
-from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, bet_link, max_sharp_hold, sharp_weights_spec, us_only
+from . import alerts, history, scan
+from .scan import groups as _groups
+from .engine import devig, lowhold, markets as mk, middles as mid, odds, parlay as pm, promo, sharp, sizing
+from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets
 from .providers import cache_info, get_snapshot
 
-app = FastAPI(title="odderjam")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    alerts.start()
+    yield
+    alerts.stop()
+
+
+app = FastAPI(title="odderjam", lifespan=lifespan)
 app.include_router(bets.router)
 app.include_router(bets.bankroll_router)
+app.include_router(alerts.router)
 
 
 def _us_markets(markets: dict) -> dict:
@@ -35,18 +45,6 @@ def odds_screen(sport: str | None = None):
     shown = [{**e, "markets": _us_markets(e["markets"])} for e in get_snapshot()
              if not sport or e["sport"] == sport]
     return [e for e in shown if e["markets"]]
-
-
-def _groups(e: dict, market: str | None = None, props: bool = True) -> Iterator[tuple[str, dict]]:
-    """Yield (market_key, line_group) for every complete line group in an event.
-
-    `market` keeps one market key only; `props=False` drops player props (mainlines only).
-    """
-    for key, outcomes in e["markets"].items():
-        if (market and key != market) or (not props and mk.is_prop(key)):
-            continue
-        for g in mk.line_groups(key, outcomes, e["home"], e["away"]):
-            yield key, g
 
 
 @app.get("/api/sharps")
@@ -68,32 +66,8 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
     max_hold = max_sharp_hold() if max_hold is None else max_hold
     _check_sizing(round_to, max_side)
     bankroll = max(bets.bankroll_info()["current"], 0.0)
-    rows = []
-    for e in get_snapshot():
-        for key, g in _groups(e, market, props):
-            # Only sharps pricing every side of this exact line can devig it.
-            fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold)
-            if fair is None:
-                continue
-            for o, fp in zip(g["outcomes"], fair["probs"]):
-                for book_name, price in o["prices"].items():
-                    if book_name not in US_BOOKS or (book and book_name != book):
-                        continue
-                    v = ev.ev_pct(fp, price)
-                    if v >= min_ev:
-                        kelly_stake = bankroll * ev.kelly_fraction(fp, price, kelly)
-                        rows.append({
-                            "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
-                            "start": e["start"], "market": key, "player": g["player"],
-                            "name": o["name"], "selection": o["name"],
-                            "point": o["point"], "pick": mk.label(o), "book": book_name,
-                            "odds": price, "link": bet_link(book_name, o),
-                            "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
-                            "stake": sizing.round_stake(kelly_stake, round_to, max_side),
-                            "kelly_stake": kelly_stake,
-                            "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"],
-                        })
-    return sorted(rows, key=lambda r: -r["ev_pct"])
+    return scan.ev_rows(get_snapshot(), weights, max_hold, book=book, min_ev=min_ev, method=method, kelly=kelly,
+                        market=market, bankroll=bankroll, round_to=round_to, max_side=max_side, props=props)
 
 
 def _check_sizing(round_to: float, max_side: float | None) -> None:
@@ -111,32 +85,8 @@ def arbs(min_profit: float = 0.0, market: str | None = None, total: float | None
     if total is None or total <= 0:
         total = bets.bankroll_info()["current"]
         total = total if total > 0 else 100.0
-    rows = []
-    for e in get_snapshot():
-        for key, g in _groups(e, market, props):
-            best = []
-            for o in g["outcomes"]:
-                us_prices = us_only(o["prices"])
-                if not us_prices:
-                    break
-                best.append((o, *max(us_prices.items(), key=lambda kv: kv[1])))
-            else:
-                if len({book for _, book, _ in best}) < 2:
-                    continue
-                result = arbm.arb([price for _, _, price in best])
-                if result["profit_pct"] >= min_profit:
-                    sized = sizing.size_arb([price for _, _, price in best], total, round_to, max_side)
-                    rows.append({"event": f'{e["away"]} @ {e["home"]}', "event_id": e["id"], "sport": e["sport"],
-                                 "market": key, "player": g["player"], "point": g["point"],
-                                 "legs": [{"pick": mk.label(o), "selection": o["name"], "point": o["point"], "book": book,
-                                           "odds": price, "link": bet_link(book, o), "stake": stake, "ideal_stake": ideal,
-                                           "profit_if_wins": won}
-                                          for (o, book, price), stake, ideal, won
-                                          in zip(best, sized["stakes"], sized["ideal_stakes"], sized["profits"])],
-                                 "profit_pct": result["profit_pct"],
-                                 **{k: sized[k] for k in ("total_stake", "min_profit", "max_profit", "min_profit_pct",
-                                                          "capped", "rounding_loss", "warning")}})
-    return sorted(rows, key=lambda r: -r["profit_pct"])
+    return scan.arb_rows(get_snapshot(), min_profit=min_profit, market=market, total=total, round_to=round_to,
+                         max_side=max_side, props=props)
 
 
 PromoKind = Literal["bonus-bet", "profit-boost", "second-chance"]

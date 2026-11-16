@@ -17,6 +17,25 @@ _lock = threading.Lock()
 log = logging.getLogger(__name__)
 MOCK_HISTORY_SECONDS = 300  # mock odds change every call; only keep one snapshot per 5 minutes
 
+# Called with each newly fetched live snapshot (see on_fetch). Never causes a fetch itself.
+_listeners: list = []
+
+
+def on_fetch(fn) -> None:
+    """Register fn(events) to run after every successful live fetch."""
+    if fn not in _listeners:
+        _listeners.append(fn)
+
+
+def off_fetch(fn) -> None:
+    if fn in _listeners:
+        _listeners.remove(fn)
+
+
+def _fetched(data: list[dict]) -> None:
+    for fn in list(_listeners):
+        threading.Thread(target=fn, args=(data,), daemon=True).start()
+
 
 def _live() -> bool:
     return bool(os.environ.get("ODDS_API_KEY"))
@@ -57,6 +76,15 @@ def _store(data: list[dict], min_gap: float = 0) -> None:
         log.exception("could not store odds history")
 
 
+def peek_snapshot() -> list[dict]:
+    """The latest snapshot already on hand (mock data or the disk cache). Never fetches."""
+    if not _live():
+        from .mock import snapshot
+        return snapshot()
+    with _lock:
+        return json.loads(CACHE.read_text()) if CACHE.exists() else []
+
+
 def get_snapshot(force: bool = False) -> list[dict]:
     if not _live():
         from .mock import snapshot
@@ -76,6 +104,7 @@ def get_snapshot(force: bool = False) -> list[dict]:
         if data:
             CACHE.write_text(json.dumps(data))
             _store(data)
+            _fetched(data)
         elif CACHE.exists():
             return json.loads(CACHE.read_text())
         return data
