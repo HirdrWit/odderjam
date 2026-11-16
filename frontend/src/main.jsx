@@ -4,6 +4,7 @@ import {createRoot} from 'react-dom/client';
 import './style.css';
 import {Calculators} from './Calculators.jsx';
 import {RowExample, Th} from './ColumnHelp.jsx';
+import {zeroStakeReason} from './columns.js';
 import {Glossary} from './Glossary.jsx';
 import {Help} from './Help.jsx';
 import {GOTO_EVENT} from './help.js';
@@ -428,7 +429,9 @@ function PositiveEv() {
               <td className="mut small">
                 {r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(' · ')}
               </td>
-              <td title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>{formatMoney(r.stake)}</td>
+              <td title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>
+                {zeroStakeReason(r) ? <span className="mut small">{zeroStakeReason(r)}</span> : formatMoney(r.stake)}
+              </td>
               <td>
                 <BetLink href={r.link} /> <button className="track" onClick={() => {
                   track(r);

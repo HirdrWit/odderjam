@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {COLUMNS, columnTip, rowExample} from './columns.js';
+import {COLUMNS, columnTip, rowExample, zeroStakeReason} from './columns.js';
 import {evEmptyText, middlesEmptyText, arbsEmptyText, lowHoldEmptyText, sharpEmptyText} from './empty.js';
 import {findEntry} from './glossary.js';
 
@@ -101,4 +101,27 @@ test('every empty state says what the tab looks for and names a control to chang
     assert.match(t ?? '', re);
     assert.match(t ?? '', /lower|raise|widen|add|refresh|check back/i);
   }
+});
+
+// odderjam-74: a positive edge with a $0 stake must say why.
+const ZERO = {ev_pct: 7.4, pick: 'Titans', book: 'DraftKings', odds: 150, fair_odds: 130, stake: 0, kelly_stake: 0.4};
+
+test('zeroStakeReason explains a zero stake on a positive edge', () => {
+  const r = zeroStakeReason(ZERO);
+  assert.match(r, /under \$1/i);
+  assert.match(r, /bankroll/i);
+  assert.match(r, /round to/i);
+});
+
+test('zeroStakeReason is empty when the stake is positive or there is no edge', () => {
+  assert.equal(zeroStakeReason({...ZERO, stake: 5}), '');
+  assert.equal(zeroStakeReason({...ZERO, ev_pct: 0}), '');
+  assert.equal(zeroStakeReason({...ZERO, ev_pct: -1}), '');
+});
+
+test('rowExample gives the zero-stake reason instead of "$0.00"', () => {
+  const t = rowExample('+EV', ZERO, fmt);
+  assert.match(t, /7\.4%/);
+  assert.match(t, /under \$1/i);
+  assert.doesNotMatch(t, /\$0\.00/);
 });
