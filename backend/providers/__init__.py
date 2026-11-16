@@ -4,9 +4,11 @@ Live fetches only happen when the cache is older than ODDS_CACHE_MINUTES
 (default 120) or when refresh() is called explicitly.
 """
 import json
+import logging
 import os
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Versioned so a cache written in an older event shape is never read back (v3: events carry "updated").
@@ -14,6 +16,27 @@ CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v3.json"
 LIVE_CACHE = CACHE.parent / ".odds_cache.live.json"
 BUDGET_FILE = CACHE.parent / ".odds_cache.budget.json"
 _lock = threading.Lock()
+log = logging.getLogger(__name__)
+MOCK_HISTORY_SECONDS = 300  # mock odds change every call; only keep one snapshot per 5 minutes
+
+# Called with each newly fetched live snapshot (see on_fetch). Never causes a fetch itself.
+_listeners: list = []
+
+
+def on_fetch(fn) -> None:
+    """Register fn(events) to run after every successful live fetch."""
+    if fn not in _listeners:
+        _listeners.append(fn)
+
+
+def off_fetch(fn) -> None:
+    if fn in _listeners:
+        _listeners.remove(fn)
+
+
+def _fetched(data: list[dict]) -> None:
+    for fn in list(_listeners):
+        threading.Thread(target=fn, args=(data,), daemon=True).start()
 
 # Live (in-play) refresh settings. Off by default: every live fetch spends API credits.
 LIVE_DEFAULTS = {"enabled": False, "interval_seconds": 30.0, "credits_per_hour": 60.0, "max_price_age": 60.0}
@@ -30,8 +53,9 @@ def _ttl() -> float:
 
 
 def _fetch() -> list[dict]:
+    from .exchanges import enrich
     from .theoddsapi import snapshot
-    return snapshot()
+    return enrich(snapshot())
 
 
 def _now() -> float:
@@ -130,12 +154,37 @@ def live_status(now: float | None = None) -> dict:
 
 def cache_info() -> dict:
     meta = CACHE.parent / ".odds_meta.json"
-    info = {"live": _live(), "age_seconds": None, "ttl_seconds": _ttl()}
+    from .theoddsapi import PROP_MARKETS  # lazy: keeps httpx out of mock mode
+    info = {"live": _live(), "age_seconds": None, "ttl_seconds": _ttl(), "prop_markets": PROP_MARKETS}
     if CACHE.exists():
         info["age_seconds"] = time.time() - CACHE.stat().st_mtime
     if meta.exists():
         info.update(json.loads(meta.read_text()))
     return info
+
+
+def _store(data: list[dict], min_gap: float = 0) -> None:
+    """Save a fetched snapshot to the odds history and fill any closing lines now due.
+    Skips the save if the newest stored snapshot is under min_gap seconds old.
+    History problems must never stop odds from being served."""
+    from .. import history  # local import: history imports providers.books, which would be circular
+    try:
+        last = history.last_fetched_at()
+        if min_gap and last and last > history.ts(datetime.now(timezone.utc) - timedelta(seconds=min_gap)):
+            return
+        history.record(data)
+        history.capture_closing()
+    except Exception:
+        log.exception("could not store odds history")
+
+
+def peek_snapshot() -> list[dict]:
+    """The latest pre-game snapshot already on hand (mock data or the disk cache). Never fetches."""
+    if not _live():
+        from .mock import snapshot
+        return snapshot()
+    with _lock:
+        return json.loads(CACHE.read_text()) if CACHE.exists() else []
 
 
 def _overlay(base: list[dict], live_events: list[dict], now: float) -> list[dict]:
@@ -181,6 +230,8 @@ def _pregame(force: bool) -> list[dict]:
         raise
     if data:
         CACHE.write_text(json.dumps(data))
+        _store(data)
+        _fetched(data)
     elif CACHE.exists():
         return json.loads(CACHE.read_text())
     return data
@@ -189,7 +240,9 @@ def _pregame(force: bool) -> list[dict]:
 def get_snapshot(force: bool = False, now: float | None = None) -> list[dict]:
     if not _live():
         from .mock import snapshot
-        return snapshot(now=now)
+        data = snapshot(now=now)
+        _store(data, 0 if force else MOCK_HISTORY_SECONDS)
+        return data
     now = _now() if now is None else now
     with _lock:
         data = _pregame(force)
@@ -199,3 +252,11 @@ def get_snapshot(force: bool = False, now: float | None = None) -> list[dict]:
         if LIVE_CACHE.exists():
             data = _overlay(data, json.loads(LIVE_CACHE.read_text()), now)
         return data
+
+
+def get_scores(sports: list[str]) -> list[dict]:
+    """Final/live scores for auto-settling bets. Live API only: spends credits on every call."""
+    if not _live():
+        raise RuntimeError("auto-settle needs ODDS_API_KEY (live scores)")
+    from .theoddsapi import scores
+    return scores(sports)

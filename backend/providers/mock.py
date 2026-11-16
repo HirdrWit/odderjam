@@ -5,6 +5,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from statistics import NormalDist
 
+from .books import BOOK_URLS
+
 BOOKS = ["Pinnacle", "DraftKings", "FanDuel", "BetMGM", "Caesars", "bet365", "BetRivers", "Fanatics"]
 GAMES = {
     "NBA": [("Lakers", "Celtics"), ("Warriors", "Nuggets"), ("Bucks", "Heat")],
@@ -19,6 +21,16 @@ SPORT_MODEL = {
     "MLB": (4.0, (7, 10), 3.0, 1.5),
     "NHL": (2.5, (5.5, 6.5), 1.8, 1.5),
 }
+# Player props per sport: (market, (mean low, mean high), std dev or None for a Poisson count stat).
+SPORT_PROPS = {
+    "NBA": [("player_points", (14, 30), 6.0), ("player_threes", (0.6, 3.5), None)],
+    "NFL": [("player_rush_yds", (35, 90), 22.0), ("player_receptions", (2.5, 7), None)],
+    "MLB": [("batter_hits", (0.6, 1.3), None), ("batter_total_bases", (1.0, 2.2), None)],
+    "NHL": [("player_points", (0.4, 1.2), None), ("player_shots_on_goal", (1.8, 4.0), None)],
+}
+PLAYERS_PER_TEAM = 2
+# Soft books misprice props more than mainlines.
+PROP_NOISE = 0.04
 # How far a book's line may sit from the market line (whole points keep lines on the .5, so no pushes).
 LINE_SHIFTS = [-1, 0, 0, 0, 1]
 
@@ -34,22 +46,59 @@ def _half(x: float) -> float:
     return math.floor(x) + 0.5
 
 
-def _priced(p: float, book: str, rng: random.Random) -> tuple[int, int]:
+def _priced(p: float, book: str, rng: random.Random, noise_sd: float = 0.025) -> tuple[int, int]:
     """Two-way prices for true probability p of side A, with book vig and noise."""
     vig = 0.025 if book == "Pinnacle" else rng.uniform(0.04, 0.06)
-    noise = 0.0 if book == "Pinnacle" else rng.gauss(0, 0.025)
+    noise = 0.0 if book == "Pinnacle" else rng.gauss(0, noise_sd)
     pa = min(0.95, max(0.05, p + noise))
     return (_to_american(min(0.97, pa * (1 + vig / 2))),
             _to_american(min(0.97, (1 - pa) * (1 + vig / 2))))
 
 
-def _add(outcomes: dict[tuple[str, float | None], dict], name: str, point: float | None, book: str, price: int) -> None:
-    outcome = outcomes.setdefault((name, point), {"name": name, "point": point, "prices": {}})
+def _add(outcomes: dict[tuple[str, str | None, float | None], dict], name: str, point: float | None, book: str, price: int,
+         event_id: str = "", market: str = "", player: str | None = None) -> None:
+    new = {"name": name, "point": point, "prices": {}}
+    if player:
+        new["player"] = player
+    outcome = outcomes.setdefault((name, player, point), new)
     outcome["prices"][book] = price
+    if book in BOOK_URLS:
+        # Fake deep link: the real book homepage plus a fragment naming the bet, so it opens somewhere sensible.
+        pick = f"{player + '_' if player else ''}{name}{'' if point is None else f'_{point:+g}'}".replace(" ", "_")
+        outcome.setdefault("links", {})[book] = f"{BOOK_URLS[book]}/#odderjam-mock={event_id}/{market}/{pick}"
+
+
+def _poisson_over(mean: float, line: float) -> float:
+    """P(X > line) for a Poisson count with the given mean (line on the .5)."""
+    k = math.floor(line)
+    return 1 - sum(math.exp(-mean) * mean ** i / math.factorial(i) for i in range(k + 1))
+
+
+def _props(sport: str, i: int, home: str, away: str, rng: random.Random) -> dict[str, list[dict]]:
+    """Over/Under props for a few made-up players per team."""
+    markets: dict[str, dict[tuple[str, str | None, float | None], dict]] = {}
+    for market, (lo, hi), sd in SPORT_PROPS[sport]:
+        outcomes = markets.setdefault(market, {})
+        for team in (home, away):
+            for n in range(1, PLAYERS_PER_TEAM + 1):
+                player = f"{team} Player {n}"
+                player_rng = random.Random(f"{sport}{i}{market}{player}")
+                mean = player_rng.uniform(lo, hi)
+                line = _half(mean) if sd is not None else max(0.5, _half(mean - 0.5))
+                for book in BOOKS:
+                    book_line = line
+                    if sd is not None and book != "Pinnacle":  # yardage/points lines vary by book
+                        book_line = line + random.Random(f"{sport}{i}{market}{player}{book}").choice(LINE_SHIFTS)
+                    p_over = 1 - NormalDist(mean, sd).cdf(book_line) if sd is not None else _poisson_over(mean, book_line)
+                    over, under = _priced(p_over, book, rng, PROP_NOISE)
+                    _add(outcomes, "Over", book_line, book, over, f"{sport}-{i}", market, player)
+                    _add(outcomes, "Under", book_line, book, under, f"{sport}-{i}", market, player)
+    return {k: list(v.values()) for k, v in markets.items()}
 
 
 def snapshot(seed: int | None = None, now: float | None = None) -> list[dict]:
-    """Return events: {id, sport, home, away, start, markets:{key:[{name, point, prices:{book:price}}]}, updated:{book:iso}}
+    """Return events: {id, sport, home, away, start, markets:{key:[{name, point, [player], prices:{book:price}}]},
+    updated:{book:iso}}
 
     Game 0 of each sport is in progress. `updated` holds each book's last price time.
     """
@@ -77,32 +126,34 @@ def snapshot(seed: int | None = None, now: float | None = None) -> list[dict]:
             ml: dict[tuple[str, float | None], dict] = {}
             spreads: dict[tuple[str, float | None], dict] = {}
             totals: dict[tuple[str, float | None], dict] = {}
+            eid = f"{sport}-{i}"
             for book in BOOKS:
                 home_price, away_price = _priced(true_home, book, rng)
-                _add(ml, home, None, book, home_price)
-                _add(ml, away, None, book, away_price)
+                _add(ml, home, None, book, home_price, eid, "moneyline")
+                _add(ml, away, None, book, away_price, eid, "moneyline")
 
                 # Lines per book are stable for a game; prices move with rng.
                 book_rng = random.Random(f"{sport}{i}{book}")
                 spread_shift = 0 if book == "Pinnacle" else book_rng.choice(LINE_SHIFTS)
                 home_line = market_spread if fixed_spread is not None else market_spread + spread_shift
                 home_price, away_price = _priced(1 - margin_dist.cdf(-home_line), book, rng)  # home covers if margin + line > 0
-                _add(spreads, home, home_line, book, home_price)
-                _add(spreads, away, -home_line, book, away_price)
+                _add(spreads, home, home_line, book, home_price, eid, "spreads")
+                _add(spreads, away, -home_line, book, away_price, eid, "spreads")
 
                 total_shift = 0 if book == "Pinnacle" else book_rng.choice(LINE_SHIFTS)
                 total_line = max(0.5, market_total + total_shift)
                 over, under = _priced(1 - total_dist.cdf(total_line), book, rng)
-                _add(totals, "Over", total_line, book, over)
-                _add(totals, "Under", total_line, book, under)
+                _add(totals, "Over", total_line, book, over, eid, "totals")
+                _add(totals, "Under", total_line, book, under, eid, "totals")
 
+            props = _props(sport, i, home, away, rng)
             max_age = 40 if in_play else 900  # live prices move fast; pre-game ones sit
             updated = {book: datetime.fromtimestamp(now - rng.uniform(0, max_age), timezone.utc).isoformat()
                        for book in BOOKS}
             events.append({
-                "id": f"{sport}-{i}", "sport": sport, "home": home, "away": away, "start": start.isoformat(),
+                "id": eid, "sport": sport, "home": home, "away": away, "start": start.isoformat(),
                 "markets": {"moneyline": list(ml.values()), "spreads": list(spreads.values()),
-                            "totals": list(totals.values())},
+                            "totals": list(totals.values()), **props},
                 "updated": updated,
             })
     return events
