@@ -3,10 +3,12 @@ import {createRoot} from 'react-dom/client';
 
 import './style.css';
 import {Calculators} from './Calculators.jsx';
+import {Glossary} from './Glossary.jsx';
 import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {TabIntro} from './TabIntro.jsx';
+import {Term} from './Term.jsx';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
 import {arbsEmptyText, lowHoldEmptyText, sharpEmptyText} from './empty.js';
@@ -265,7 +267,7 @@ function Bankroll({bank, onSetStart}) {
 function SharpWeights({cfg, weights, maxHold, canReset, onWeight, onMaxHold, onReset}) {
   return (
     <div className="bar wrap">
-      Sharp weights {cfg.books.map((b) => (
+      <Term id="sharp-book">Sharp</Term> weights {cfg.books.map((b) => (
         <span key={b}>
           {b} <input className="mini" type="number" step="0.25" min="0" value={weights[b] ?? 0}
             onChange={(e) => {
@@ -273,7 +275,7 @@ function SharpWeights({cfg, weights, maxHold, canReset, onWeight, onMaxHold, onR
             }} />
         </span>
       ))}
-      Max sharp hold % <input className="mini" type="number" step="0.5" value={maxHold}
+      Max sharp <Term id="hold">hold</Term> % <input className="mini" type="number" step="0.5" value={maxHold}
         onChange={(e) => {
           onMaxHold(Number(e.target.value));
         }} />
@@ -372,10 +374,10 @@ function PositiveEv() {
         }}>
           {EV_BOOKS.map((b) => <option key={b} value={b}>{b || 'All books'}</option>)}
         </select>
-        Min EV % <input type="number" step="0.5" value={minEv} onChange={(e) => {
+        Min <Term id="ev">EV</Term> % <input type="number" step="0.5" value={minEv} onChange={(e) => {
           setMinEv(Number(e.target.value));
         }} />
-        Devig <select value={method} onChange={(e) => {
+        <Term id="devig">Devig</Term> <select value={method} onChange={(e) => {
           setMethod(e.target.value);
         }}>
           {(cfg?.methods || [method]).map((m) => <option key={m}>{m}</option>)}
@@ -383,7 +385,7 @@ function PositiveEv() {
         {bank && <Bankroll key={`${bank.starting}-${startRejected}`} bank={bank} onSetStart={(v) => {
           setStart(v);
         }} />}
-        Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => {
+        <Term id="kelly">Kelly</Term> <input type="number" step="0.05" value={kelly} onChange={(e) => {
           setKelly(Number(e.target.value));
         }} />
         <SizingBar s={sizing} />
@@ -401,8 +403,8 @@ function PositiveEv() {
       <table>
         <thead>
           <tr>
-            <th>EV%</th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th>
-            <th>Fair</th><th>Sharps (hold)</th><th>Stake</th><th></th>
+            <th><Term id="ev">EV%</Term></th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th>
+            <th><Term id="fair-odds">Fair</Term></th><th>Sharps (<Term id="hold">hold</Term>)</th><th>Stake</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -506,7 +508,7 @@ function Arbs() {
     <>
       <TabIntro tab="Arbitrage" />
       <div className="bar">
-        Min profit % <input type="number" step="0.5" value={min} onChange={(e) => {
+        Min profit % (<Term id="arb">arb</Term>) <input type="number" step="0.5" value={min} onChange={(e) => {
           setMin(Number(e.target.value));
         }} />
         <SizingBar s={sizing} showTotal totalHint={bank ? bank.current.toFixed(0) : 'bankroll'} />
@@ -649,7 +651,7 @@ function Promos() {
         }} />
       ))}
       {Array.isArray(data) && data.length === 0 && (
-        <p className="mut">No two-sided markets with a hedge at another book.</p>
+        <p className="mut">No two-sided markets with a <Term id="hedge">hedge</Term> at another book.</p>
       )}
     </>
   );
@@ -730,7 +732,7 @@ function Parlay() {
   return (
     <>
       <div className="bar">
-        Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => {
+        <Term id="kelly">Kelly</Term> <input type="number" step="0.05" value={kelly} onChange={(e) => {
           setKelly(Number(e.target.value));
         }} />
         <span className="mut">Devig: {method} (set on +EV tab)</span>
@@ -840,7 +842,7 @@ function LowHold() {
       <ApiError data={data} />
       <table>
         <thead>
-          <tr><th>Hold</th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr>
+          <tr><th><Term id="hold">Hold</Term></th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr>
         </thead>
         <tbody>
           {(Array.isArray(data) ? data : []).map((r, i) => (
@@ -913,13 +915,13 @@ function Middles() {
           onChange={onMaxCost} />
       </div>
       <div className="mut small">
-        Per $100 total stake, split so both misses cost the same. EV uses a normal model of the
+        A <Term id="middle">middle</Term> wins both bets when the result lands in the window. Per $100 total stake, split so both misses cost the same. EV uses a normal model of the
         result (NFL margins weighted to key numbers).
       </div>
       <table>
         <thead>
           <tr>
-            <th>EV%</th><th>Event</th><th>Market</th><th>Window</th><th>Legs</th><th>Worst case</th>
+            <th><Term id="ev">EV%</Term></th><th>Event</th><th>Market</th><th>Window</th><th>Legs</th><th>Worst case</th>
             <th>Win both</th><th>Hit %</th><th></th>
           </tr>
         </thead>
@@ -1205,6 +1207,7 @@ const TABS = {
   'Pick\'em': Pickem,
   'Calculator': Calculators,
   'Tracker': Tracker,
+  'Glossary': Glossary,
   'Alerts': Alerts,
 };
 

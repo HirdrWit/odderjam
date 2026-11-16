@@ -3,6 +3,7 @@ import {Fragment, useState} from 'react';
 import {americanToProb} from './calc.js';
 import {useApi, useSlip, useStored} from './hooks.js';
 import {TabIntro} from './TabIntro.jsx';
+import {Term} from './Term.jsx';
 import {slipLeg} from './slip.js';
 import {
   FORMATS,
@@ -65,7 +66,7 @@ function LineTable({group, books, format, legOf, slip}) {
   return (
     <table className="odds">
       <thead>
-        <tr><th>Line</th><th>Best</th><th>Fair</th>{books.map((b) => <th key={b}>{b}</th>)}</tr>
+        <tr><th>Line</th><th>Best</th><th><Term id="fair-odds">Fair</Term></th>{books.map((b) => <th key={b}>{b}</th>)}</tr>
       </thead>
       <tbody>
         {group.outcomes.map((o, i) => (
@@ -90,7 +91,7 @@ function LineTable({group, books, format, legOf, slip}) {
           </tr>
         ))}
         <tr className="foot">
-          <td>Hold at best</td>
+          <td><Term id="hold">Hold</Term> at best</td>
           <td className={holdClass(stats.holdPct)}>{holdText(stats.holdPct)}</td>
           <td colSpan={books.length + 1} className="mut small">
             {bookCount ? `Fair = no-vig average of ${bookCount} book${bookCount > 1 ? 's' : ''}` : ''}
@@ -272,7 +273,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
         {!main ? `No ${marketLabel(m).toLowerCase()} odds` : (
           <>
             {marketLabel(m)} best: {bestSummary}
-            {' · '}hold <span className={holdClass(mainStats.holdPct)}>{holdText(mainStats.holdPct)}</span>
+            {' · '}<Term id="hold">hold</Term> <span className={holdClass(mainStats.holdPct)}>{holdText(mainStats.holdPct)}</span>
             {groups.length > 1 && ` · ${groups.length} lines`}
           </>
         )}
@@ -332,6 +333,7 @@ export function OddsScreen() {
         <input className="search" placeholder="Search team" value={query} onChange={(e) => {
           setQuery(e.target.value);
         }} />
+        <Term id="american-odds">American</Term> / <Term id="decimal-odds">decimal</Term> odds
         <select value={format} onChange={(e) => {
           setFormat(e.target.value);
         }}>
