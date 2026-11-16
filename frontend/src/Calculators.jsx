@@ -1,6 +1,7 @@
-import {useState} from 'react';
+import {createContext, useContext, useState} from 'react';
 
 import * as calc from './calc.js';
+import {CALC_GUIDE, CALC_QUESTIONS, explainRow} from './calcguide.js';
 import {SizingBar, useSizing} from './Sizing.jsx';
 
 /** Formats American odds with a leading sign, or a dash if invalid. */
@@ -54,16 +55,32 @@ function Num({label, value, set, step = 1, ...rest}) {
   );
 }
 
+const CalcName = createContext('');
+
 /** Two-column table of `[label, value, className]` result rows. */
 function Out({rows}) {
+  const calcName = useContext(CalcName);
   return (
     <table className="out">
       <tbody>
         {rows.map(([label, value, cls]) => (
-          <tr key={label}><td className="mut">{label}</td><td className={cls}>{value}</td></tr>
+          <tr key={label}><td className="mut">{label}{explainRow(calcName, label) &&
+              <div className="row-help">{explainRow(calcName, label)}</div>}</td>
+            <td className={cls}>{value}</td></tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** Explains every column of a calculator that shows a table instead of result rows. */
+function Legend({calcName}) {
+  return (
+    <dl className="row-help legend">
+      {Object.entries(CALC_GUIDE[calcName].rows).map(([label, text]) => (
+        <div key={label}><dt>{label}</dt><dd>{text}</dd></div>
+      ))}
+    </dl>
   );
 }
 
@@ -188,6 +205,7 @@ function NoVig() {
         </table>
       )}
       {valid && <p className="mut">Hold {formatPct(calc.hold(odds).holdPct)}</p>}
+      <Legend calcName="No-vig fair odds" />
     </>
   );
 }
@@ -261,6 +279,7 @@ function Implied() {
           Total {formatPct(result.totalImplied * 100)} — overround {formatPct(result.overroundPct)}
         </p>
       )}
+      <Legend calcName="Implied probability" />
     </>
   );
 }
@@ -715,8 +734,23 @@ export function Calculators() {
     }
   };
   const Page = CALCS[name];
+  const guide = CALC_GUIDE[name];
+  const jump = (target) => {
+    go(target);
+    setTimeout(() => {
+      document.getElementById('calc-card')?.scrollIntoView?.({behavior: 'smooth', block: 'start'});
+    }, 0);
+  };
   return (
     <>
+      <div className="calc-index">
+        <strong>What do you want to know?</strong>
+        {CALC_QUESTIONS.map((q) => (
+          <button key={q.question} onClick={() => {
+            jump(q.calc);
+          }}>{q.question}</button>
+        ))}
+      </div>
       <div className="subnav">
         {Object.keys(CALCS).map((n) => (
           <button key={n} className={n === name ? 'on' : ''} onClick={() => {
@@ -724,7 +758,13 @@ export function Calculators() {
           }}>{n}</button>
         ))}
       </div>
-      <div className="card calc"><h2>{name}</h2><Page /></div>
+      <div className="card calc" id="calc-card">
+        <h2>{name}</h2>
+        <p className="use-when">{guide.when}</p>
+        <p className="mut"><span className="tag-example">Example</span> {guide.example} Edit the
+          numbers to use your own.</p>
+        <CalcName.Provider value={name}><Page /></CalcName.Provider>
+      </div>
     </>
   );
 }
