@@ -142,5 +142,5 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
                                       in zip(best, sized["stakes"], sized["ideal_stakes"], sized["profits"])],
                              "profit_pct": result["profit_pct"],
                              **{k: sized[k] for k in ("total_stake", "min_profit", "max_profit", "min_profit_pct",
-                                                      "capped", "rounding_loss", "warning")}, **fresh})
+                                                      "capped", "rounding_loss", "over_total", "warning")}, **fresh})
     return sorted(rows, key=lambda r: -r["profit_pct"])

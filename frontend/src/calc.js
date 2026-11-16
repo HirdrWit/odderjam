@@ -582,7 +582,9 @@ function isBetter(a, b) {
 
 /**
  * Rounds and caps the stakes of an arb or low-hold bet, choosing among the
- * floor/ceil options the one with the best worst-case profit percentage.
+ * floor/ceil options that add up to at most `total` the one with the best
+ * worst-case profit percentage. If none fits, the best of all options is used
+ * and `overTotal` is set.
  * @param {!Array<number>} american
  * @param {number} total
  * @param {number=} increment Rounding step in dollars; 0 means cents.
@@ -590,7 +592,8 @@ function isBetter(a, b) {
  * @return {{stakes: !Array<number>, idealStakes: !Array<number>,
  *     totalStake: number, profits: !Array<number>, minProfit: number,
  *     maxProfit: number, minProfitPct: number, idealProfitPct: number,
- *     capped: boolean, roundingLoss: boolean, warning: ?string}}
+ *     capped: boolean, roundingLoss: boolean, overTotal: boolean,
+ *     warning: ?string}}
  */
 export function sizeArb(american, total, increment = 1, maxPerSide = null) {
   const decimals = american.map((a) => americanToDecimal(a));
@@ -605,9 +608,11 @@ export function sizeArb(american, total, increment = 1, maxPerSide = null) {
     const worst = Math.min(...candidate.map((s, i) => s * decimals[i])) - staked;
     return [Math.round((worst / staked) * 1e9) / 1e9, -Math.abs(staked - targetTotal)];
   };
+  const combos = cartesian(targets.map((t) => choices(t, inc, cap)));
+  const within = combos.filter((c) => sum(c) <= total + EPS);
   let stakes = null;
   let best = null;
-  for (const candidate of cartesian(targets.map((t) => choices(t, inc, cap)))) {
+  for (const candidate of within.length ? within : combos) {
     const candidateScore = score(candidate);
     if (isBetter(candidateScore, best)) {
       best = candidateScore;
@@ -619,10 +624,20 @@ export function sizeArb(american, total, increment = 1, maxPerSide = null) {
   const minProfit = Math.min(...profits);
   const maxProfit = Math.max(...profits);
   const roundingLoss = ideal.profitPct >= 0 && minProfit < -EPS;
-  const warning = roundingLoss ?
-      `Rounded stakes lose up to $${(-minProfit).toFixed(2)} on one outcome; ` +
-          'use a smaller increment' :
-      null;
+  const overTotal = staked > total + EPS;
+  const warnings = [];
+  if (overTotal) {
+    warnings.push(
+        `Rounded stakes total $${staked.toFixed(2)}, ` +
+        `$${(staked - total).toFixed(2)} over the $${total.toFixed(2)} ` +
+        'entered; use a smaller increment or a larger total');
+  }
+  if (roundingLoss) {
+    warnings.push(
+        `Rounded stakes lose up to $${(-minProfit).toFixed(2)} on one outcome; ` +
+        'use a smaller increment');
+  }
+  const warning = warnings.length ? warnings.join('; ') : null;
   return {
     stakes,
     idealStakes: targets,
@@ -634,6 +649,7 @@ export function sizeArb(american, total, increment = 1, maxPerSide = null) {
     idealProfitPct: ideal.profitPct,
     capped: scale < 1,
     roundingLoss,
+    overTotal,
     warning,
   };
 }
