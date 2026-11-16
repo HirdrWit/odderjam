@@ -1,28 +1,55 @@
-import React, { useEffect, useState } from "react";
+import {useEffect, useState} from 'react';
 
-export { useApi, useStored } from "./hooks.js";
+export {useApi, useStored} from './hooks.js';
 
-/** Show a short inline notice. kind: "ok" | "err". */
-export const toast = (text, kind = "ok") => window.dispatchEvent(new CustomEvent("toast", { detail: { text, kind } }));
+const TOAST_MS = 3500;
 
+/**
+ * Shows a short inline notice.
+ * @param {string} text
+ * @param {string=} kind 'ok' or 'err'.
+ */
+export function toast(text, kind = 'ok') {
+  window.dispatchEvent(new CustomEvent('toast', {detail: {text, kind}}));
+}
+
+/** Renders the notices sent with `toast`. */
 export function Toaster() {
   const [items, setItems] = useState([]);
   useEffect(() => {
-    let n = 0;
+    let nextId = 0;
     const add = (e) => {
-      const id = ++n;
-      setItems((xs) => [...xs, { id, ...e.detail }]);
-      setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), 3500);
+      const id = ++nextId;
+      setItems((xs) => [...xs, {id, ...e.detail}]);
+      setTimeout(() => {
+        setItems((xs) => xs.filter((x) => x.id !== id));
+      }, TOAST_MS);
     };
-    window.addEventListener("toast", add);
-    return () => window.removeEventListener("toast", add);
+    window.addEventListener('toast', add);
+    return () => {
+      window.removeEventListener('toast', add);
+    };
   }, []);
   return (
     <div className="toasts" role="status" aria-live="polite">
-      {items.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.kind === "err" ? "⚠ " : "✓ "}{t.text}</div>)}
+      {items.map((t) => (
+        <div key={t.id} className={`toast ${t.kind}`}>{t.kind === 'err' ? '⚠ ' : '✓ '}{t.text}</div>
+      ))}
     </div>
   );
 }
 
-export const postJson = (url, body, method = "POST") =>
-  fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+/**
+ * Sends `body` as JSON to `url`.
+ * @param {string} url
+ * @param {*} body
+ * @param {string=} method
+ * @return {!Promise<!Response>}
+ */
+export function postJson(url, body, method = 'POST') {
+  return fetch(url, {
+    method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+}
