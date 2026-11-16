@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import main
+from backend.engine import markets as mk
 from backend.engine.parlay import parlay
 
 
@@ -86,3 +87,31 @@ def test_parlay_without_sharp_line_has_no_ev(client):
 def test_ev_rows_carry_leg_identity(client):
     row = client.get("/api/ev", params={"min_ev": -100}).json()[0]
     assert {"event_id", "market", "name", "point"} <= row.keys()
+
+
+def test_same_market_error_names_game_and_market(client):
+    r = client.post("/api/parlay", json={"legs": [leg("g1", "moneyline", "A"), leg("g1", "moneyline", "B")]})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Both sides of B @ A Moneyline are in the slip; remove one"
+
+
+def test_same_market_error_names_spread_market(client):
+    legs = [leg("g1", "moneyline", "A"), leg("g2", "spreads", "C", -3.5), leg("g2", "spreads", "D", 3.5)]
+    r = client.post("/api/parlay", json={"legs": legs})
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert detail == "Both sides of D @ C Spread are in the slip; remove one"
+    assert "g2" not in detail and "spreads" not in detail
+
+
+@pytest.mark.parametrize("market, label", [
+    ("moneyline", "Moneyline"),
+    ("spreads", "Spread"),
+    ("totals", "Total"),
+    ("player_points", "Points"),
+    ("batter_total_bases", "Total Bases"),
+    ("pitcher_strikeouts", "Strikeouts"),
+    ("h2h_lay", "h2h_lay"),
+])
+def test_market_label(market, label):
+    assert mk.market_label(market) == label

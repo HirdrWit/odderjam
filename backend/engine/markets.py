@@ -80,3 +80,8 @@ def label(outcome: dict) -> str:
         text = f"{name} {p:+g}"
     player = outcome.get("player")
     return f"{player} {text}" if player else text
+
+
+def market_label(market: str) -> str:
+    """Display name of a market key, matching the frontend's marketName."""
+    return ""
