@@ -92,3 +92,31 @@ export function scaleSeries(rows, w, h, pad = 4) {
 export function filterQuery(filters) {
   return new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
 }
+
+/**
+ * Returns why the Add-bet form cannot be submitted, or null when it is valid.
+ * @param {{pick: string, odds: string, stake: string, closing_odds: ?string}} form
+ * @return {?string}
+ */
+export function betFormError(form) {
+  if (!String(form.pick ?? '').trim()) return 'Pick is required';
+  if (!isAmericanOdds(form.odds)) return 'Odds must be +100 or more, or -100 or less';
+  const stake = toNumber(form.stake);
+  if (!(Number.isFinite(stake) && stake > 0)) return 'Stake must be more than 0';
+  const closing = form.closing_odds;
+  if (closing != null && String(closing).trim() !== '' && !isAmericanOdds(closing)) {
+    return 'Closing odds must be +100 or more, or -100 or less';
+  }
+  return null;
+}
+
+/** Parses a form value as a number; blank is NaN, not 0. */
+function toNumber(value) {
+  return value == null || String(value).trim() === '' ? NaN : Number(value);
+}
+
+/** True for a finite American price: +100 or more, or -100 or less. */
+function isAmericanOdds(value) {
+  const odds = toNumber(value);
+  return Number.isFinite(odds) && Math.abs(odds) >= 100;
+}

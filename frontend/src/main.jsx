@@ -285,12 +285,14 @@ function PositiveEv() {
   const [book, setBook] = useState(() => loadEvBook());
   const bank = useApi('/api/bankroll', 30000);
   const sizing = useSizing();
+  // Bumped when a start bankroll is rejected, so the input remounts showing the stored value.
+  const [startRejected, setStartRejected] = useState(0);
   const setStart = async (starting) => {
-    await fetch('/api/bankroll', {
-      method: 'PUT',
-      headers: JSON_HEADERS,
-      body: JSON.stringify({starting}),
-    });
+    const response = await postJson('/api/bankroll', {starting}, 'PUT');
+    if (!response.ok) {
+      toast(response.status === 422 ? 'Starting bankroll must be 0 or more' : 'Could not set bankroll', 'err');
+      setStartRejected((n) => n + 1);
+    }
     notifyDataChanged();
   };
   const pickBook = (next) => {
@@ -356,7 +358,7 @@ function PositiveEv() {
         }}>
           {(cfg?.methods || [method]).map((m) => <option key={m}>{m}</option>)}
         </select>
-        {bank && <Bankroll bank={bank} onSetStart={(v) => {
+        {bank && <Bankroll key={`${bank.starting}-${startRejected}`} bank={bank} onSetStart={(v) => {
           setStart(v);
         }} />}
         Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => {

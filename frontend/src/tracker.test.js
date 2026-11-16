@@ -3,6 +3,7 @@ import {test} from 'node:test';
 
 import {
   LOSS,
+  betFormError,
   NEUTRAL,
   PROFIT,
   calendarWeeks,
@@ -40,4 +41,37 @@ test('scaleSeries keeps zero inside the range', () => {
 test('filterQuery drops blanks', () => {
   const filters = {sport: 'NBA', book: '', status: null, date_from: '2026-01-01'};
   assert.equal(filterQuery(filters), 'sport=NBA&date_from=2026-01-01');
+});
+
+const VALID_FORM = {pick: 'Chiefs', odds: '150', stake: '10', closing_odds: ''};
+
+test('betFormError accepts a valid form', () => {
+  assert.equal(betFormError(VALID_FORM), null);
+  assert.equal(betFormError({...VALID_FORM, odds: '-100'}), null);
+  assert.equal(betFormError({...VALID_FORM, odds: '100', stake: '0.01'}), null);
+  assert.equal(betFormError({...VALID_FORM, closing_odds: '-120'}), null);
+});
+
+test('betFormError rejects odds between -100 and +100', () => {
+  for (const odds of ['0', '50', '-50', '99.99', '', 'abc']) {
+    assert.match(betFormError({...VALID_FORM, odds}) ?? '', /odds/i, `odds ${JSON.stringify(odds)}`);
+  }
+});
+
+test('betFormError rejects a stake that is not positive', () => {
+  for (const stake of ['0', '-5', '', 'abc']) {
+    assert.match(betFormError({...VALID_FORM, stake}) ?? '', /stake/i, `stake ${JSON.stringify(stake)}`);
+  }
+});
+
+test('betFormError rejects a blank pick', () => {
+  for (const pick of ['', '   ']) {
+    assert.match(betFormError({...VALID_FORM, pick}) ?? '', /pick/i);
+  }
+});
+
+test('betFormError rejects invalid closing odds but allows blank', () => {
+  assert.match(betFormError({...VALID_FORM, closing_odds: '0'}) ?? '', /closing/i);
+  assert.match(betFormError({...VALID_FORM, closing_odds: '50'}) ?? '', /closing/i);
+  assert.equal(betFormError({...VALID_FORM, closing_odds: undefined}), null);
 });
