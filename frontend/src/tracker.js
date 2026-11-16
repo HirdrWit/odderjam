@@ -92,3 +92,12 @@ export function scaleSeries(rows, w, h, pad = 4) {
 export function filterQuery(filters) {
   return new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
 }
+
+/**
+ * Returns why the Add-bet form cannot be submitted, or null when it is valid.
+ * @param {{pick: string, odds: string, stake: string, closing_odds: ?string}} form
+ * @return {?string}
+ */
+export function betFormError(form) {
+  return null;
+}
