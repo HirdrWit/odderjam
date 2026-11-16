@@ -62,6 +62,16 @@ export function columnTip(tab, label) {
 const LEAD = 'How to read this row: ';
 
 /**
+ * Why a +EV row shows no stake: a positive edge whose stake rounded to zero.
+ * @param {!Object} row A +EV row from the API.
+ * @return {string} A short reason, or '' when the stake is above zero or there is no edge.
+ */
+export function zeroStakeReason(row) {
+  if (!(row.ev_pct > 0) || row.stake > 0) return '';
+  return 'under $1: raise bankroll or lower Round to';
+}
+
+/**
  * @param {!Object} l A leg.
  * @return {string}
  */
@@ -77,10 +87,12 @@ function legText(l) {
  */
 export function rowExample(tab, row, fmt) {
   switch (tab) {
-    case '+EV':
+    case '+EV': {
+      const reason = zeroStakeReason(row);
       return `${LEAD}${row.pick} at ${row.book} pays ${fmt.odds(row.odds)}, but the fair price is ` +
-          `${fmt.odds(row.fair_odds)}. That is a ${row.ev_pct.toFixed(1)}% edge, so the suggested stake ` +
-          `is ${fmt.money(row.stake)}.`;
+          `${fmt.odds(row.fair_odds)}. That is a ${row.ev_pct.toFixed(1)}% edge, ` +
+          (reason ? `but there is no suggested stake: ${reason}.` : `so the suggested stake is ${fmt.money(row.stake)}.`);
+    }
     case 'Arbitrage':
       return `${LEAD}place ${row.legs.map((l) => `${legText(l)} for ${fmt.money(l.stake)}`).join(' and ')}. ` +
           `Whichever side wins, you lock in ${row.profit_pct.toFixed(1)}% profit.`;
