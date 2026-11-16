@@ -42,6 +42,6 @@ export function lowHoldEmptyText(data, maxHold) {
  */
 export function sharpEmptyText(data, k, windowMin) {
   if (!isEmptyList(data)) return null;
-  return `No exchange volume spike of ${k}× or more in the last ${windowMin} min. ` +
+  return `No exchange volume spike above ${k}× the usual rate in the last ${windowMin} min. ` +
       'Lower Spike × or Min contracts, or check back later.';
 }
