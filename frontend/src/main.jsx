@@ -10,6 +10,7 @@ import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
 import {arbsEmptyText, lowHoldEmptyText, sharpEmptyText} from './empty.js';
 import {legKey, useSlip} from './hooks.js';
+import {slipPriceText} from './slip.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {ageText, isProp} from './odds.js';
 
@@ -745,6 +746,7 @@ function Parlay() {
             <button className="x" onClick={() => {
               toggle(l);
             }}>✕</button> <b>{l.pick}</b>{' '}
+            {slipPriceText(l) && <>{slipPriceText(l)}{' '}</>}
             <span className="mut">{marketName(l.market)} · {l.event}</span>
             {fair != null && <span className="mut">fair {(fair * 100).toFixed(1)}%</span>}
             {result && fair == null && (

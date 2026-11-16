@@ -2,6 +2,7 @@ import {Fragment, useState} from 'react';
 
 import {americanToProb} from './calc.js';
 import {useApi, useSlip, useStored} from './hooks.js';
+import {slipLeg} from './slip.js';
 import {
   FORMATS,
   ageText,
@@ -56,7 +57,7 @@ function LineTable({group, books, format, legOf, slip}) {
     return `${isBest ? 'best' : ''}${leg && slip.has(leg) ? ' inslip' : ''}`;
   };
   const togglePrice = (o, book) => {
-    const leg = legOf(o);
+    const leg = legOf(o, book);
     if (o.prices[book] != null && leg) slip.toggle(leg);
   };
   const bookCount = stats.bookCount;
@@ -260,18 +261,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
     const best = mainStats.best[i];
     return `${outcomeLabel(o)} ${best ? formatOdds(best.price, format) : '—'}`;
   }).join(' · ');
-  const legOf = (o) => {
-    if (isProp(m)) return null;
-    return {
-      event_id: event.id,
-      event: `${event.away} @ ${event.home}`,
-      sport: event.sport,
-      market: m,
-      name: o.name,
-      point: o.point,
-      pick: outcomeLabel(o),
-    };
-  };
+  const legOf = (o, book) => slipLeg(event, m, o, book);
   return (
     <div className="card" onClick={onToggle}>
       {event.live && <><span className="badge live">LIVE</span>{' '}</>}
