@@ -130,3 +130,6 @@ nav button.link, .welcome button.link { text-decoration: underline; }
 .help dd { margin: 2px 0 0; }
 .info { color: #8795a6; font-size: 10px; cursor: help; }
 .row-example { margin-top: 8px; }
+input.bankroll-start { width: 90px; }
+.bankroll { white-space: nowrap; }
+.info:focus-visible { outline: 2px solid #2a6df4; }

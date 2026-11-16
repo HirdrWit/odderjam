@@ -19,6 +19,7 @@ import {ruleFormError} from './alerts.js';
 import {arbsEmptyText, evEmptyText, lowHoldEmptyText, middlesEmptyText, sharpEmptyText} from './empty.js';
 import {legKey, useSlip} from './hooks.js';
 import {slipPriceText} from './slip.js';
+import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {ageText, isProp} from './odds.js';
 import {dismissWelcome, shouldShowWelcome} from './welcome.js';
@@ -194,9 +195,9 @@ function RefreshBox() {
  * "Bet" button: opens the sportsbook (deep link to the bet when the feed has
  * one) in a new tab.
  */
-function BetLink({href}) {
+function BetLink({href, title}) {
   if (!href) return null;
-  return <a className="bet" href={href} target="_blank" rel="noopener noreferrer">Bet</a>;
+  return <a className="bet" href={href} title={title} target="_blank" rel="noopener noreferrer">Bet</a>;
 }
 
 const MARKETS = {moneyline: 'Moneyline', spreads: 'Spread', totals: 'Total'};
@@ -252,18 +253,31 @@ function loadEvBook() {
   }
 }
 
+function FilterHelp({help}) {
+  return <span className="info" title={FILTER_HELP[help]} tabIndex={0} aria-label={FILTER_HELP[help]}> ⓘ</span>;
+}
+
 function Bankroll({bank, onSetStart}) {
-  const onBlur = (e) => {
-    const value = Number(e.target.value);
-    if (value !== bank.starting) onSetStart(value);
-  };
+  const [typed, setTyped] = useState(String(bank.starting));
+  useEffect(() => {
+    if (typed === '' || Number(typed) === bank.starting) return undefined;
+    const timer = setTimeout(() => {
+      onSetStart(Number(typed));
+    }, 600);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [typed]);
+  const pending = pendingStartText(typed, bank.starting);
   return (
-    <span>
-      Bankroll <b className={bank.profit >= 0 ? 'best' : 'bad'}>${bank.current.toFixed(2)}</b>
+    <span className="bankroll">
+      <FilterHelp help="bankroll" /> Start $<input className="bankroll-start" type="number" min="0" value={typed}
+        aria-label="Starting bankroll" onChange={(e) => {
+          setTyped(e.target.value);
+        }} />
+      {' · '}Current <b className={bank.profit >= 0 ? 'best' : 'bad'}>${bank.current.toFixed(2)}</b>
       <span className="mut">
-        start $<input className="mini" type="number" defaultValue={bank.starting}
-          onBlur={onBlur} />{' '}
-        {bank.profit >= 0 ? '+' : '-'}${Math.abs(bank.profit).toFixed(2)} P/L
+        {' '}({bank.profit >= 0 ? '+' : '-'}${Math.abs(bank.profit).toFixed(2)} P/L){pending && ` ${pending}`}
       </span>
     </span>
   );
@@ -272,7 +286,7 @@ function Bankroll({bank, onSetStart}) {
 function SharpWeights({cfg, weights, maxHold, canReset, onWeight, onMaxHold, onReset}) {
   return (
     <div className="bar wrap">
-      <Term id="sharp-book">Sharp</Term> weights {cfg.books.map((b) => (
+      <Term id="sharp-book">Sharp</Term> weights<FilterHelp help="sharpWeights" /> {cfg.books.map((b) => (
         <span key={b}>
           {b} <input className="mini" type="number" step="0.25" min="0" value={weights[b] ?? 0}
             onChange={(e) => {
@@ -280,7 +294,7 @@ function SharpWeights({cfg, weights, maxHold, canReset, onWeight, onMaxHold, onR
             }} />
         </span>
       ))}
-      Max sharp <Term id="hold">hold</Term> % <input className="mini" type="number" step="0.5" value={maxHold}
+      Max sharp <Term id="hold">hold</Term> %<FilterHelp help="maxHold" /> <input className="mini" type="number" step="0.5" value={maxHold}
         onChange={(e) => {
           onMaxHold(Number(e.target.value));
         }} />
@@ -384,15 +398,15 @@ function PositiveEv() {
         Min <Term id="ev">EV</Term> % <input type="number" step="0.5" value={minEv} onChange={(e) => {
           setMinEv(Number(e.target.value));
         }} />
-        <Term id="devig">Devig</Term> <select value={method} onChange={(e) => {
+        <Term id="devig">Devig</Term><FilterHelp help="devig" /> <select value={method} onChange={(e) => {
           setMethod(e.target.value);
         }}>
-          {(cfg?.methods || [method]).map((m) => <option key={m}>{m}</option>)}
+          {(cfg?.methods || [method]).map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}
         </select>
         {bank && <Bankroll key={`${bank.starting}-${startRejected}`} bank={bank} onSetStart={(v) => {
           setStart(v);
         }} />}
-        <Term id="kelly">Kelly</Term> <input type="number" step="0.05" value={kelly} onChange={(e) => {
+        <Term id="kelly">Kelly</Term><FilterHelp help="kelly" /> <input type="number" step="0.05" value={kelly} onChange={(e) => {
           setKelly(Number(e.target.value));
         }} />
         <SizingBar s={sizing} />
@@ -433,11 +447,11 @@ function PositiveEv() {
                 {zeroStakeReason(r) ? <span className="mut small">{zeroStakeReason(r)}</span> : formatMoney(r.stake)}
               </td>
               <td>
-                <BetLink href={r.link} /> <button className="track" onClick={() => {
+                <BetLink href={r.link} title={ROW_ACTION_TIPS.bet} /> <button className="track" title={ROW_ACTION_TIPS.track} onClick={() => {
                   track(r);
                 }}>Track</button>{' '}
                 {!r.player && (
-                  <button className={has(r) ? 'track on' : 'track'} title="Add to parlay slip"
+                  <button className={has(r) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.slip}
                     onClick={() => {
                       toggle(r);
                     }}>{has(r) ? '✓ Slip' : '+ Slip'}</button>
