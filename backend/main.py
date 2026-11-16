@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from math import prod
 from pathlib import Path
 from statistics import median
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -14,8 +14,8 @@ from pydantic import BaseModel, Field
 
 from . import alerts, history, scan, sharp_money
 from .scan import groups as _groups
-from .engine import (devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, promo,
-                     sharp, sizing)
+from .engine import (devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
+                     promo, sharp, sizing)
 from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets, filters as flt
 from .routes.filters import FilterSet
@@ -261,6 +261,122 @@ def price_parlay(p: ParlayIn):
         "fair_prob": fair_prob,
         "fair_odds": odds.prob_to_american(fair_prob) if fair_prob else None,
         "books": rows,
+    }
+
+
+PickemSize = Annotated[int, Field(ge=pickem.MIN_LEGS, le=pickem.MAX_LEGS)]
+
+
+class PickemLine(BaseModel):
+    player: str = Field(min_length=1)
+    market: str = Field(min_length=1)
+    point: float = Field(allow_inf_nan=False)
+    side: str | None = None
+
+
+class PickemIn(BaseModel):
+    lines: list[PickemLine] = Field(min_length=1, max_length=200)
+    payout: Literal["power", "flex"] = "power"
+    sizes: list[PickemSize] = Field(default_factory=lambda: list(range(pickem.MIN_LEGS, pickem.MAX_LEGS + 1)))
+    payouts: dict[int, dict[int, float]] | None = None
+    method: str = "multiplicative"
+    top: int = Field(3, ge=1, le=20)
+
+
+class PickemText(BaseModel):
+    text: str = Field(max_length=100_000)
+
+
+def _market_matches(key: str, wanted: str) -> bool:
+    """'player_points' matches 'player_points', 'points' and 'Points'."""
+    w = wanted.strip().casefold().replace(" ", "_")
+    return key == w or (mk.is_prop(key) and key.split("_", 1)[1] == w)
+
+
+def _pickem_probs(outcomes: list[dict], method: str) -> tuple[list[float], str] | None:
+    """No-vig probs for one prop line: weighted sharp consensus, else the mean of every book pricing all sides."""
+    c = sharp.group_consensus(outcomes, sharp.parse_weights(sharp_weights_spec()), method, max_sharp_hold())
+    if c:
+        return c["probs"], "sharp"
+    fn = devig.METHODS[method]
+    books = set.intersection(*(set(o["prices"]) for o in outcomes))
+    per_book = [fn([odds.american_to_prob(o["prices"][b]) for o in outcomes]) for b in books]
+    if not per_book:
+        return None
+    return [sum(ps[i] for ps in per_book) / len(per_book) for i in range(len(outcomes))], "market"
+
+
+def _prop_index(events: list[dict]) -> dict[tuple[str, float], list[tuple[dict, str, dict]]]:
+    """(casefolded player, point) -> [(event, market key, line group)] for every prop line in the snapshot."""
+    index: dict[tuple[str, float], list[tuple[dict, str, dict]]] = {}
+    for e in events:
+        for key, g in _groups(e):
+            if mk.is_prop(key) and g["player"]:
+                index.setdefault((g["player"].casefold(), g["point"]), []).append((e, key, g))
+    return index
+
+
+def _pickem_leg(line: PickemLine, index: dict, method: str) -> dict:
+    """Match one pick'em line to the sportsbook prop at the same player, market and point."""
+    out = {"player": line.player, "market": line.market, "point": line.point, "matched": False, "side": line.side,
+           "prob": None, "probs": None, "source": None, "event_id": None, "event": None, "sport": None}
+    for e, key, g in index.get((line.player.strip().casefold(), line.point), []):
+        if not _market_matches(key, line.market):
+            continue
+        r = _pickem_probs(g["outcomes"], method)
+        if r is None:
+            continue
+        probs = {o["name"]: p for o, p in zip(g["outcomes"], r[0])}
+        if line.side:
+            side = next((n for n in probs if n.casefold() == line.side.strip().casefold()), None)
+            if side is None:
+                continue
+        else:
+            side = max(probs, key=probs.get)
+        return {**out, "player": g["player"], "market": key, "matched": True, "side": side, "prob": probs[side],
+                "probs": probs, "source": r[1], "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}',
+                "sport": e["sport"]}
+    return out
+
+
+@app.get("/api/pickem/payouts")
+def pickem_payouts():
+    """Default power and flex payout tables: {type: {legs: {hits: multiplier}}}."""
+    return pickem.DEFAULT_PAYOUTS
+
+
+@app.post("/api/pickem/parse")
+def pickem_parse(body: PickemText):
+    """Parse pasted pick'em lines (`player, market, line[, over|under]` per row)."""
+    lines, errors = pickem.parse_lines(body.text)
+    return {"lines": lines, "errors": errors}
+
+
+@app.post("/api/pickem")
+def pickem_optimize(p: PickemIn):
+    """Price pick'em lines against no-vig sportsbook props and build the best slips per size.
+
+    Legs are ranked by hit probability (unmatched lines last). Slips assume independent legs and
+    never stack one player or use a single event. `payouts` replaces the default table for `payout`.
+    """
+    if p.method not in devig.METHODS:
+        raise HTTPException(400, f"unknown devig method {p.method!r}")
+    table = p.payouts if p.payouts is not None else pickem.DEFAULT_PAYOUTS[p.payout]
+    try:
+        pickem.validate_table(table)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    index = _prop_index(get_snapshot())
+    legs = [_pickem_leg(line, index, p.method) for line in p.lines]
+    legs.sort(key=lambda x: (not x["matched"], -(x["prob"] or 0)))
+    matched = [x for x in legs if x["matched"]]
+    slips = {str(n): pickem.best_slips(matched, n, table[n], p.top) for n in sorted(set(p.sizes)) if n in table}
+    return {
+        "payout": p.payout,
+        "table": table,
+        "breakeven": {str(n): pickem.breakeven_prob(table[n], n) for n in sorted(table)},
+        "legs": legs,
+        "slips": slips,
     }
 
 

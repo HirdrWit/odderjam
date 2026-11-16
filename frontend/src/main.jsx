@@ -4,6 +4,7 @@ import {createRoot} from 'react-dom/client';
 import './style.css';
 import {Calculators} from './Calculators.jsx';
 import {OddsScreen} from './OddsScreen.jsx';
+import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {Tracker} from './Tracker.jsx';
 import {legKey, useSlip} from './hooks.js';
@@ -1164,6 +1165,7 @@ const TABS = {
   'Middles': Middles,
   'Sharp Money': SharpMoney,
   'Promos': Promos,
+  'Pick\'em': Pickem,
   'Calculator': Calculators,
   'Tracker': Tracker,
   'Alerts': Alerts,
