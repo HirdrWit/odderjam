@@ -18,7 +18,7 @@ import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
 import {arbsEmptyText, evEmptyText, lowHoldEmptyText, middlesEmptyText, sharpEmptyText} from './empty.js';
 import {legKey, useSlip} from './hooks.js';
-import {slipPriceText} from './slip.js';
+import {INDEPENDENT_NOTE, devigLabel, restoredNote, slipLegPriceText, tinyStakeNote} from './slip.js';
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {ageText, isProp} from './odds.js';
@@ -688,7 +688,7 @@ function ParlayBookRow({book, onTrack}) {
       <td>{book.book}</td>
       <td>{formatOdds(book.odds)}</td>
       <td className={signClass(book.ev_pct)}>{formatPct(book.ev_pct)}</td>
-      <td>{book.stake == null ? '—' : formatMoney(book.stake)}</td>
+      <td>{book.stake == null ? '—' : formatMoney(book.stake)}{tinyStakeNote(book.stake) && <div className="mut small">{tinyStakeNote(book.stake)}</div>}</td>
       <td className="mut">{book.leg_odds.map((o) => formatOdds(o)).join(' × ')}</td>
       <td>
         {book.blocked ?
@@ -701,6 +701,7 @@ function ParlayBookRow({book, onTrack}) {
 
 function Parlay() {
   const {slip, toggle, clear} = useSlip();
+  const [restored] = useState(() => slip.length > 0);
   const [method] = useStored('evMethod', 'multiplicative');
   const [kelly, setKelly] = useStored('evKelly', 0.25);
   const [result, setResult] = useState(null);
@@ -761,11 +762,12 @@ function Parlay() {
         <Term id="kelly">Kelly</Term> <input type="number" step="0.05" value={kelly} onChange={(e) => {
           setKelly(Number(e.target.value));
         }} />
-        <span className="mut">Devig: {method} (set on +EV tab)</span>
-        {slip.length > 0 && <button className="x" onClick={() => {
+        <span className="mut">{devigLabel(method)}</span>
+        {slip.length > 0 && <button className="track on" onClick={() => {
           clear();
         }}>Clear slip</button>}
       </div>
+      {restoredNote(slip.length, restored) && <div className="mut">{restoredNote(slip.length, restored)}</div>}
       {slip.length === 0 && (
         <div className="mut">
           Add legs with "+ Slip" on the +EV tab, or click a price on the Odds Screen.
@@ -778,7 +780,7 @@ function Parlay() {
             <button className="x" onClick={() => {
               toggle(l);
             }}>✕</button> <b>{l.pick}</b>{' '}
-            {slipPriceText(l) && <>{slipPriceText(l)}{' '}</>}
+            <span className={l.odds == null || !l.book ? 'bad' : ''}>{slipLegPriceText(l)}</span>{' '}
             <span className="mut">{marketName(l.market)} · {l.event}</span>
             {fair != null && <span className="mut">fair {(fair * 100).toFixed(1)}%</span>}
             {result && fair == null && (
@@ -797,7 +799,7 @@ function Parlay() {
             Fair <b>{result.fair_odds == null ? '—' : formatOdds(result.fair_odds)}</b>
             {result.fair_prob != null && (
               <span className="mut">
-                {(result.fair_prob * 100).toFixed(2)}% · legs treated as independent
+                {(result.fair_prob * 100).toFixed(2)}% · legs treated as independent. {INDEPENDENT_NOTE}
               </span>
             )}
           </div>
