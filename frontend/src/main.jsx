@@ -5,6 +5,7 @@ import './style.css';
 import {Calculators} from './Calculators.jsx';
 import {RowExample, Th} from './ColumnHelp.jsx';
 import {zeroStakeReason} from './columns.js';
+import {parseStakeInput, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
 import {Glossary} from './Glossary.jsx';
 import {Help} from './Help.jsx';
 import {GOTO_EVENT} from './help.js';
@@ -350,7 +351,16 @@ function PositiveEv() {
       // Storage can be unavailable; the choice just is not remembered.
     }
   };
+  const [tracked, setTracked] = useState(() => new Set());
   const track = async (row) => {
+    let stake = trackStake(row);
+    if (stake == null) {
+      stake = parseStakeInput(window.prompt(`Suggested stake is $0.00. Stake to log for ${row.pick} @ ${row.book}?`));
+      if (stake == null) {
+        toast('Not tracked: enter a stake above 0', 'err');
+        return;
+      }
+    }
     const response = await postJson('/api/bets', {
       event: row.event,
       event_id: row.event_id,
@@ -361,13 +371,15 @@ function PositiveEv() {
       point: row.point,
       book: row.book,
       odds: row.odds,
-      stake: Number(row.stake.toFixed(2)) || 1,
+      stake,
       ev_pct: row.ev_pct,
       strategy: 'ev',
       event_start: row.start,
     });
     if (response.ok) {
-      toast(`Tracked ${row.pick} @ ${row.book}`);
+      const t = trackToast(row, stake);
+      toast(t.text, t.kind, t.action);
+      setTracked((prev) => new Set(prev).add(trackKey(row)));
     } else {
       toast('Could not track bet', 'err');
     }
@@ -450,9 +462,9 @@ function PositiveEv() {
                 {zeroStakeReason(r) ? <span className="mut small">{zeroStakeReason(r)}</span> : formatMoney(r.stake)}
               </td>
               <td>
-                <BetLink href={r.link} title={ROW_ACTION_TIPS.bet} /> <button className="track" title={ROW_ACTION_TIPS.track} onClick={() => {
+                <BetLink href={r.link} title={ROW_ACTION_TIPS.bet} /> <button className={tracked.has(trackKey(r)) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.track} onClick={() => {
                   track(r);
-                }}>Track</button>{' '}
+                }}>{trackButtonLabel(tracked.has(trackKey(r)))}</button>{' '}
                 {!r.player && (
                   <button className={has(r) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.slip}
                     onClick={() => {
