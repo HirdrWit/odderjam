@@ -133,3 +133,7 @@ nav button.link, .welcome button.link { text-decoration: underline; }
 input.bankroll-start { width: 90px; }
 .bankroll { white-space: nowrap; }
 .info:focus-visible { outline: 2px solid #2a6df4; }
+.badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 8px; margin-right: 6px; background: #383835; color: #e6e6e6; }
+.badge.won { background: #1d4ed8; color: #fff; } .badge.lost { background: #b42318; color: #fff; }
+.badge.push, .badge.void { background: #4b5563; color: #fff; } .badge.pending { background: #7c5a10; color: #fff; }
+.tile b.small { font-size: 12px; font-weight: 600; }
