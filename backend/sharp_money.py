@@ -10,6 +10,7 @@ soonest games first) so page loads never hammer an exchange. Trades older than S
 import logging
 import os
 import threading
+import time
 
 import httpx
 
@@ -38,6 +39,18 @@ def _poll_seconds() -> float:
 
 def _max_markets() -> int:
     return int(os.environ.get("SHARP_MONEY_MAX_MARKETS", "60"))
+
+
+def _poll_budget() -> float:
+    return float(os.environ.get("SHARP_MONEY_POLL_BUDGET", "15"))
+
+
+def retention_seconds() -> float:
+    """How far back trades are kept; a spike's window plus baseline cannot look further."""
+    return _keep_hours() * 3600
+
+
+_clock = time.monotonic
 
 
 def reset() -> None:
@@ -97,11 +110,30 @@ def _markets(events: list[dict], now: float) -> list[tuple[dict, str, str, str]]
     return out
 
 
+def _by_backer(trades: list[dict], outcome: str, other: str | None) -> dict[str, list[dict]]:
+    """Trades grouped by the outcome the taker backed. A NO taker on a two-way market backed the other
+    outcome, at the complementary price; without a known other outcome such a trade is dropped."""
+    out: dict[str, list[dict]] = {}
+    for t in trades:
+        if t.get("taker") == "no":
+            if other is None:
+                continue
+            out.setdefault(other, []).append({**t, "cents": 100 - t["cents"]})
+        else:
+            out.setdefault(outcome, []).append(t)
+    return out
+
+
 def poll(events: list[dict], client: httpx.Client | None, now: float, lookback: float) -> int:
-    """Fetch and store new trades for every exchange market on open events. A market whose fetch or
-    parse fails is skipped. Returns the number of new trades stored."""
-    stored = 0
+    """Fetch and store new trades for every exchange market on open events. Volume is credited to the
+    outcome the taker backed (see _by_backer). A market whose fetch or parse fails is skipped; once
+    SHARP_MONEY_POLL_BUDGET seconds have gone, the rest wait for the next poll. Returns the number of
+    new trades stored."""
+    stored, deadline = 0, _clock() + _poll_budget()
     for e, book, outcome, market in _markets(events, now)[:_max_markets()]:
+        if _clock() >= deadline:
+            log.warning("sharp money poll stopped at its %ss budget", _poll_budget())
+            break
         mod = TRADE_PLATFORMS[book]
         since = max(last_ts(book, market) or 0.0, now - lookback)
         try:
@@ -109,7 +141,10 @@ def poll(events: list[dict], client: httpx.Client | None, now: float, lookback: 
         except Exception as exc:  # noqa: BLE001 - third-party feed; one market never stops the rest
             log.warning("sharp money %s %s skipped: %s", book, market, exc)
             continue
-        stored += record(book, market, e["id"], outcome, new)
+        names = [o for o in e["exchange_markets"][book] if o != outcome]
+        other = names[0] if len(names) == 1 else None
+        for backed, group in _by_backer(new, outcome, other).items():
+            stored += record(book, market, e["id"], backed, group)
     prune(now)
     return stored
 

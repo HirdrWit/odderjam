@@ -1087,6 +1087,12 @@ function Alerts() {
   );
 }
 
+/** A positive number from an input, else `fallback` (the API rejects zero windows and multipliers). */
+function positiveInput(value, fallback) {
+  const n = parseNumberInput(value, fallback);
+  return n > 0 ? n : fallback;
+}
+
 /**
  * Sharp Money: exchange markets where matched volume just spiked, with the
  * sportsbooks still paying more than the price that volume traded at.
@@ -1102,13 +1108,13 @@ function SharpMoney() {
     <>
       <div className="bar">
         Last <input type="number" step="1" min="1" value={windowMin} onChange={(e) => {
-          setWindowMin(parseNumberInput(e.target.value, windowMin));
+          setWindowMin(positiveInput(e.target.value, windowMin));
         }} /> min
         vs prior <input type="number" step="10" min="1" value={baselineMin} onChange={(e) => {
-          setBaselineMin(parseNumberInput(e.target.value, baselineMin));
+          setBaselineMin(positiveInput(e.target.value, baselineMin));
         }} /> min
         Spike × <input type="number" step="0.5" min="0.5" value={k} onChange={(e) => {
-          setK(parseNumberInput(e.target.value, k));
+          setK(positiveInput(e.target.value, k));
         }} />
         Min contracts <input type="number" step="100" min="0" value={minVolume} onChange={(e) => {
           setMinVolume(parseNumberInput(e.target.value, minVolume));
@@ -1126,7 +1132,7 @@ function SharpMoney() {
           </tr>
         </thead>
         <tbody>
-          {(data || []).map((r, i) => (
+          {(Array.isArray(data) ? data : []).map((r, i) => (
             <tr key={i}>
               <td>{r.event} <span className="mut">{r.sport}</span></td>
               <td>{r.outcome}</td>
