@@ -1,6 +1,7 @@
 import {useState} from 'react';
 
 import {Term} from './Term.jsx';
+import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {INTRO_COPY, introDismissed, setIntroDismissed} from './intro.js';
 
 function store() {
@@ -61,6 +62,9 @@ export function TabIntro({tab}) {
   return (
     <div className="intro" role="note">
       <p>{withTerms(`${copy.what} ${copy.how}`)}</p>
+      <button type="button" onClick={() => {
+        window.dispatchEvent(new CustomEvent(GOTO_EVENT, {detail: HELP_TAB}));
+      }}>Learn more in Help</button>
       <button type="button" onClick={() => {
         set(true);
       }}>Got it</button>

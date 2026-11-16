@@ -4,6 +4,8 @@ import {createRoot} from 'react-dom/client';
 import './style.css';
 import {Calculators} from './Calculators.jsx';
 import {Glossary} from './Glossary.jsx';
+import {Help} from './Help.jsx';
+import {GOTO_EVENT} from './help.js';
 import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
@@ -1211,6 +1213,7 @@ const TABS = {
   'Tracker': Tracker,
   'Glossary': Glossary,
   'Alerts': Alerts,
+  'Help': Help,
 };
 
 const DEFAULT_TAB = 'Odds Screen';
@@ -1244,6 +1247,9 @@ function Welcome({onJump, onClose}) {
         <button onClick={() => {
           onJump('+EV');
         }}>Go to +EV</button>
+        <button onClick={() => {
+          onJump('Help');
+        }}>Read the Help page</button>
         <button className="link" onClick={onClose}>Dismiss</button>
       </div>
       <p className="mut small">This is not betting advice, and results are not guaranteed.</p>
@@ -1261,6 +1267,13 @@ function App() {
       // Storage can be unavailable; the choice just is not remembered.
     }
   };
+  useEffect(() => {
+    const onGoto = (e) => {
+      if (isOption(TABS, e.detail)) go(e.detail);
+    };
+    window.addEventListener(GOTO_EVENT, onGoto);
+    return () => window.removeEventListener(GOTO_EVENT, onGoto);
+  }, []);
   const [welcome, setWelcome] = useState(() => shouldShowWelcome());
   const closeWelcome = () => {
     setWelcome(false);

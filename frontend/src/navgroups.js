@@ -10,7 +10,7 @@ export const NAV_GROUPS = [
     title: 'Find bets',
     tabs: ['+EV', 'Arbitrage', 'Middles', 'Low Hold', 'Sharp Money', 'Parlay', 'Promos', 'Pick\'em'],
   },
-  {title: 'Size and track', tabs: ['Calculator', 'Tracker', 'Alerts', 'Glossary']},
+  {title: 'Size and track', tabs: ['Calculator', 'Tracker', 'Alerts', 'Glossary', 'Help']},
 ];
 
 /** @const {!Object<string, string>} */
@@ -28,6 +28,7 @@ export const NAV_SUBTITLES = {
   'Tracker': 'Log bets and see results',
   'Alerts': 'Get notified of new edges',
   'Glossary': 'Plain-English betting terms',
+  'Help': 'How it works, odds and FAQ',
 };
 
 /** @return {!Array<string>} Every tab name, in nav order. */
