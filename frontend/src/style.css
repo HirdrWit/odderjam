@@ -83,3 +83,15 @@ table.odds tr.foot td { border-bottom: 0; }
 h3.section { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #8795a6; margin: 16px 0 8px; }
 .livebox { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #222c38; padding-top: 8px; }
 .livebox input[type=number] { width: 70px; }
+.content { flex: 1; min-width: 0; }
+.welcome { margin: 16px 16px 0; padding: 12px 16px; background: #1b2634; border: 1px solid #2c3b4e; border-radius: 8px; overflow-wrap: anywhere; }
+.welcome p { margin: 0 0 8px; }
+.welcome ol { margin: 0 0 8px; padding-left: 20px; }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+nav button.link, .welcome button.link { text-decoration: underline; }
+@media (max-width: 640px) {
+  .app { flex-direction: column; }
+  nav { width: auto; flex-direction: row; flex-wrap: wrap; }
+  nav h1 { width: 100%; margin-bottom: 4px; }
+  .welcome { margin: 8px; }
+}
