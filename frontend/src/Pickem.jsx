@@ -73,7 +73,10 @@ export function Pickem() {
       const body = {lines, payout, sizes, method: 'multiplicative', top: 3};
       if (override) body.payouts = override;
       const r = await postJson('/api/pickem', body);
-      if (!r.ok) return toast('Could not build slips', 'err');
+      if (!r.ok) {
+        const detail = await r.json().then((d) => d.detail, () => null);
+        return toast(typeof detail === 'string' ? detail : 'Could not build slips', 'err');
+      }
       setResult(await r.json());
     } finally {
       setBusy(false);

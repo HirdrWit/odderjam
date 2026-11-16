@@ -78,13 +78,35 @@ def _valid(slip: tuple[dict, ...]) -> bool:
     return len(set(players)) == len(players) and len({leg["event_id"] for leg in slip}) > 1
 
 
+def _candidates(legs: list[dict]) -> list[dict]:
+    """The legs worth combining: each player's most likely leg, the CANDIDATE_POOL best of those,
+    with the best leg from a second event swapped in if they would all come from one event.
+
+    A slip holds one leg per player, and with payouts that rise with hits a more likely leg never
+    lowers EV, so a player's weaker legs can be dropped before the search.
+    """
+    best: dict[str, dict] = {}
+    for leg in legs:
+        key = leg["player"].casefold()
+        if key not in best or leg["prob"] > best[key]["prob"]:
+            best[key] = leg
+    ranked = sorted(best.values(), key=lambda leg: leg["prob"], reverse=True)
+    pool = ranked[:CANDIDATE_POOL]
+    events = {leg["event_id"] for leg in pool}
+    if len(events) == 1:
+        other = next((leg for leg in ranked[CANDIDATE_POOL:] if leg["event_id"] not in events), None)
+        if other:
+            pool[-1] = other
+    return pool
+
+
 def best_slips(legs: list[dict], size: int, table: dict[int, float], top: int = 3) -> list[dict]:
     """Top slips of exactly `size` legs, best EV first.
 
     Each leg needs "player", "event_id" and "prob". A slip never holds two legs on one
     player, and never has every leg from one event (both are highly correlated).
     """
-    pool = nlargest(CANDIDATE_POOL, legs, key=lambda leg: leg["prob"])
+    pool = _candidates(legs)
     scored = []
     for slip in combinations(pool, size):
         if _valid(slip):

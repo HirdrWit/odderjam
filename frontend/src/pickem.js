@@ -3,6 +3,10 @@
  * pickem.test.js.
  */
 
+/** Slip sizes the backend accepts. */
+const MIN_LEGS = 2;
+const MAX_LEGS = 6;
+
 /**
  * Formats a payout table {legs: {hits: multiplier}} as editable text.
  * @param {!Object<string, !Object<string, number>>} table
@@ -37,7 +41,7 @@ export function parseTableText(text) {
     const head = line.match(/^(\d+)\s*:\s*(.+)$/);
     if (!head) fail('expected "legs: hits=multiplier, ..."');
     const legs = Number(head[1]);
-    if (!Number.isInteger(legs) || legs < 1) fail('bad leg count');
+    if (legs < MIN_LEGS || legs > MAX_LEGS) fail(`slips have ${MIN_LEGS} to ${MAX_LEGS} legs`);
     const row = {};
     for (const part of head[2].split(',')) {
       const pair = part.trim().match(/^(\d+)\s*=\s*(\S+)$/);

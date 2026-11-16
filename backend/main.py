@@ -306,28 +306,36 @@ def _pickem_probs(outcomes: list[dict], method: str) -> tuple[list[float], str] 
     return [sum(ps[i] for ps in per_book) / len(per_book) for i in range(len(outcomes))], "market"
 
 
-def _pickem_leg(line: PickemLine, events: list[dict], method: str) -> dict:
+def _prop_index(events: list[dict]) -> dict[tuple[str, float], list[tuple[dict, str, dict]]]:
+    """(casefolded player, point) -> [(event, market key, line group)] for every prop line in the snapshot."""
+    index: dict[tuple[str, float], list[tuple[dict, str, dict]]] = {}
+    for e in events:
+        for key, g in _groups(e):
+            if mk.is_prop(key) and g["player"]:
+                index.setdefault((g["player"].casefold(), g["point"]), []).append((e, key, g))
+    return index
+
+
+def _pickem_leg(line: PickemLine, index: dict, method: str) -> dict:
     """Match one pick'em line to the sportsbook prop at the same player, market and point."""
     out = {"player": line.player, "market": line.market, "point": line.point, "matched": False, "side": line.side,
            "prob": None, "probs": None, "source": None, "event_id": None, "event": None, "sport": None}
-    for e in events:
-        for key, g in _groups(e):
-            if not (mk.is_prop(key) and _market_matches(key, line.market) and g["point"] == line.point
-                    and (g["player"] or "").casefold() == line.player.strip().casefold()):
+    for e, key, g in index.get((line.player.strip().casefold(), line.point), []):
+        if not _market_matches(key, line.market):
+            continue
+        r = _pickem_probs(g["outcomes"], method)
+        if r is None:
+            continue
+        probs = {o["name"]: p for o, p in zip(g["outcomes"], r[0])}
+        if line.side:
+            side = next((n for n in probs if n.casefold() == line.side.strip().casefold()), None)
+            if side is None:
                 continue
-            r = _pickem_probs(g["outcomes"], method)
-            if r is None:
-                continue
-            probs = {o["name"]: p for o, p in zip(g["outcomes"], r[0])}
-            if line.side:
-                side = next((n for n in probs if n.casefold() == line.side.strip().casefold()), None)
-                if side is None:
-                    continue
-            else:
-                side = max(probs, key=probs.get)
-            return {**out, "player": g["player"], "market": key, "matched": True, "side": side, "prob": probs[side],
-                    "probs": probs, "source": r[1], "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}',
-                    "sport": e["sport"]}
+        else:
+            side = max(probs, key=probs.get)
+        return {**out, "player": g["player"], "market": key, "matched": True, "side": side, "prob": probs[side],
+                "probs": probs, "source": r[1], "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}',
+                "sport": e["sport"]}
     return out
 
 
@@ -358,8 +366,8 @@ def pickem_optimize(p: PickemIn):
         pickem.validate_table(table)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    events = get_snapshot()
-    legs = [_pickem_leg(line, events, p.method) for line in p.lines]
+    index = _prop_index(get_snapshot())
+    legs = [_pickem_leg(line, index, p.method) for line in p.lines]
     legs.sort(key=lambda x: (not x["matched"], -(x["prob"] or 0)))
     matched = [x for x in legs if x["matched"]]
     slips = {str(n): pickem.best_slips(matched, n, table[n], p.top) for n in sorted(set(p.sizes)) if n in table}
