@@ -236,12 +236,15 @@ def price_parlay(p: ParlayIn):
             raise HTTPException(404, f"leg not found: {leg.event_id} {leg.market} {leg.name} {leg.point}")
         legs.append((leg, e, outcome))
 
-    seen: dict[str, set[str]] = {}
-    for leg, e, _ in legs:
-        if leg.market in seen.setdefault(leg.event_id, set()):
-            raise HTTPException(400, f'Both sides of {e["away"]} @ {e["home"]} {mk.market_label(leg.market)} '
+    seen: dict[str, dict[str, dict]] = {}
+    for leg, e, o in legs:
+        first = seen.setdefault(leg.event_id, {}).get(leg.market)
+        if first is not None:
+            same_line = mk.line_key(leg.market, first, e["home"]) == mk.line_key(leg.market, o, e["home"])
+            lead = "Both sides of" if same_line else "Two legs from"
+            raise HTTPException(400, f'{lead} {e["away"]} @ {e["home"]} {mk.market_label(leg.market)} '
                                      "are in the slip; remove one")
-        seen[leg.event_id].add(leg.market)
+        seen[leg.event_id][leg.market] = o
     same_game = len(seen) < len(legs)
 
     fair = [_fair_prob(e, leg.market, o, p.method) for leg, e, o in legs]
