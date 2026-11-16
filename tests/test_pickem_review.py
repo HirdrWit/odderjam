@@ -42,3 +42,10 @@ def test_many_lines_on_a_big_snapshot_stay_fast(monkeypatch):
     r = TestClient(main.app).post("/api/pickem", json={"lines": lines, "sizes": [2]})
     assert r.status_code == 200
     assert time.perf_counter() - start < 3  # was ~18 s when every line rescanned the whole snapshot
+
+
+def test_weaker_leg_kept_when_payouts_fall_with_hits():
+    # A table paying more for 1 hit than 2: A's weaker leg makes the best slip, so it must not be dropped.
+    legs = [leg("A", "g1", 0.9), leg("A", "g1", 0.5), leg("B", "g2", 0.9)]
+    best = pickem.best_slips(legs, 2, {2: 0.0, 1: 5.0}, top=1)[0]
+    assert sorted(x["prob"] for x in best["legs"]) == [0.5, 0.9]

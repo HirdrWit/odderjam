@@ -78,19 +78,26 @@ def _valid(slip: tuple[dict, ...]) -> bool:
     return len(set(players)) == len(players) and len({leg["event_id"] for leg in slip}) > 1
 
 
-def _candidates(legs: list[dict]) -> list[dict]:
+def _rises_with_hits(table: dict[int, float]) -> bool:
+    """True when no hit count pays more than a higher one (true of real power and flex tables)."""
+    mults = [table.get(k, 0.0) for k in range(max(table, default=0) + 1)]
+    return all(a <= b for a, b in zip(mults, mults[1:]))
+
+
+def _candidates(legs: list[dict], dedupe: bool = True) -> list[dict]:
     """The legs worth combining: each player's most likely leg, the CANDIDATE_POOL best of those,
     with the best leg from a second event swapped in if they would all come from one event.
 
     A slip holds one leg per player, and with payouts that rise with hits a more likely leg never
-    lowers EV, so a player's weaker legs can be dropped before the search.
+    lowers EV, so a player's weaker legs can be dropped before the search. `dedupe=False` keeps
+    them, for tables where that does not hold.
     """
     best: dict[str, dict] = {}
     for leg in legs:
         key = leg["player"].casefold()
         if key not in best or leg["prob"] > best[key]["prob"]:
             best[key] = leg
-    ranked = sorted(best.values(), key=lambda leg: leg["prob"], reverse=True)
+    ranked = sorted(best.values() if dedupe else legs, key=lambda leg: leg["prob"], reverse=True)
     pool = ranked[:CANDIDATE_POOL]
     events = {leg["event_id"] for leg in pool}
     if len(events) == 1:
@@ -106,7 +113,7 @@ def best_slips(legs: list[dict], size: int, table: dict[int, float], top: int = 
     Each leg needs "player", "event_id" and "prob". A slip never holds two legs on one
     player, and never has every leg from one event (both are highly correlated).
     """
-    pool = _candidates(legs)
+    pool = _candidates(legs, dedupe=_rises_with_hits(table))
     scored = []
     for slip in combinations(pool, size):
         if _valid(slip):
