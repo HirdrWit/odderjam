@@ -30,6 +30,8 @@ function RefreshBox() {
       {info.remaining != null && <div className="mut">API credits left: {info.remaining}</div>}
       {info.live && <button onClick={refresh} disabled={busy}>{busy ? "Refreshing…" : "Refresh odds"}</button>}
       {info.live && <div className="mut small">Each refresh spends API credits</div>}
+      {info.live && info.prop_markets?.length > 0 && (
+        <div className="bad small">Player props on ({info.prop_markets.length} markets): each refresh costs about {info.prop_markets.length * 2} more credits per game</div>)}
     </div>
   );
 }
@@ -38,6 +40,16 @@ function RefreshBox() {
 const BetLink = ({ href }) => (href ? <a className="bet" href={href} target="_blank" rel="noopener noreferrer">Bet</a> : null);
 
 const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
+const isProp = (k) => /^(player|batter|pitcher)_/.test(k);
+// "player_points" -> "Points", "batter_total_bases" -> "Total Bases"
+const propName = (k) => k.replace(/^(player|batter|pitcher)_/, "").split("_")
+  .filter(Boolean)
+  .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+  .join(" ");
+const marketName = (k) => MARKETS[k] || (isProp(k) ? propName(k) : k);
+const PROP_FILTER = { include: "Include props", mainlines: "Mainlines only" };
+const propsParam = (f) => (f === "mainlines" ? "&props=false" : "");
+
 const money = (n) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 const pct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 
@@ -45,6 +57,7 @@ function PositiveEV() {
   const [minEv, setMinEv] = useStored("evMin", 1);
   const [method, setMethod] = useStored("evMethod", "multiplicative");
   const [kelly, setKelly] = useStored("evKelly", 0.25);
+  const [props, setProps] = useStored("evProps", "include");
   const [book, setBook] = useState(() => localStorage.getItem("evBook") ?? "DraftKings");
   const bank = useApi("/api/bankroll", 30000);
   const sz = useSizing();
@@ -69,7 +82,7 @@ function PositiveEV() {
   const setWeight = (b, v) => setWeights({ ...w, [b]: v });
   const sharpSpec = w ? Object.entries(w).filter(([, v]) => v > 0).map(([b, v]) => `${b}:${v}`).join(",") : null;
   const data = useApi(cfg && `/api/ev?book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}`
-    + `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${hold}${sizingQuery(sz)}`);
+    + `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${hold}${sizingQuery(sz)}${propsParam(props)}`);
   return (
     <>
       <div className="bar">
@@ -83,6 +96,7 @@ function PositiveEV() {
             onBlur={(e) => +e.target.value !== bank.starting && setStart(+e.target.value)} /> {bank.profit >= 0 ? "+" : "-"}${Math.abs(bank.profit).toFixed(2)} P/L</span></span>}
         Kelly <input type="number" step="0.05" value={kelly} onChange={(e) => setKelly(+e.target.value)} />
         <SizingBar s={sz} />
+        <PropsFilter value={props} onChange={setProps} />
       </div>
       {cfg && w && (
         <div className="bar wrap">
@@ -95,23 +109,32 @@ function PositiveEV() {
       )}
       <table><thead><tr><th>EV%</th><th>Pick</th><th>Market</th><th>Event</th><th>Book</th><th>Odds</th><th>Fair</th><th>Sharps (hold)</th><th>Stake</th><th></th></tr></thead><tbody>
         {(data || []).map((r, i) => (
-          <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{MARKETS[r.market] || r.market}</td><td>{r.event}</td>
+          <tr key={i}><td className="best">{r.ev_pct.toFixed(1)}%</td><td>{r.pick}</td><td>{marketName(r.market)}</td><td>{r.event}</td>
             <td>{r.book}</td><td>{fmt(r.odds)}</td><td>{fmt(r.fair_odds)}</td>
             <td className="mut small">{r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(" · ")}</td>
             <td title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>{money(r.stake)}</td>
             <td><BetLink href={r.link} /> <button className="track" onClick={() => track(r)}>Track</button>{" "}
-              <button className={has(r) ? "track on" : "track"} title="Add to parlay slip" onClick={() => toggle(r)}>{has(r) ? "✓ Slip" : "+ Slip"}</button></td></tr>
+              {!r.player && <button className={has(r) ? "track on" : "track"} title="Add to parlay slip" onClick={() => toggle(r)}>{has(r) ? "✓ Slip" : "+ Slip"}</button>}</td></tr>
         ))}
       </tbody></table>
     </>
   );
 }
 
+function PropsFilter({ value, onChange }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {Object.entries(PROP_FILTER).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+    </select>
+  );
+}
+
 function Arbs() {
   const [min, setMin] = useStored("arbMin", 0);
+  const [props, setProps] = useStored("arbProps", "include");
   const sz = useSizing();
   const bank = useApi("/api/bankroll", 30000);
-  const data = useApi(`/api/arbs?min_profit=${min}${sizingQuery(sz, true)}`);
+  const data = useApi(`/api/arbs?min_profit=${min}${sizingQuery(sz, true)}${propsParam(props)}`);
   const track = async (r) => {
     const res = await Promise.all(r.legs.map((l) => postJson("/api/bets", { event: r.event, event_id: r.event_id,
       sport: r.sport, market: r.market, pick: l.pick, selection: l.selection, point: l.point, book: l.book,
@@ -122,10 +145,11 @@ function Arbs() {
   return (
     <>
       <div className="bar">Min profit % <input type="number" step="0.5" value={min} onChange={(e) => setMin(+e.target.value)} />
-        <SizingBar s={sz} showTotal totalHint={bank ? bank.current.toFixed(0) : "bankroll"} /></div>
+        <SizingBar s={sz} showTotal totalHint={bank ? bank.current.toFixed(0) : "bankroll"} />
+        <PropsFilter value={props} onChange={setProps} /></div>
       {(data || []).map((r, i) => (
         <div className="card" key={i}>
-          <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {MARKETS[r.market] || r.market}</span>
+          <b className="best">{r.profit_pct.toFixed(2)}%</b> {r.event} <span className="mut">{r.sport} · {marketName(r.market)}</span>
           <button className="track right" onClick={() => track(r)}>Track legs</button>
           {r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — stake <b>{money(l.stake)}</b> <BetLink href={l.link} />{" "}
             <span className="mut">· profit if wins <span className={l.profit_if_wins >= 0 ? "best" : "bad"}>{money(l.profit_if_wins)}</span></span></div>)}
@@ -175,7 +199,7 @@ function Parlay() {
       {slip.map((l, i) => {
         const f = res?.legs[i]?.fair_prob;
         return <div className="card calc" key={legKey(l)}>
-          <button className="x" onClick={() => toggle(l)}>✕</button> <b>{l.pick}</b> <span className="mut">{MARKETS[l.market] || l.market} · {l.event}</span>
+          <button className="x" onClick={() => toggle(l)}>✕</button> <b>{l.pick}</b> <span className="mut">{marketName(l.market)} · {l.event}</span>
           {f != null && <span className="mut">fair {(f * 100).toFixed(1)}%</span>}
           {res && f == null && <span className="mut">no sharp price for this line — EV unknown</span>}
         </div>;
@@ -227,7 +251,7 @@ function LowHold() {
       <table><thead><tr><th>Hold</th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr></thead><tbody>
         {(data || []).map((r, i) => (
           <tr key={i}><td className={r.hold_pct <= 0 ? "best" : ""}>{r.hold_pct.toFixed(2)}%</td><td>{r.event} <span className="mut">{r.sport}</span></td>
-            <td>{MARKETS[r.market] || r.market}</td>
+            <td>{marketName(r.market)}</td>
             <td>{r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>)}</td>
             <td className={r.expected_loss <= 0 ? "best" : "bad"}>{money(r.expected_loss)}</td></tr>
         ))}
@@ -268,7 +292,7 @@ function Middles() {
       <table><thead><tr><th>EV%</th><th>Event</th><th>Market</th><th>Window</th><th>Legs</th><th>Worst case</th><th>Win both</th><th>Hit %</th><th></th></tr></thead><tbody>
         {(data || []).map((r, i) => (
           <tr key={i}><td className={r.ev_pct >= 0 ? "best" : "bad"}>{r.ev_pct.toFixed(1)}%</td>
-            <td>{r.event} <span className="mut">{r.sport}</span></td><td>{MARKETS[r.market] || r.market}</td><td>{r.window}</td>
+            <td>{r.event} <span className="mut">{r.sport}</span></td><td>{marketName(r.market)}</td><td>{r.window}</td>
             <td>{r.legs.map((l, j) => <div key={j}>{l.pick} {fmt(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>)}</td>
             <td className={r.worst_case >= 0 ? "best" : "bad"}>{money(r.worst_case)}</td>
             <td className="best">{money(r.win_both)}</td><td>{(r.hit_prob * 100).toFixed(1)}%</td>

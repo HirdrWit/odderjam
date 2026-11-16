@@ -36,9 +36,14 @@ def odds_screen(sport: str | None = None):
     return [e for e in shown if e["markets"]]
 
 
-def _groups(e: dict) -> Iterator[tuple[str, dict]]:
-    """Yield (market_key, line_group) for every complete line group in an event."""
+def _groups(e: dict, market: str | None = None, props: bool = True) -> Iterator[tuple[str, dict]]:
+    """Yield (market_key, line_group) for every complete line group in an event.
+
+    `market` keeps one market key only; `props=False` drops player props (mainlines only).
+    """
     for key, outcomes in e["markets"].items():
+        if (market and key != market) or (not props and mk.is_prop(key)):
+            continue
         for g in mk.line_groups(key, outcomes, e["home"], e["away"]):
             yield key, g
 
@@ -53,7 +58,7 @@ def sharp_settings():
 @app.get("/api/ev")
 def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25,
                 sharps: str | None = None, max_hold: float | None = None, market: str | None = None,
-                round_to: float = 1.0, max_side: float | None = None):
+                round_to: float = 1.0, max_side: float | None = None, props: bool = True):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
     more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price."""
     if method not in devig.METHODS:
@@ -64,9 +69,7 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     rows = []
     for e in get_snapshot():
-        for key, g in _groups(e):
-            if market and key != market:
-                continue
+        for key, g in _groups(e, market, props):
             # Only sharps pricing every side of this exact line can devig it.
             fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold)
             if fair is None:
@@ -80,7 +83,8 @@ def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "mul
                         kelly_stake = bankroll * ev.kelly_fraction(fp, price, kelly)
                         rows.append({
                             "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
-                            "start": e["start"], "market": key, "name": o["name"], "selection": o["name"],
+                            "start": e["start"], "market": key, "player": g["player"],
+                            "name": o["name"], "selection": o["name"],
                             "point": o["point"], "pick": mk.label(o), "book": book_name,
                             "odds": price, "link": bet_link(book_name, o),
                             "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
@@ -100,7 +104,7 @@ def _check_sizing(round_to: float, max_side: float | None) -> None:
 
 @app.get("/api/arbs")
 def arbs(min_profit: float = 0.0, market: str | None = None, total: float | None = None, round_to: float = 1.0,
-         max_side: float | None = None):
+         max_side: float | None = None, props: bool = True):
     """Arbs sized to `total` (default: current bankroll), rounded to `round_to`, capped at `max_side`."""
     _check_sizing(round_to, max_side)
     if total is None or total <= 0:
@@ -108,9 +112,7 @@ def arbs(min_profit: float = 0.0, market: str | None = None, total: float | None
         total = total if total > 0 else 100.0
     rows = []
     for e in get_snapshot():
-        for key, g in _groups(e):
-            if market and key != market:
-                continue
+        for key, g in _groups(e, market, props):
             best = []
             for o in g["outcomes"]:
                 us_prices = us_only(o["prices"])
@@ -124,7 +126,7 @@ def arbs(min_profit: float = 0.0, market: str | None = None, total: float | None
                 if result["profit_pct"] >= min_profit:
                     sized = sizing.size_arb([price for _, _, price in best], total, round_to, max_side)
                     rows.append({"event": f'{e["away"]} @ {e["home"]}', "event_id": e["id"], "sport": e["sport"],
-                                 "market": key, "point": g["point"],
+                                 "market": key, "player": g["player"], "point": g["point"],
                                  "legs": [{"pick": mk.label(o), "selection": o["name"], "point": o["point"], "book": book,
                                            "odds": price, "link": bet_link(book, o), "stake": stake, "ideal_stake": ideal,
                                            "profit_if_wins": won}

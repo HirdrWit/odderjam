@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { useStored, useApi, useSlip } from './hooks.js';
 import { americanToProb } from './calc.js';
-import { FORMATS, formatOdds, outcomeLabel, lineGroups, groupStats, mainGroup, filterEvents, allBooks } from './odds.js';
+import { FORMATS, formatOdds, isProp, outcomeLabel, lineGroups, groupStats, mainGroup, filterEvents, allBooks } from './odds.js';
 
 const MARKET_LABELS = { moneyline: 'Moneyline', spreads: 'Spread', totals: 'Total' };
 const ORDER = Object.keys(MARKET_LABELS);
+// "player_points" -> "Points", "batter_total_bases" -> "Total Bases"
+const propName = (k) => k.replace(/^(player|batter|pitcher)_/, '').split('_')
+  .filter(Boolean)
+  .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+  .join(' ');
 function marketLabel(k) {
-  return MARKET_LABELS[k] || k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+  if (MARKET_LABELS[k]) return MARKET_LABELS[k];
+  return isProp(k) ? propName(k) : k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
 function holdText(h) {
@@ -32,8 +38,8 @@ function LineTable({ group, books, format, legOf, slip }) {
             <td className="mut">{formatOdds(s.fair[i], format) || '—'}</td>
             {books.map((b) => (
               <td key={b}
-                className={`${o.prices[b] != null && s.best[i] && o.prices[b] === s.best[i].price ? 'best' : ''}${slip.has(legOf(o)) ? ' inslip' : ''}`}
-                onClick={() => o.prices[b] != null && slip.toggle(legOf(o))}>
+                className={`${o.prices[b] != null && s.best[i] && o.prices[b] === s.best[i].price ? 'best' : ''}${legOf(o) && slip.has(legOf(o)) ? ' inslip' : ''}`}
+                onClick={() => o.prices[b] != null && legOf(o) && slip.toggle(legOf(o))}>
                 {formatOdds(o.prices[b], format)}
               </td>
             ))}
@@ -189,10 +195,10 @@ export default function OddsScreen() {
                     <button key={k} className={k === m ? 'on' : ''} onClick={() => setEventMarket({ ...eventMarket, [e.id]: k })}>{marketLabel(k)}</button>
                   ))}
                 </div>
-                <div className="mut small">Click a price to add it to the parlay slip.</div>
+                {!isProp(m) && <div className="mut small">Click a price to add it to the parlay slip.</div>}
                 {groups.map((g) => (
-                  <LineTable key={String(g.point)} group={g} books={shown} format={format} slip={slip}
-                    legOf={(o) => ({ event_id: e.id, event: `${e.away} @ ${e.home}`, sport: e.sport, market: m, name: o.name, point: o.point, pick: outcomeLabel(o) })} />
+                  <LineTable key={`${g.player ?? ''}${g.point}`} group={g} books={shown} format={format} slip={slip}
+                    legOf={(o) => (isProp(m) ? null : { event_id: e.id, event: `${e.away} @ ${e.home}`, sport: e.sport, market: m, name: o.name, point: o.point, pick: outcomeLabel(o) })} />
                 ))}
                 <LineMovement e={e} books={shown} format={format} />
               </div>

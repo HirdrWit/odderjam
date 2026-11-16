@@ -19,10 +19,14 @@ function pt(p, total) {
   return p > 0 ? `+${p}` : `${p}`;
 }
 
-/** Labels an outcome with its name and signed point, e.g. "Lakers -3.5" or "Over 220.5". */
+/** True for player prop markets (mirror of backend/engine/markets.py is_prop). */
+export const isProp = (market) => /^(player|batter|pitcher)_/.test(market);
+
+/** Labels an outcome, e.g. "Lakers -3.5", "Over 220.5" or "LeBron James Over 25.5". */
 export function outcomeLabel(o) {
   const isTotal = o.name === 'Over' || o.name === 'Under';
-  return `${o.name}${o.point == null ? '' : ` ${pt(o.point, isTotal)}`}`;
+  const text = `${o.name}${o.point == null ? '' : ` ${pt(o.point, isTotal)}`}`;
+  return o.player ? `${o.player} ${text}` : text;
 }
 
 /** Mirror of backend/engine/markets.py line_key: one shared perspective per line. */
@@ -33,17 +37,18 @@ function lineKey(market, o, home) {
 }
 
 function requiredNames(market, outcomes, home, away) {
-  if (market === 'totals') return ['Over', 'Under'];
+  if (market === 'totals' || isProp(market)) return ['Over', 'Under'];
   if (market === 'moneyline' || market === 'spreads') {
     const names = [home, away];
     if (market === 'moneyline' && outcomes.some((o) => o.name === 'Draw')) names.push('Draw');
     return names;
   }
-  return null; // unknown market (props etc.): group by line, take whatever sides exist
+  return null; // unknown market: group by line, take whatever sides exist
 }
 
 /**
- * Group a market's outcomes into lines: [{point, outcomes, complete}].
+ * Group a market's outcomes into lines: [{player, point, outcomes, complete}].
+ * Props are grouped per player as well as per line.
  * `complete` lines have every mutually exclusive side, so hold and fair price apply.
  */
 export function lineGroups(market, outcomes, home, away) {
@@ -51,16 +56,19 @@ export function lineGroups(market, outcomes, home, away) {
   const byLine = new Map();
   for (const o of outcomes) {
     if (names && !names.includes(o.name)) continue;
-    const k = lineKey(market, o, home);
-    if (!byLine.has(k)) byLine.set(k, []);
-    byLine.get(k).push(o);
+    const player = o.player ?? null;
+    const point = lineKey(market, o, home);
+    const k = JSON.stringify([player, point]);
+    if (!byLine.has(k)) byLine.set(k, { player, point, outs: [] });
+    byLine.get(k).outs.push(o);
   }
-  const groups = [...byLine.entries()].map(([point, outs]) => {
+  const groups = [...byLine.values()].map(({ player, point, outs }) => {
     const order = names || [...new Set(outs.map((o) => o.name))];
     const sorted = order.map((n) => outs.find((o) => o.name === n)).filter((x) => x != null);
-    return { point, outcomes: sorted, complete: !!names && sorted.length === names.length };
+    return { player, point, outcomes: sorted, complete: !!names && sorted.length === names.length };
   });
-  return groups.sort((a, b) => (a.point == null) - (b.point == null) || (a.point ?? 0) - (b.point ?? 0));
+  return groups.sort((a, b) => (a.player ?? '').localeCompare(b.player ?? '')
+    || (a.point == null) - (b.point == null) || (a.point ?? 0) - (b.point ?? 0));
 }
 
 /** Best (highest) price for an outcome among the given books: {book, price} or null. */

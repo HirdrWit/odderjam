@@ -34,6 +34,18 @@ test('lineGroups handles unknown (prop) markets', () => {
   assert.equal(g[0].complete, false);
 });
 
+test('lineGroups splits props by player and labels the player', () => {
+  const outs = [
+    { name: 'Over', player: 'B', point: 20.5, prices: { A: -110 } },
+    { name: 'Under', player: 'B', point: 20.5, prices: { A: -110 } },
+    { name: 'Over', player: 'A', point: 20.5, prices: { A: -115 } },
+    { name: 'Under', player: 'A', point: 20.5, prices: { A: -105 } },
+  ];
+  const g = o.lineGroups('player_points', outs, 'H', 'A');
+  assert.deepEqual(g.map((x) => [x.player, x.point, x.complete]), [['A', 20.5, true], ['B', 20.5, true]]);
+  assert.equal(o.outcomeLabel(g[0].outcomes[0]), 'A Over 20.5');
+});
+
 test('groupStats: best, hold at best prices, fair', () => {
   const [, main] = o.lineGroups('spreads', spreads, 'Lakers', 'Celtics');
   const s = o.groupStats(main, ['A', 'B']);
