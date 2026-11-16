@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import history
 from .engine import arb as arbm, devig, ev, lowhold, markets as mk, middles as mid, odds, parlay as pm, sharp, sizing
 from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, bet_link, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets
@@ -133,6 +134,12 @@ def arbs(min_profit: float = 0.0, market: str | None = None, total: float | None
                                  **{k: sized[k] for k in ("total_stake", "min_profit", "max_profit", "min_profit_pct",
                                                           "capped", "rounding_loss", "warning")}})
     return sorted(rows, key=lambda r: -r["profit_pct"])
+
+
+@app.get("/api/history/{event_id}")
+def odds_history(event_id: str, market: str = "moneyline"):
+    """Every stored price for one event and market, oldest first."""
+    return history.history(event_id, market)
 
 
 class LegIn(BaseModel):

@@ -56,7 +56,7 @@ function PositiveEV() {
   const track = async (r) => {
     const res = await postJson("/api/bets", { event: r.event, event_id: r.event_id, sport: r.sport, market: r.market,
       pick: r.pick, selection: r.selection, point: r.point, book: r.book, odds: r.odds,
-      stake: +r.stake.toFixed(2) || 1, ev_pct: r.ev_pct, strategy: "ev" });
+      stake: +r.stake.toFixed(2) || 1, ev_pct: r.ev_pct, strategy: "ev", event_start: r.start });
     res.ok ? toast(`Tracked ${r.pick} @ ${r.book}`) : toast("Could not track bet", "err");
     window.dispatchEvent(new Event("data-changed"));
   };

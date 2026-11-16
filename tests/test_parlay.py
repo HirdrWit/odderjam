@@ -3,7 +3,6 @@ from fastapi.testclient import TestClient
 
 from backend import main
 from backend.engine.parlay import parlay
-from backend.routes import bets
 
 
 def o(name, point, **prices):
@@ -39,8 +38,7 @@ EVENTS = [
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(bets, "DB", tmp_path / "t.db")
+def client(monkeypatch):
     monkeypatch.setattr(main, "get_snapshot", lambda: EVENTS)
     return TestClient(main.app)
 

@@ -4,18 +4,17 @@ import io
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, ValidationError
 
-from .. import providers
+from .. import history, providers
+from ..db import conn
 from ..engine.odds import american_to_decimal
 from ..engine.settle import SETTLEABLE, final_scores, grade, parse_pick
 
-DB = Path(__file__).resolve().parent.parent.parent / ".odderjam.db"
 router = APIRouter(prefix="/api/bets")
 
 Status = Literal["pending", "won", "lost", "push", "void"]
@@ -27,22 +26,6 @@ NEW_COLUMNS = {"strategy": "TEXT", "event_id": "TEXT", "selection": "TEXT", "poi
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def conn() -> sqlite3.Connection:
-    c = sqlite3.connect(DB)
-    c.row_factory = sqlite3.Row
-    c.execute("""CREATE TABLE IF NOT EXISTS bets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, placed_at TEXT NOT NULL, event TEXT, sport TEXT,
-        market TEXT DEFAULT 'moneyline', pick TEXT NOT NULL, book TEXT, odds REAL NOT NULL,
-        stake REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending', closing_odds REAL,
-        ev_pct REAL, notes TEXT)""")
-    have = {r["name"] for r in c.execute("PRAGMA table_info(bets)")}
-    for col, typ in NEW_COLUMNS.items():
-        if col not in have:
-            c.execute(f"ALTER TABLE bets ADD COLUMN {col} {typ}")
-    c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value REAL)")
-    return c
 
 
 class BetIn(BaseModel):
@@ -61,6 +44,9 @@ class BetIn(BaseModel):
     event_id: str | None = None
     selection: str | None = None  # outcome name ("Lakers", "Over"); parsed from pick when missing
     point: float | None = None
+    # Set by the +EV "Track" button so the closing line can be captured automatically.
+    event_start: str | None = None
+    closing_sharp_odds: float | None = None
 
 
 FIELDS = list(BetIn.model_fields)
@@ -72,16 +58,17 @@ def profit(b) -> float:
     return -b["stake"] if b["status"] == "lost" else 0.0
 
 
-def clv(b) -> float | None:
-    if b["closing_odds"] is None:
+def clv(b, key: str = "closing_odds") -> float | None:
+    if b[key] is None:
         return None
-    return (american_to_decimal(b["odds"]) / american_to_decimal(b["closing_odds"]) - 1) * 100
+    return (american_to_decimal(b["odds"]) / american_to_decimal(b[key]) - 1) * 100
 
 
 def out(b) -> dict:
     d = dict(b)
     d["profit"] = profit(b)
     d["clv_pct"] = clv(b)
+    d["clv_sharp_pct"] = clv(b, "closing_sharp_odds")
     return d
 
 
@@ -116,6 +103,8 @@ def values(b: BetIn) -> tuple:
         d["selection"], parsed = parse_pick(d["market"], d["pick"])
         if d["point"] is None:
             d["point"] = parsed
+    if d["event_start"]:
+        d["event_start"] = history.ts(d["event_start"])
     return tuple(d[k] for k in FIELDS)
 
 
@@ -130,6 +119,7 @@ def insert(c: sqlite3.Connection, b: BetIn, placed_at: str | None = None, settle
 
 @router.get("")
 def list_bets(f: Filters = Depends()):
+    history.capture_closing()
     with conn() as c:
         return [out(r) for r in query(c, f)]
 
@@ -202,6 +192,7 @@ def summarize(rows: list) -> dict:
     net = sum(profit(r) for r in settled)
     decided = [r for r in settled if r["status"] in ("won", "lost")]
     clvs = [v for r in rows if (v := clv(r)) is not None]
+    sharp_clvs = [v for r in rows if (v := clv(r, "closing_sharp_odds")) is not None]
     return {
         "total_bets": len(rows),
         "pending": sum(r["status"] == "pending" for r in rows),
@@ -211,6 +202,7 @@ def summarize(rows: list) -> dict:
         "win_rate_pct": sum(r["status"] == "won" for r in decided) / len(decided) * 100 if decided else 0,
         "avg_clv_pct": sum(clvs) / len(clvs) if clvs else None,
         "pos_clv_rate_pct": sum(v > 0 for v in clvs) / len(clvs) * 100 if clvs else None,
+        "avg_clv_sharp_pct": sum(sharp_clvs) / len(sharp_clvs) if sharp_clvs else None,
         "by_sport": group(settled, "sport"),
         "by_book": group(settled, "book"),
         "by_market": group(settled, "market"),
@@ -221,6 +213,7 @@ def summarize(rows: list) -> dict:
 
 @router.get("/stats")
 def stats(f: Filters = Depends()):
+    history.capture_closing()
     with conn() as c:
         return summarize(query(c, f))
 

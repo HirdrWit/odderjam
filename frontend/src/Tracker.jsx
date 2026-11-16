@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { postJson, toast, useApi, useStored } from "./hooks.jsx";
+import { formatOdds } from "./odds.js";
 import { calendarWeeks, filterQuery, plColor, scaleSeries, PROFIT } from "./tracker.js";
 
 const money = (n) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
@@ -146,7 +147,7 @@ export default function Tracker() {
   const tiles = stats && [
     ["Profit", money(stats.profit), stats.profit >= 0 ? "best" : "bad"], ["ROI", pct(stats.roi_pct)],
     ["Win rate", pct(stats.win_rate_pct)], ["Staked", money(stats.staked)],
-    ["Avg CLV", pct(stats.avg_clv_pct)], ["Pending", stats.pending],
+    ["Avg CLV", pct(stats.avg_clv_pct)], ["Sharp CLV", pct(stats.avg_clv_sharp_pct)], ["Pending", stats.pending],
   ];
   return (
     <>
@@ -182,7 +183,7 @@ export default function Tracker() {
         <input placeholder="Stake *" required type="number" step="0.01" value={f.stake} onChange={set("stake")} />
         <button className="primary">Add bet</button>
       </form>
-      <table><thead><tr><th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Type</th><th>Odds</th><th>Stake</th><th>Close</th><th>CLV</th><th>Status</th><th>P/L</th><th></th></tr></thead><tbody>
+      <table><thead><tr><th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Type</th><th>Odds</th><th>Stake</th><th>Close</th><th>CLV</th><th title="CLV vs the sharp no-vig closing line">Sharp CLV</th><th>Status</th><th>P/L</th><th></th></tr></thead><tbody>
         {(bets || []).map((b) => (
           <tr key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}`}><td>{new Date(b.placed_at).toLocaleDateString()}</td><td>{b.pick}</td><td>{b.event}</td><td>{b.book}</td>
             <td className="mut">{MARKETS[b.market] || b.market}{b.strategy ? ` · ${STRATEGIES[b.strategy]}` : ""}</td>
@@ -193,6 +194,8 @@ export default function Tracker() {
             <td><input className="mini" type="number" defaultValue={b.closing_odds ?? ""} placeholder="—"
               onBlur={(e) => e.target.value !== String(b.closing_odds ?? "") && patch(b, { closing_odds: e.target.value })} /></td>
             <td className={b.clv_pct > 0 ? "best" : b.clv_pct < 0 ? "bad" : ""}>{pct(b.clv_pct)}</td>
+            <td className={b.clv_sharp_pct > 0 ? "best" : b.clv_sharp_pct < 0 ? "bad" : ""}
+              title={b.closing_sharp_odds != null ? `Sharp fair close ${formatOdds(b.closing_sharp_odds)}` : ""}>{pct(b.clv_sharp_pct)}</td>
             <td><select value={b.status} onChange={(e) => patch(b, { status: e.target.value })}>
               {STATUSES.map((x) => <option key={x}>{x}</option>)}</select></td>
             <td className={b.profit > 0 ? "best" : b.profit < 0 ? "bad" : ""}>{money(b.profit)}</td>

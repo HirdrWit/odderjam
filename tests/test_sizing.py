@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from backend import main
 from backend.engine import sizing
 from backend.engine.odds import american_to_decimal
-from backend.routes import bets
 
 
 def test_round_stake_nearest_and_capped():
@@ -95,8 +94,7 @@ def test_size_bonus_hedge():
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(bets, "DB", tmp_path / "t.db")
+def client():
     return TestClient(main.app)
 
 
