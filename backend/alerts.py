@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sqlite3
+import sys
 import threading
 from datetime import datetime, timezone
 from typing import Literal
@@ -40,7 +41,20 @@ def conn() -> sqlite3.Connection:
         id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
         rule_id INTEGER, rule_name TEXT, kind TEXT NOT NULL, title TEXT NOT NULL, value REAL NOT NULL,
         data TEXT NOT NULL)""")
+    _drop_invalid_rules(c)
     return c
+
+
+def _drop_invalid_rules(c: sqlite3.Connection) -> None:
+    """Delete rules saved before min_value was validated (odderjam-46).
+
+    A negative threshold alerts on losing bets, and an infinite one makes the rule list unserialisable
+    (GET /api/alerts/rules returns 500, so the rule could not even be deleted from the UI).
+    """
+    dropped = c.execute("DELETE FROM alert_rules WHERE NOT (min_value >= 0 AND min_value <= ?)",
+                        (sys.float_info.max,)).rowcount
+    if dropped:
+        log.warning("dropped %d alert rule(s) with a negative or non-finite min_value", dropped)
 
 
 # --- dedupe -----------------------------------------------------------------
