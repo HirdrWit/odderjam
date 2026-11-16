@@ -5,6 +5,9 @@ nav { width: 190px; padding: 16px; background: #161c24; display: flex; flex-dire
 nav h1 { font-size: 18px; margin: 0 0 12px; }
 nav button { background: none; border: 0; color: inherit; text-align: left; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
 nav button.on, nav button:hover { background: #243040; }
+.nav-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.nav-group h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #8a96a6; margin: 4px 10px; font-weight: 600; }
+nav button .sub { display: block; font-size: 11px; color: #8a96a6; margin-top: 2px; }
 main { flex: 1; padding: 20px; max-width: 1000px; }
 .bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
 input, select { background: #1d2530; color: inherit; border: 1px solid #2c3a4b; border-radius: 4px; padding: 5px 8px; width: 90px; }
@@ -100,5 +103,7 @@ nav button.link, .welcome button.link { text-decoration: underline; }
   .app { flex-direction: column; }
   nav { width: auto; flex-direction: row; flex-wrap: wrap; }
   nav h1 { width: 100%; margin-bottom: 4px; }
+  .nav-group { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; margin-bottom: 4px; }
+  .nav-group h2 { width: 100%; margin: 4px 0; }
   .welcome { margin: 8px; }
 }
