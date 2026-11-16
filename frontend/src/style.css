@@ -121,3 +121,10 @@ nav button.link, .welcome button.link { text-decoration: underline; }
 .calc-index { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
 .calc-index button { background: #161c24; color: inherit; border: 1px solid #2c3a4b; border-radius: 14px; padding: 4px 10px; cursor: pointer; }
 .legend dt { font-weight: 600; display: inline; } .legend dd { display: inline; margin: 0 0 0 4px; } .legend div { margin-bottom: 2px; }
+
+.help section { margin-top: 20px; max-width: 70ch; }
+.help-toc { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.help-risk { border-left: 3px solid #c9a227; padding: 6px 10px; }
+.help-converter { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.help dt { font-weight: 600; margin-top: 10px; }
+.help dd { margin: 2px 0 0; }
