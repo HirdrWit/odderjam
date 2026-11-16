@@ -1087,6 +1087,68 @@ function Alerts() {
   );
 }
 
+/**
+ * Sharp Money: exchange markets where matched volume just spiked, with the
+ * sportsbooks still paying more than the price that volume traded at.
+ */
+function SharpMoney() {
+  const [windowMin, setWindowMin] = useStored('smWindow', 10);
+  const [baselineMin, setBaselineMin] = useStored('smBaseline', 120);
+  const [k, setK] = useStored('smK', 3);
+  const [minVolume, setMinVolume] = useStored('smMinVolume', 500);
+  const data = useApi(`/api/sharp-money?window_minutes=${windowMin}&baseline_minutes=${baselineMin}` +
+      `&k=${k}&min_volume=${minVolume}`);
+  return (
+    <>
+      <div className="bar">
+        Last <input type="number" step="1" min="1" value={windowMin} onChange={(e) => {
+          setWindowMin(parseNumberInput(e.target.value, windowMin));
+        }} /> min
+        vs prior <input type="number" step="10" min="1" value={baselineMin} onChange={(e) => {
+          setBaselineMin(parseNumberInput(e.target.value, baselineMin));
+        }} /> min
+        Spike × <input type="number" step="0.5" min="0.5" value={k} onChange={(e) => {
+          setK(parseNumberInput(e.target.value, k));
+        }} />
+        Min contracts <input type="number" step="100" min="0" value={minVolume} onChange={(e) => {
+          setMinVolume(parseNumberInput(e.target.value, minVolume));
+        }} />
+      </div>
+      <div className="mut small">
+        Exchange trades are public. A burst of matched volume well above the usual rate points at
+        informed money; EV is against the burst&apos;s volume-weighted price. Needs EXCHANGES=Kalshi.
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Event</th><th>Side</th><th>Exchange</th><th>Volume</th><th>× usual</th>
+            <th>Spike price</th><th>Books paying more</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(data || []).map((r, i) => (
+            <tr key={i}>
+              <td>{r.event} <span className="mut">{r.sport}</span></td>
+              <td>{r.outcome}</td>
+              <td>{r.exchange}</td>
+              <td>{Math.round(r.volume)} <span className="mut">({r.trades} trades)</span></td>
+              <td>{r.ratio === null ? 'new' : `${r.ratio.toFixed(1)}×`}</td>
+              <td>{formatOdds(r.price)} <span className="mut">{r.vwap_cents.toFixed(1)}¢</span></td>
+              <td>
+                {r.books.length ? r.books.map((b) => (
+                  <div key={b.book}>
+                    {b.book} {formatOdds(b.price)} <span className="best">+{b.ev_pct.toFixed(1)}%</span>
+                  </div>
+                )) : <span className="mut">none</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 const TABS = {
   'Odds Screen': OddsScreen,
   '+EV': PositiveEv,
@@ -1094,6 +1156,7 @@ const TABS = {
   'Arbitrage': Arbs,
   'Low Hold': LowHold,
   'Middles': Middles,
+  'Sharp Money': SharpMoney,
   'Promos': Promos,
   'Calculator': Calculators,
   'Tracker': Tracker,
