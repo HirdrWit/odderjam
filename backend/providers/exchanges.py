@@ -18,6 +18,7 @@ from . import kalshi, polymarket
 from .teams import same_team
 
 PLATFORMS = {"Kalshi": kalshi, "Polymarket": polymarket}
+TRADE_PLATFORMS: dict = {}
 log = logging.getLogger(__name__)
 
 

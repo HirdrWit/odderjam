@@ -388,6 +388,11 @@ def _live_payload() -> dict:
     return {**live_status(), "live_events": sum(_live_mod.is_live(e, now) for e in get_snapshot())}
 
 
+@app.get("/api/sharp-money")
+def sharp_money_rows():
+    return []
+
+
 @app.get("/api/live")
 def live_get():
     return _live_payload()

@@ -81,3 +81,11 @@ def fetch(sport: str, client: httpx.Client) -> dict:
         if not cursor:
             break
     return {"markets": markets}
+
+
+def parse_trades(payload: dict) -> list[dict]:
+    return []
+
+
+def fetch_trades(ticker: str, min_ts: float, client: httpx.Client) -> dict:
+    return {"trades": []}
