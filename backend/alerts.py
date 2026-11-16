@@ -55,6 +55,11 @@ def _drop_invalid_rules(c: sqlite3.Connection) -> None:
                         (sys.float_info.max,)).rowcount
     if dropped:
         log.warning("dropped %d alert rule(s) with a negative or non-finite min_value", dropped)
+    # Alerts from rules that no longer exist (sample or test rules) and losing (negative) alerts are stale.
+    stale = c.execute("DELETE FROM opportunities WHERE value < 0 OR rule_id IS NULL "
+                      "OR rule_id NOT IN (SELECT id FROM alert_rules)").rowcount
+    if stale:
+        log.warning("dropped %d stale alert(s) from removed rules or with a negative value", stale)
 
 
 # --- dedupe -----------------------------------------------------------------

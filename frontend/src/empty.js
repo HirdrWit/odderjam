@@ -77,3 +77,12 @@ export function trackerEmptyText(data) {
   if (!isEmptyList(data)) return null;
   return 'No bets yet. Add one below, or click Track on any +EV or Arbitrage row.';
 }
+
+/**
+ * @param {*} feed The /api/alerts response.
+ * @return {?string}
+ */
+export function alertsEmptyText(feed) {
+  if (!feed || !Array.isArray(feed.items) || feed.items.length > 0) return null;
+  return 'No alerts yet. Add a rule above.';
+}

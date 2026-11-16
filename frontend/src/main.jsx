@@ -16,7 +16,7 @@ import {Term} from './Term.jsx';
 import {NAV_GROUPS, NAV_SUBTITLES} from './navgroups.js';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
-import {arbsEmptyText, evEmptyText, lowHoldEmptyText, middlesEmptyText, sharpEmptyText} from './empty.js';
+import {alertsEmptyText, arbsEmptyText, evEmptyText, lowHoldEmptyText, middlesEmptyText, sharpEmptyText} from './empty.js';
 import {legKey, useSlip} from './hooks.js';
 import {INDEPENDENT_NOTE, devigLabel, restoredNote, slipLegPriceText, tinyStakeNote} from './slip.js';
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
@@ -1094,7 +1094,7 @@ function Alerts() {
   if (feed) {
     discordNote = feed.discord ?
         <> <Term id="discord-webhook">Discord webhook</Term> is on.</> :
-        <> Set DISCORD_WEBHOOK_URL to also post to Discord (see <Term id="discord-webhook">Discord webhook</Term>).</>;
+        <> Discord is optional: set DISCORD_WEBHOOK_URL to also post alerts there (see <Term id="discord-webhook">Discord webhook</Term>).</>;
   }
   return (
     <>
@@ -1146,6 +1146,7 @@ function Alerts() {
         </tbody>
       </table>
       <h3>Recent alerts</h3>
+      <EmptyState text={alertsEmptyText(feed)} />
       <table>
         <thead>
           <tr><th>When</th><th>Alert</th><th>Rule</th></tr>
