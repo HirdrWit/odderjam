@@ -1057,11 +1057,12 @@ function Alerts() {
   let discordNote = null;
   if (feed) {
     discordNote = feed.discord ?
-        ' Discord webhook is on.' :
-        ' Set DISCORD_WEBHOOK_URL to also post to Discord.';
+        <> <Term id="discord-webhook">Discord webhook</Term> is on.</> :
+        <> Set DISCORD_WEBHOOK_URL to also post to Discord (see <Term id="discord-webhook">Discord webhook</Term>).</>;
   }
   return (
     <>
+      <TabIntro tab="Alerts" />
       <p className="mut">
         Rules are checked after each odds fetch that already happens. Alerts never spend extra API
         credits.
@@ -1071,7 +1072,7 @@ function Alerts() {
         <select value={form.kind} onChange={field('kind')}>
           <option value="ev">+EV</option><option value="arb">Arbitrage</option>
         </select>
-        Min % <input type="number" step="0.5" value={form.min_value} onChange={field('min_value')} />
+        <Term id="min-percent">Min %</Term> <input type="number" step="0.5" value={form.min_value} onChange={field('min_value')} />
         <select value={form.book} onChange={field('book')}>
           {ANY_BOOKS.map((b) => <option key={b} value={b}>{b || 'Any book'}</option>)}
         </select>
