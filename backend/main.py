@@ -448,7 +448,7 @@ def middles(
     min_window: float = 0.0,
     max_cost: float | None = None,
     market: str | None = None,
-    stake: float = 100.0,
+    stake: float = Query(100.0, gt=0, allow_inf_nan=False),
 ) -> list[dict]:
     """Middles across books. `max_cost` caps the worst-case loss as a percent of total stake."""
     now = _now()
