@@ -5,6 +5,7 @@ wins. Backing a team can also be done with NO on the opponent's market, so each 
 the cheaper of the two. Prices are taker asks, converted to American odds after Kalshi's fee.
 """
 import logging
+import time
 from datetime import datetime
 
 import httpx
@@ -20,7 +21,9 @@ SPORTS = set(SERIES)
 GAME_HOURS = {"NBA": 2.5, "NFL": 3.25, "MLB": 3.0, "NHL": 2.5}
 OPEN = {"active", "open"}
 MAX_PAGES = 10
-TRADE_TIMEOUT = 10  # seconds per trades page; polling runs inside a request
+TRADE_TIMEOUT = 5  # seconds per trades page; polling runs inside a request
+TRADE_FETCH_SECONDS = 10.0  # stop paging one market's trades after this long
+_clock = time.monotonic
 log = logging.getLogger(__name__)
 
 
@@ -126,11 +129,14 @@ def parse_trades(payload: dict) -> list[dict]:
 def fetch_trades(ticker: str, min_ts: float, client: httpx.Client) -> dict:
     """Public trades on one market since ``min_ts`` (epoch seconds), following the cursor.
 
-    Kalshi lists trades newest first, so if the page cap stops the walk it is the oldest trades that
-    are missing; that is logged.
+    Kalshi lists trades newest first, so if the page cap or the TRADE_FETCH_SECONDS time cap stops the
+    walk it is the oldest trades that are missing; that is logged.
     """
-    trades, cursor = [], None
+    trades, cursor, deadline = [], None, _clock() + TRADE_FETCH_SECONDS
     for _ in range(MAX_PAGES):
+        if cursor and _clock() >= deadline:
+            log.warning("kalshi %s: trades fetch out of time after %d trades, oldest not fetched", ticker, len(trades))
+            break
         params = {"ticker": ticker, "min_ts": int(min_ts), "limit": 1000}
         if cursor:
             params["cursor"] = cursor

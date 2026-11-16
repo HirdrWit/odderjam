@@ -1,6 +1,7 @@
 """Sharp Money review fixes: taker direction, poll time budget, baseline within retention."""
 from datetime import datetime, timezone
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -70,3 +71,16 @@ def test_api_rejects_baseline_beyond_retention(monkeypatch):
     assert c.get("/api/sharp-money", params={"window_minutes": 10, "baseline_minutes": 23 * 60}).status_code == 200
     monkeypatch.setenv("SHARP_MONEY_HOURS", "48")
     assert c.get("/api/sharp-money", params={"window_minutes": 10, "baseline_minutes": 24 * 60}).status_code == 200
+
+
+def test_fetch_trades_stops_paging_at_its_time_cap(monkeypatch):
+    ticks = iter([0.0, 4.0, 11.0, 12.0])  # cap 10s: start, page 2 allowed at 4s, page 3 refused at 11s
+    monkeypatch.setattr(kalshi, "_clock", lambda: next(ticks))
+    pages = []
+
+    def handler(request):
+        pages.append(request.url.params.get("cursor"))
+        return httpx.Response(200, json={"trades": [{"trade_id": str(len(pages))}], "cursor": f"c{len(pages)}"})
+
+    out = kalshi.fetch_trades("T", NOW - 60, httpx.Client(transport=httpx.MockTransport(handler)))
+    assert pages == [None, "c1"] and len(out["trades"]) == 2
