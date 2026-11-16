@@ -82,6 +82,16 @@ def label(outcome: dict) -> str:
     return f"{player} {text}" if player else text
 
 
+MARKET_LABELS = {"moneyline": "Moneyline", "spreads": "Spread", "totals": "Total"}
+
+
 def market_label(market: str) -> str:
-    """Display name of a market key, matching the frontend's marketName."""
-    return ""
+    """Display name of a market key, matching the frontend's marketName.
+
+    Props drop their prefix and are title-cased ("batter_total_bases" -> "Total Bases").
+    """
+    if market in MARKET_LABELS:
+        return MARKET_LABELS[market]
+    if is_prop(market):
+        return " ".join(w.capitalize() for w in market.split("_")[1:] if w)
+    return market

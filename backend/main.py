@@ -237,9 +237,10 @@ def price_parlay(p: ParlayIn):
         legs.append((leg, e, outcome))
 
     seen: dict[str, set[str]] = {}
-    for leg, _, _ in legs:
+    for leg, e, _ in legs:
         if leg.market in seen.setdefault(leg.event_id, set()):
-            raise HTTPException(400, f"two legs from the same market in event {leg.event_id}")
+            raise HTTPException(400, f'Both sides of {e["away"]} @ {e["home"]} {mk.market_label(leg.market)} '
+                                     "are in the slip; remove one")
         seen[leg.event_id].add(leg.market)
     same_game = len(seen) < len(legs)
 
