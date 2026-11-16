@@ -6,13 +6,13 @@ from pathlib import Path
 from statistics import median
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts, history, scan
+from . import alerts, history, scan, sharp_money
 from .scan import groups as _groups
 from .engine import (devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, promo,
                      sharp, sizing)
@@ -386,6 +386,23 @@ class LiveSettings(BaseModel):
 def _live_payload() -> dict:
     now = _now()
     return {**live_status(), "live_events": sum(_live_mod.is_live(e, now) for e in get_snapshot())}
+
+
+@app.get("/api/sharp-money")
+def sharp_money_rows(window_minutes: float = Query(10.0, gt=0, allow_inf_nan=False),
+                     baseline_minutes: float = Query(120.0, gt=0, allow_inf_nan=False),
+                     k: float = Query(3.0, gt=0, allow_inf_nan=False),
+                     min_volume: float = Query(500.0, ge=0, allow_inf_nan=False)):
+    """Volume spikes on exchange markets (matched volume in the last `window_minutes` above `k` x the
+    rate over the `baseline_minutes` before it, and at least `min_volume` contracts), each with the
+    sportsbooks paying more than the spike's volume-weighted price. Polls exchange trades first (throttled)."""
+    window, baseline = window_minutes * 60, baseline_minutes * 60
+    if window + baseline > sharp_money.retention_seconds():
+        raise HTTPException(422, f"window + baseline must fit in the {sharp_money.retention_seconds() / 3600:g}h "
+                                 "of stored trades (SHARP_MONEY_HOURS)")
+    snap, now = get_snapshot(), _now()
+    sharp_money.maybe_poll(snap, now, lookback=window + baseline)
+    return sharp_money.rows(snap, now, window, baseline, k, min_volume)
 
 
 @app.get("/api/live")

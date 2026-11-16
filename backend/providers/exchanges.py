@@ -18,6 +18,8 @@ from . import kalshi, polymarket
 from .teams import same_team
 
 PLATFORMS = {"Kalshi": kalshi, "Polymarket": polymarket}
+# Platforms with a public trade feed (parse_trades/fetch_trades), polled for Sharp Money.
+TRADE_PLATFORMS = {"Kalshi": kalshi}
 log = logging.getLogger(__name__)
 
 
@@ -62,7 +64,8 @@ def merge_quotes(events: list[dict], quotes: list[dict], tolerance_hours: float 
     """Add each quote's prices to its matching event's moneyline outcomes (events are updated in place).
 
     If two quotes from one book land on the same event, the one closest in time wins. A malformed
-    quote is skipped.
+    quote is skipped. A quote's ``markets`` ({team: market id}) are kept on the event as
+    ``exchange_markets[book][event team]``, so Sharp Money knows which markets to poll.
     """
     placed: dict[tuple[str, int], tuple[float, dict, dict, dict]] = {}
     for q in quotes:
@@ -86,6 +89,10 @@ def merge_quotes(events: list[dict], quotes: list[dict], tolerance_hours: float 
                 o = {"name": team, "point": None, "prices": {}}
                 outcomes.append(o)
             o["prices"][q["book"]] = price
+        tickers = q.get("markets")
+        if tickers:
+            e.setdefault("exchange_markets", {})[q["book"]] = {
+                mapping[name]: t for name, t in tickers.items() if name in mapping and t}
     return events
 
 
