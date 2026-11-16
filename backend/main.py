@@ -4,7 +4,7 @@ from pathlib import Path
 from statistics import median
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -12,7 +12,8 @@ from . import alerts, history, scan
 from .scan import groups as _groups
 from .engine import devig, lowhold, markets as mk, middles as mid, odds, parlay as pm, promo, sharp, sizing
 from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
-from .routes import bets
+from .routes import bets, filters as flt
+from .routes.filters import FilterSet
 from .providers import cache_info, get_snapshot
 
 
@@ -27,6 +28,7 @@ app = FastAPI(title="odderjam", lifespan=lifespan)
 app.include_router(bets.router)
 app.include_router(bets.bankroll_router)
 app.include_router(alerts.router)
+app.include_router(flt.router)
 
 
 def _us_markets(markets: dict) -> dict:
@@ -55,19 +57,21 @@ def sharp_settings():
 
 
 @app.get("/api/ev")
-def positive_ev(book: str | None = None, min_ev: float = 0.0, method: str = "multiplicative", kelly: float = 0.25,
-                sharps: str | None = None, max_hold: float | None = None, market: str | None = None,
-                round_to: float = 1.0, max_side: float | None = None, props: bool = True):
+def positive_ev(method: str = "multiplicative", kelly: float = 0.25, sharps: str | None = None,
+                max_hold: float | None = None, round_to: float = 1.0, max_side: float | None = None,
+                props: bool = True, f: FilterSet = Depends(flt.query_filters)):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
-    more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price."""
+    more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price.
+    `f` (query params and/or a saved `preset`) filters sports, books, markets, odds, start time and min EV."""
     if method not in devig.METHODS:
         raise HTTPException(400, f"unknown devig method {method!r}")
     weights = sharp.parse_weights(sharps if sharps is not None else sharp_weights_spec())
     max_hold = max_sharp_hold() if max_hold is None else max_hold
     _check_sizing(round_to, max_side)
     bankroll = max(bets.bankroll_info()["current"], 0.0)
-    return scan.ev_rows(get_snapshot(), weights, max_hold, book=book, min_ev=min_ev, method=method, kelly=kelly,
-                        market=market, bankroll=bankroll, round_to=round_to, max_side=max_side, props=props)
+    min_ev = f.min_ev if f.min_ev is not None else 0.0
+    return scan.ev_rows(get_snapshot(), weights, max_hold, min_ev=min_ev, method=method, kelly=kelly,
+                        bankroll=bankroll, round_to=round_to, max_side=max_side, props=props, filters=f)
 
 
 def _check_sizing(round_to: float, max_side: float | None) -> None:
@@ -78,15 +82,16 @@ def _check_sizing(round_to: float, max_side: float | None) -> None:
 
 
 @app.get("/api/arbs")
-def arbs(min_profit: float = 0.0, market: str | None = None, total: float | None = None, round_to: float = 1.0,
-         max_side: float | None = None, props: bool = True):
+def arbs(total: float | None = None, round_to: float = 1.0, max_side: float | None = None, props: bool = True,
+         f: FilterSet = Depends(flt.query_filters)):
     """Arbs sized to `total` (default: current bankroll), rounded to `round_to`, capped at `max_side`."""
     _check_sizing(round_to, max_side)
     if total is None or total <= 0:
         total = bets.bankroll_info()["current"]
         total = total if total > 0 else 100.0
-    return scan.arb_rows(get_snapshot(), min_profit=min_profit, market=market, total=total, round_to=round_to,
-                         max_side=max_side, props=props)
+    min_profit = f.min_profit if f.min_profit is not None else 0.0
+    return scan.arb_rows(get_snapshot(), min_profit=min_profit, total=total, round_to=round_to,
+                         max_side=max_side, props=props, filters=f)
 
 
 PromoKind = Literal["bonus-bet", "profit-boost", "second-chance"]
