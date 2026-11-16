@@ -2,6 +2,7 @@ import {Fragment, useState} from 'react';
 
 import {americanToProb} from './calc.js';
 import {useApi, useSlip, useStored} from './hooks.js';
+import {TabIntro} from './TabIntro.jsx';
 import {slipLeg} from './slip.js';
 import {
   FORMATS,
@@ -321,6 +322,7 @@ export function OddsScreen() {
 
   return (
     <>
+      <TabIntro tab="Odds Screen" />
       <div className="bar wrap">
         <select value={sport} onChange={(e) => {
           setSport(e.target.value);

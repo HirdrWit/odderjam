@@ -6,6 +6,7 @@ import {Calculators} from './Calculators.jsx';
 import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
+import {TabIntro} from './TabIntro.jsx';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
 import {arbsEmptyText, lowHoldEmptyText, sharpEmptyText} from './empty.js';
@@ -364,6 +365,7 @@ function PositiveEv() {
   const data = useApi(cfg && `/api/ev?${query}`);
   return (
     <>
+      <TabIntro tab="+EV" />
       <div className="bar">
         Book <select value={book} onChange={(e) => {
           pickBook(e.target.value);
@@ -502,6 +504,7 @@ function Arbs() {
   };
   return (
     <>
+      <TabIntro tab="Arbitrage" />
       <div className="bar">
         Min profit % <input type="number" step="0.5" value={min} onChange={(e) => {
           setMin(Number(e.target.value));
