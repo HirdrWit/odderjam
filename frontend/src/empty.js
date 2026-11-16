@@ -13,6 +13,21 @@ function isEmptyList(data) {
   return Array.isArray(data) && data.length === 0;
 }
 
+/** Low Hold opens at a cutoff that lists markets on a normal day. */
+export const LOW_HOLD_DEFAULT_MAX = 3;
+
+/** Note shown beside the Arb total box. */
+export const ARB_TOTAL_NOTE = 'Arb total is filled from your bankroll until you type one.';
+
+/**
+ * @param {number} min Min profit %.
+ * @return {?string} A warning when the minimum is below zero, else null.
+ */
+export function arbMinWarning(min) {
+  if (!(min < 0)) return null;
+  return 'A negative Min profit % is a guaranteed loss, not an arb. Set it to 0 or more.';
+}
+
 /**
  * @param {*} data The /api/arbs response.
  * @param {number} min Min profit %.
@@ -20,18 +35,21 @@ function isEmptyList(data) {
  */
 export function arbsEmptyText(data, min) {
   if (!isEmptyList(data)) return null;
+  if (min < 0) return `No arbs at >= ${min}% right now. ${arbMinWarning(min)}`;
   return `No arbs at >= ${min}% right now. Lower Min profit % or refresh odds.`;
 }
 
 /**
  * @param {*} data The /api/lowhold response.
  * @param {number} maxHold Max hold %.
+ * @param {?number=} lowest Lowest hold % among all markets, when known.
  * @return {?string}
  */
-export function lowHoldEmptyText(data, maxHold) {
+export function lowHoldEmptyText(data, maxHold, lowest) {
   if (!isEmptyList(data)) return null;
-  return `No markets with hold <= ${maxHold}% right now. Raise Max hold %, widen the book or market ` +
-      'filter, or refresh odds.';
+  const miss = typeof lowest === 'number' ? ` Lowest hold right now: ${lowest.toFixed(2)}%.` : '';
+  return `No markets with hold <= ${maxHold}% right now.${miss} Raise Max hold %, widen the book or ` +
+      'market filter, or refresh odds.';
 }
 
 /**

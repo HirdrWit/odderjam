@@ -36,3 +36,15 @@ def _component(name):
 def test_tab_renders_empty_state(component, helper):
     body = _component(component)
     assert re.search(helper + r"\(data,", body), f"{component} does not call {helper}(data, ...)"
+
+
+def test_low_hold_uses_default_and_nearest_miss():
+    body = _component("LowHold")
+    assert "LOW_HOLD_DEFAULT_MAX" in body
+    assert re.search(r"lowHoldEmptyText\(data, maxHold, ", body), "LowHold must pass the lowest hold"
+
+
+def test_arbs_warns_on_negative_min_and_labels_total():
+    body = _component("Arbs")
+    assert "arbMinWarning(" in body
+    assert "ARB_TOTAL_NOTE" in body

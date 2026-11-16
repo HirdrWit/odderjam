@@ -16,7 +16,10 @@ import {Term} from './Term.jsx';
 import {NAV_GROUPS, NAV_SUBTITLES} from './navgroups.js';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
-import {alertsEmptyText, arbsEmptyText, evEmptyText, lowHoldEmptyText, middlesEmptyText, sharpEmptyText} from './empty.js';
+import {
+  alertsEmptyText, arbMinWarning, ARB_TOTAL_NOTE, arbsEmptyText, evEmptyText, LOW_HOLD_DEFAULT_MAX,
+  lowHoldEmptyText, middlesEmptyText, sharpEmptyText,
+} from './empty.js';
 import {legKey, useSlip} from './hooks.js';
 import {INDEPENDENT_NOTE, devigLabel, restoredNote, slipLegPriceText, tinyStakeNote} from './slip.js';
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
@@ -540,7 +543,9 @@ function Arbs() {
         }} />
         <SizingBar s={sizing} showTotal totalHint={bank ? bank.current.toFixed(0) : 'bankroll'} />
         <PropsFilter value={props} onChange={setProps} />
+        <div className="mut">{ARB_TOTAL_NOTE}</div>
       </div>
+      {arbMinWarning(min) && <div className="bad">⚠ {arbMinWarning(min)}</div>}
       <ApiError data={data} />
       <EmptyState text={arbsEmptyText(data, min)} />
       <RowExample tab="Arbitrage" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
@@ -839,13 +844,17 @@ function parseNumberInput(value, fallback) {
 const LOW_HOLD_BOOKS = ['', ...BOOKS, ...EXCHANGE_BOOKS];
 
 function LowHold() {
-  const [maxHold, setMaxHold] = useStored('lhMax', 1);
+  const [maxHold, setMaxHold] = useStored('lhMax', LOW_HOLD_DEFAULT_MAX);
   const [book, setBook] = useStored('lhBook', '');
   const [stake, setStake] = useStored('lhStake', 100);
   const [market, setMarket] = useStored('lhMarket', '');
   const marketParam = market ? `&market=${market}` : '';
   const data = useApi(
       `/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${marketParam}`);
+  // Nearest miss: only fetched once the filtered list comes back empty.
+  const empty = Array.isArray(data) && data.length === 0;
+  const all = useApi(empty ? '/api/lowhold?max_hold=100&stake=100' : null);
+  const lowest = Array.isArray(all) && all.length ? all[0].hold_pct : null;
   return (
     <>
       <TabIntro tab="Low Hold" />
@@ -892,7 +901,7 @@ function LowHold() {
           ))}
         </tbody>
       </table>
-      <EmptyState text={lowHoldEmptyText(data, maxHold)} />
+      <EmptyState text={lowHoldEmptyText(data, maxHold, lowest)} />
       <RowExample tab="Low Hold" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
