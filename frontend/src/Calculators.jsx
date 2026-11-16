@@ -1,6 +1,7 @@
 import {useState} from 'react';
 
 import * as calc from './calc.js';
+import {SizingBar, useSizing} from './Sizing.jsx';
 
 /** Formats American odds with a leading sign, or a dash if invalid. */
 function formatAmerican(odds) {
@@ -264,11 +265,51 @@ function Implied() {
   );
 }
 
+/** Rounded stakes for covering every outcome, with the profit if each one wins. */
+function SizedStakes({odds, total, sizing}) {
+  if (!(total > 0)) return null;
+  const result = calc.sizeArb(odds, total, sizing.round, sizing.maxSide);
+  return (
+    <>
+      <table>
+        <thead>
+          <tr>
+            <th>Outcome</th><th>Odds</th><th>Exact stake</th><th>Rounded stake</th>
+            <th>Profit if wins</th>
+          </tr>
+        </thead>
+        <tbody>
+          {odds.map((o, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              <td>{formatAmerican(o)}</td>
+              <td className="mut">{formatUsd(result.idealStakes[i])}</td>
+              <td>{formatUsd(result.stakes[i])}</td>
+              <td className={signClass(result.profits[i])}>{formatUsd(result.profits[i])}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mut">
+        Rounded total {formatUsd(result.totalStake)} · profit {formatUsd(result.minProfit)} to{' '}
+        {formatUsd(result.maxProfit)}{result.capped ? ' · scaled down to max per side' : ''}
+      </p>
+      {result.warning && <p className="bad">⚠ {result.warning}</p>}
+    </>
+  );
+}
+
 function Hold() {
   const [odds, setOdds] = useState([-110, -110]);
+  const [total, setTotal] = useState(200);
+  const sizing = useSizing();
   const result = allValidAmerican(odds) ? calc.hold(odds) : null;
   return (
     <>
+      <div className="bar">
+        <Num label="Total stake $ (low-hold rollover)" value={total} set={setTotal} />
+        <SizingBar s={sizing} />
+      </div>
       <OddsList odds={odds} setOdds={setOdds} label="Outcome" />
       {result && <Out rows={[
         ['Hold (book margin)', formatPct(result.holdPct), result.holdPct <= 0 ? 'best' : ''],
@@ -276,6 +317,7 @@ function Hold() {
         ['Total implied', formatPct(result.totalImplied * 100)],
       ]} />}
       {result && result.holdPct < 0 && <p className="best">Negative hold — this is an arbitrage.</p>}
+      {result && <SizedStakes odds={odds} total={total} sizing={sizing} />}
     </>
   );
 }
@@ -378,8 +420,12 @@ function Bonus() {
   const [bonus, setBonus] = useState(100);
   const [oddsBonus, setOddsBonus] = useState(250);
   const [oddsHedge, setOddsHedge] = useState(-300);
+  const sizing = useSizing();
   const valid = isValidAmerican(oddsBonus) && isValidAmerican(oddsHedge) && bonus > 0;
   const result = valid ? calc.bonusBetHedge(bonus, oddsBonus, oddsHedge) : null;
+  const sized = valid ?
+      calc.sizeBonusHedge(bonus, oddsBonus, oddsHedge, sizing.round, sizing.maxSide) :
+      null;
   return (
     <>
       <div className="bar">
@@ -387,10 +433,33 @@ function Bonus() {
         <Num label="Bonus side odds" value={oddsBonus} set={setOddsBonus} />
         <Num label="Hedge side odds (cash)" value={oddsHedge} set={setOddsHedge} />
       </div>
+      <div className="bar"><SizingBar s={sizing} /></div>
       {result && <Out rows={[
-        ['Hedge stake', formatUsd(result.hedgeStake)],
-        ['Guaranteed profit', formatUsd(result.profit), signClass(result.profit)],
-        ['Conversion', formatPct(result.conversionPct, 1), 'best'],
+        [
+          'Exact hedge stake',
+          `${formatUsd(result.hedgeStake)} (profit ${formatUsd(result.profit)}, ` +
+              `${formatPct(result.conversionPct, 1)})`,
+        ],
+        [
+          'Rounded hedge stake',
+          `${formatUsd(sized.hedgeStake)}${sized.capped ? ' (capped at max per side)' : ''}`,
+          'best',
+        ],
+        [
+          'Profit if bonus side wins',
+          formatUsd(sized.profitIfBonusWins),
+          signClass(sized.profitIfBonusWins),
+        ],
+        [
+          'Profit if hedge side wins',
+          formatUsd(sized.profitIfHedgeWins),
+          signClass(sized.profitIfHedgeWins),
+        ],
+        [
+          'Conversion (worst case)',
+          formatPct(sized.conversionPct, 1),
+          signClass(sized.conversionPct),
+        ],
       ]} />}
       <p className="mut">
         Bonus bet stake is not returned on a win. Longer odds on the bonus side usually convert
@@ -403,33 +472,26 @@ function Bonus() {
 function Arb() {
   const [odds, setOdds] = useState([110, -105]);
   const [total, setTotal] = useState(100);
+  const sizing = useSizing();
   const result = allValidAmerican(odds) ? calc.arb(odds, total) : null;
   return (
     <>
-      <Num label="Total stake $" value={total} set={setTotal} />
+      <div className="bar">
+        <Num label="Total stake $" value={total} set={setTotal} />
+        <SizingBar s={sizing} />
+      </div>
       <OddsList odds={odds} setOdds={setOdds} max={3} label="Outcome" />
       {result && (
         <>
           <Out rows={[
             [
-              'Profit',
+              'Profit (exact stakes)',
               `${formatPct(result.profitPct)} (${formatUsd(result.payout - total)})`,
               signClass(result.profitPct),
             ],
             ['Payout (any outcome)', formatUsd(result.payout)],
           ]} />
-          <table>
-            <thead><tr><th>Outcome</th><th>Odds</th><th>Stake</th></tr></thead>
-            <tbody>
-              {odds.map((o, i) => (
-                <tr key={i}>
-                  <td>{i + 1}</td>
-                  <td>{formatAmerican(o)}</td>
-                  <td>{formatUsd(result.stakes[i])}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <SizedStakes odds={odds} total={total} sizing={sizing} />
         </>
       )}
     </>

@@ -512,3 +512,172 @@ export function spreadToMoneyline(spread, sd) {
     dogAmerican: probToAmerican(1 - fav),
   };
 }
+
+// ---- stake sizing (backend/engine/sizing.py) ----
+
+const CENT = 0.01;
+const EPS = 1e-9;
+
+function roundCents(x) {
+  return Math.round(x * 100) / 100;
+}
+
+/** Returns the rounding increment, treating 0 (or less) as whole cents. */
+function incrementOf(increment) {
+  return increment > 0 ? increment : CENT;
+}
+
+/**
+ * Returns the largest stake allowed on one side: `maxPerSide` rounded down to
+ * the increment, or Infinity when there is no cap.
+ * @param {number} increment Rounding step in dollars; 0 means cents.
+ * @param {?number} maxPerSide
+ * @return {number}
+ * @throws {Error} If the cap is smaller than one increment.
+ */
+export function stakeCap(increment, maxPerSide) {
+  if (!(maxPerSide > 0)) return Infinity;
+  const inc = incrementOf(increment);
+  const cap = Math.floor(maxPerSide / inc + EPS) * inc;
+  if (cap <= 0) {
+    throw new Error('max stake per side is smaller than the rounding increment');
+  }
+  return roundCents(cap);
+}
+
+/**
+ * Rounds a single stake (e.g. a +EV Kelly stake) to the nearest increment,
+ * then applies the per-side cap.
+ * @param {number} stake
+ * @param {number=} increment Rounding step in dollars; 0 means cents.
+ * @param {?number=} maxPerSide
+ * @return {number}
+ */
+export function roundStake(stake, increment = 1, maxPerSide = null) {
+  const inc = incrementOf(increment);
+  const rounded = Math.max(Math.floor(stake / inc + 0.5 + EPS) * inc, 0);
+  return roundCents(Math.min(rounded, stakeCap(increment, maxPerSide)));
+}
+
+/** Returns the rounded stakes to try for `target`: its floor and ceil steps. */
+function choices(target, inc, cap) {
+  const steps = target / inc;
+  const lo = Math.floor(steps + 1e-6) * inc;
+  const near = Math.abs(steps - Math.round(steps)) < 1e-6 ? [lo] : [lo, lo + inc];
+  const inRange = near.filter((x) => x > 0 && x <= cap + EPS).map((x) => roundCents(x));
+  const options = [...new Set(inRange)].sort((a, b) => a - b);
+  return options.length ? options : [roundCents(Math.min(inc, cap))];
+}
+
+/** Returns every combination that takes one item from each list. */
+function cartesian(lists) {
+  return lists.reduce(
+      (acc, list) => acc.flatMap((a) => list.map((x) => [...a, x])), [[]]);
+}
+
+/** Returns true if score `a` beats score `b` (compared element by element). */
+function isBetter(a, b) {
+  return !b || a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+}
+
+/**
+ * Rounds and caps the stakes of an arb or low-hold bet, choosing among the
+ * floor/ceil options the one with the best worst-case profit percentage.
+ * @param {!Array<number>} american
+ * @param {number} total
+ * @param {number=} increment Rounding step in dollars; 0 means cents.
+ * @param {?number=} maxPerSide
+ * @return {{stakes: !Array<number>, idealStakes: !Array<number>,
+ *     totalStake: number, profits: !Array<number>, minProfit: number,
+ *     maxProfit: number, minProfitPct: number, idealProfitPct: number,
+ *     capped: boolean, roundingLoss: boolean, warning: ?string}}
+ */
+export function sizeArb(american, total, increment = 1, maxPerSide = null) {
+  const decimals = american.map((a) => americanToDecimal(a));
+  const ideal = arb(american, total);
+  const inc = incrementOf(increment);
+  const cap = stakeCap(increment, maxPerSide);
+  const scale = Math.min(1, cap / Math.max(...ideal.stakes));
+  const targetTotal = total * scale;
+  const targets = ideal.stakes.map((s) => s * scale);
+  const score = (candidate) => {
+    const staked = sum(candidate);
+    const worst = Math.min(...candidate.map((s, i) => s * decimals[i])) - staked;
+    return [Math.round((worst / staked) * 1e9) / 1e9, -Math.abs(staked - targetTotal)];
+  };
+  let stakes = null;
+  let best = null;
+  for (const candidate of cartesian(targets.map((t) => choices(t, inc, cap)))) {
+    const candidateScore = score(candidate);
+    if (isBetter(candidateScore, best)) {
+      best = candidateScore;
+      stakes = candidate;
+    }
+  }
+  const staked = roundCents(sum(stakes));
+  const profits = stakes.map((s, i) => s * decimals[i] - staked);
+  const minProfit = Math.min(...profits);
+  const maxProfit = Math.max(...profits);
+  const roundingLoss = ideal.profitPct >= 0 && minProfit < -EPS;
+  const warning = roundingLoss ?
+      `Rounded stakes lose up to $${(-minProfit).toFixed(2)} on one outcome; ` +
+          'use a smaller increment' :
+      null;
+  return {
+    stakes,
+    idealStakes: targets,
+    totalStake: staked,
+    profits,
+    minProfit,
+    maxProfit,
+    minProfitPct: (minProfit / staked) * 100,
+    idealProfitPct: ideal.profitPct,
+    capped: scale < 1,
+    roundingLoss,
+    warning,
+  };
+}
+
+/**
+ * Rounds and caps the cash hedge for a bonus bet (stake not returned) on the
+ * bonus side.
+ * @param {number} bonus Bonus bet amount.
+ * @param {number} oddsBonus American odds of the bonus side.
+ * @param {number} oddsHedge American odds of the cash hedge side.
+ * @param {number=} increment Rounding step in dollars; 0 means cents.
+ * @param {?number=} maxPerSide
+ * @return {{hedgeStake: number, idealHedge: number, profitIfBonusWins: number,
+ *     profitIfHedgeWins: number, minProfit: number, maxProfit: number,
+ *     capped: boolean, conversionPct: number}}
+ */
+export function sizeBonusHedge(
+    bonus, oddsBonus, oddsHedge, increment = 1, maxPerSide = null) {
+  const decimalBonus = americanToDecimal(oddsBonus);
+  const decimalHedge = americanToDecimal(oddsHedge);
+  const bonusWin = bonus * (decimalBonus - 1);
+  const ideal = bonusWin / decimalHedge;
+  const inc = incrementOf(increment);
+  const cap = stakeCap(increment, maxPerSide);
+  const profits = (h) => [bonusWin - h, h * (decimalHedge - 1)];
+  let hedgeStake = null;
+  let best = null;
+  for (const h of choices(Math.min(ideal, cap), inc, cap)) {
+    const candidateScore = [Math.min(...profits(h)), -Math.abs(h - ideal)];
+    if (isBetter(candidateScore, best)) {
+      best = candidateScore;
+      hedgeStake = h;
+    }
+  }
+  const [profitIfBonusWins, profitIfHedgeWins] = profits(hedgeStake);
+  const minProfit = Math.min(profitIfBonusWins, profitIfHedgeWins);
+  return {
+    hedgeStake,
+    idealHedge: ideal,
+    profitIfBonusWins,
+    profitIfHedgeWins,
+    minProfit,
+    maxProfit: Math.max(profitIfBonusWins, profitIfHedgeWins),
+    capped: ideal > cap,
+    conversionPct: (minProfit / bonus) * 100,
+  };
+}

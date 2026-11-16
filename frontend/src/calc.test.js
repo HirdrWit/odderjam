@@ -146,3 +146,44 @@ test('spread to moneyline', () => {
   assert.ok(f.favAmerican < -100 && f.dogAmerican > 100);
   close(calc.normCdf(1.96), 0.975, 1e-4);
 });
+
+test('stake rounding matches backend', () => {
+  assert.equal(calc.roundStake(13.47, 5), 15);
+  assert.equal(calc.roundStake(12.49, 5), 10);
+  assert.equal(calc.roundStake(13.47, 0), 13.47);
+  assert.equal(calc.roundStake(812, 10, 305), 300);
+  assert.throws(() => calc.roundStake(10, 10, 5));
+});
+
+test('sizeArb re-balances and flags rounding losses', () => {
+  const r = calc.sizeArb([110, 110], 100, 0);
+  assert.deepEqual(r.stakes, [50, 50]);
+  close(r.minProfit, 5);
+  assert.deepEqual(calc.sizeArb([-110, -110], 200, 5).stakes, [100, 100]);
+  const capped = calc.sizeArb([110, -105], 1000, 5, 300);
+  assert.ok(Math.max(...capped.stakes) <= 300 && capped.capped && capped.minProfit > 0);
+  assert.ok(calc.sizeArb([105, -103], 20, 0).minProfit > 0);
+  const lossy = calc.sizeArb([105, -103], 20, 10);
+  assert.ok(lossy.minProfit < 0 && lossy.roundingLoss && lossy.warning);
+  // The ideal arb result must be read correctly, or roundingLoss is never set.
+  close(lossy.idealProfitPct, calc.arb([105, -103], 20).profitPct);
+  for (const a of [100, 105, 120, 150, 300]) {
+    for (const b of [-140, -120, -105, 100, 110]) {
+      for (const t of [10, 50, 100, 333]) {
+        for (const inc of [1, 5, 10]) {
+          const x = calc.sizeArb([a, b], t, inc);
+          assert.ok(x.stakes.every((s) => Math.abs(s / inc - Math.round(s / inc)) < 1e-9));
+          if (x.idealProfitPct >= 0) assert.equal(x.roundingLoss, x.minProfit < -1e-9);
+        }
+      }
+    }
+  }
+});
+
+test('sizeBonusHedge rounds the hedge', () => {
+  const r = calc.sizeBonusHedge(100, 250, -300, 5);
+  close(r.idealHedge, 187.5);
+  assert.ok([185, 190].includes(r.hedgeStake));
+  close(r.profitIfBonusWins, 250 - r.hedgeStake);
+  assert.equal(calc.sizeBonusHedge(100, 250, -300, 5, 100).hedgeStake, 100);
+});
