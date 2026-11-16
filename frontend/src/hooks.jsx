@@ -1,5 +1,7 @@
 import {useEffect, useState} from 'react';
 
+import {GOTO_EVENT} from './help.js';
+
 export {useApi, useStored} from './hooks.js';
 
 const TOAST_MS = 3500;
@@ -8,9 +10,10 @@ const TOAST_MS = 3500;
  * Shows a short inline notice.
  * @param {string} text
  * @param {string=} kind 'ok' or 'err'.
+ * @param {{label: string, tab: string}=} action Optional link to another tab.
  */
-export function toast(text, kind = 'ok') {
-  window.dispatchEvent(new CustomEvent('toast', {detail: {text, kind}}));
+export function toast(text, kind = 'ok', action = undefined) {
+  window.dispatchEvent(new CustomEvent('toast', {detail: {text, kind, action}}));
 }
 
 /** Renders the notices sent with `toast`. */
@@ -33,7 +36,13 @@ export function Toaster() {
   return (
     <div className="toasts" role="status" aria-live="polite">
       {items.map((t) => (
-        <div key={t.id} className={`toast ${t.kind}`}>{t.kind === 'err' ? '⚠ ' : '✓ '}{t.text}</div>
+        <div key={t.id} className={`toast ${t.kind}`}>{t.kind === 'err' ? '⚠ ' : '✓ '}{t.text}
+          {t.action && (
+            <>{' '}<button type="button" className="link" onClick={() => {
+              window.dispatchEvent(new CustomEvent(GOTO_EVENT, {detail: t.action.tab}));
+            }}>{t.action.label}</button></>
+          )}
+        </div>
       ))}
     </div>
   );
