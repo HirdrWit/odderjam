@@ -1342,7 +1342,7 @@ function App() {
       </nav>
       <div className="content">
         {welcome && <Welcome onJump={go} onClose={closeWelcome} />}
-        <main><Page /></main>
+        <main><Page welcome={welcome} /></main>
       </div>
       <Toaster />
     </div>

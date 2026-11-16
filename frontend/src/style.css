@@ -133,3 +133,7 @@ nav button.link, .welcome button.link { text-decoration: underline; }
 input.bankroll-start { width: 90px; }
 .bankroll { white-space: nowrap; }
 .info:focus-visible { outline: 2px solid #2a6df4; }
+.card:hover { background: #1b2430; }
+.card:focus-visible { outline: 2px solid #2a6df4; }
+.card .chevron { color: #8aa0b8; display: inline-block; width: 1em; }
+.toast button.link { background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
