@@ -469,7 +469,7 @@ def middles(
             pmf = mid.model_pmf(e["sport"], key, _center(key, outcomes, e["home"]))
             for la, overs in over.items():
                 for lb, unders in under.items():
-                    if lb - la <= 0 or lb - la < min_window:
+                    if lb - la <= 0 or lb - la < min_window or not mid.can_hit(la, lb):
                         continue
                     pairs = [(a, b) for a in overs for b in unders if a[1] != b[1]]
                     if not pairs:
