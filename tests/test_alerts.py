@@ -3,7 +3,6 @@ from fastapi.testclient import TestClient
 
 from backend import alerts, main, providers
 from backend.providers import mock
-from backend.routes import bets
 
 
 def outcome(name, point=None, **prices):
@@ -17,8 +16,7 @@ def event(dk_price=150, fd_price=-110):
 
 
 @pytest.fixture
-def db(tmp_path, monkeypatch):
-    monkeypatch.setattr(bets, "DB", tmp_path / "t.db")
+def db(monkeypatch):
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
 
 

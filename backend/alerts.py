@@ -20,8 +20,9 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import providers, scan
-from .routes import bets
+from . import db, providers, scan
+from .engine import sharp
+from .providers.books import max_sharp_hold, sharp_weights_spec
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/alerts")
@@ -31,7 +32,7 @@ Kind = Literal["ev", "arb"]
 
 
 def conn() -> sqlite3.Connection:
-    c = bets.conn()  # same database file as the bet tracker
+    c = db.conn()  # same database file as the bet tracker
     c.execute("""CREATE TABLE IF NOT EXISTS alert_rules (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, kind TEXT NOT NULL,
         min_value REAL NOT NULL DEFAULT 0, book TEXT, market TEXT, sport TEXT, created_at TEXT NOT NULL)""")
@@ -68,7 +69,9 @@ def matches(rule, events: list[dict]) -> list[tuple[str, dict]]:
     """(kind, row) for every opportunity in events that satisfies rule."""
     f = {"market": rule["market"] or None, "sport": rule["sport"] or None}
     if rule["kind"] == "ev":
-        rows = scan.ev_rows(events, book=rule["book"] or None, min_ev=rule["min_value"], **f)
+        # Same fair price as the +EV screen's defaults (SHARP_WEIGHTS, MAX_SHARP_HOLD).
+        rows = scan.ev_rows(events, sharp.parse_weights(sharp_weights_spec()), max_sharp_hold(),
+                            book=rule["book"] or None, min_ev=rule["min_value"], **f)
     else:
         rows = scan.arb_rows(events, min_profit=rule["min_value"], **f)
         if rule["book"]:
