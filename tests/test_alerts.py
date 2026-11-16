@@ -155,5 +155,5 @@ def test_api_rules_and_feed(client, snapshot):
 
 
 def test_mock_snapshot_rule_runs(db):
-    add_rule(min_value=-100)
+    add_rule(min_value=0)  # lowest valid threshold; negative rules are dropped (odderjam-46)
     assert alerts.evaluate(mock.snapshot(seed=1))
