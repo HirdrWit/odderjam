@@ -89,3 +89,16 @@ h3.section { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; 
 .intro-help { display: flex; justify-content: flex-end; margin-bottom: 6px; }
 .intro-help button { padding: 2px 8px; border-radius: 50%; }
 @media (max-width: 600px) { .intro { flex-direction: column; align-items: stretch; } }
+
+.content { flex: 1; min-width: 0; }
+.welcome { margin: 16px 16px 0; padding: 12px 16px; background: #1b2634; border: 1px solid #2c3b4e; border-radius: 8px; overflow-wrap: anywhere; }
+.welcome p { margin: 0 0 8px; }
+.welcome ol { margin: 0 0 8px; padding-left: 20px; }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+nav button.link, .welcome button.link { text-decoration: underline; }
+@media (max-width: 640px) {
+  .app { flex-direction: column; }
+  nav { width: auto; flex-direction: row; flex-wrap: wrap; }
+  nav h1 { width: 100%; margin-bottom: 4px; }
+  .welcome { margin: 8px; }
+}

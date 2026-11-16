@@ -14,6 +14,7 @@ import {legKey, useSlip} from './hooks.js';
 import {slipPriceText} from './slip.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {ageText, isProp} from './odds.js';
+import {dismissWelcome, shouldShowWelcome} from './welcome.js';
 
 // Field names such as `age_seconds` and `ev_pct` come straight from the
 // backend's JSON API, so they keep the backend's snake_case.
@@ -1219,6 +1220,32 @@ function loadTab() {
   }
 }
 
+/** First-visit banner: what Odderjam is, where to start, and jump buttons. */
+function Welcome({onJump, onClose}) {
+  return (
+    <section className="welcome" aria-label="Welcome">
+      <p>
+        <strong>Welcome to Odderjam.</strong> It compares sportsbook prices and finds bets with a built-in edge.
+      </p>
+      <ol>
+        <li>Look at prices on the Odds Screen.</li>
+        <li>Find an edge on +EV or Arbitrage.</li>
+        <li>Log the bet in Tracker.</li>
+      </ol>
+      <div className="welcome-actions">
+        <button onClick={() => {
+          onJump('Odds Screen');
+        }}>Go to Odds Screen</button>
+        <button onClick={() => {
+          onJump('+EV');
+        }}>Go to +EV</button>
+        <button className="link" onClick={onClose}>Dismiss</button>
+      </div>
+      <p className="mut small">This is not betting advice, and results are not guaranteed.</p>
+    </section>
+  );
+}
+
 function App() {
   const [tab, setTab] = useState(() => loadTab());
   const go = (next) => {
@@ -1228,6 +1255,11 @@ function App() {
     } catch {
       // Storage can be unavailable; the choice just is not remembered.
     }
+  };
+  const [welcome, setWelcome] = useState(() => shouldShowWelcome());
+  const closeWelcome = () => {
+    setWelcome(false);
+    dismissWelcome();
   };
   const Page = TABS[tab];
   return (
@@ -1239,10 +1271,16 @@ function App() {
             go(t);
           }}>{t}</button>
         ))}
+        <button className="link" onClick={() => {
+          setWelcome(true);
+        }}>Show welcome</button>
         <RefreshBox />
         <AlertWatcher />
       </nav>
-      <main><Page /></main>
+      <div className="content">
+        {welcome && <Welcome onJump={go} onClose={closeWelcome} />}
+        <main><Page /></main>
+      </div>
       <Toaster />
     </div>
   );
