@@ -2,6 +2,8 @@ import {Fragment, useState} from 'react';
 
 import {americanToProb} from './calc.js';
 import {useApi, useSlip, useStored} from './hooks.js';
+import {toast} from './hooks.jsx';
+import {booksHelp, chevron, introVisible, slipToast} from './oddsrow.js';
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {slipLeg} from './slip.js';
@@ -60,7 +62,11 @@ function LineTable({group, books, format, legOf, slip}) {
   };
   const togglePrice = (o, book) => {
     const leg = legOf(o, book);
-    if (o.prices[book] != null && leg) slip.toggle(leg);
+    if (o.prices[book] == null || !leg) return;
+    const added = !slip.has(leg);
+    slip.toggle(leg);
+    const t = slipToast(added);
+    toast(t.text, t.kind, t.action);
   };
   const bookCount = stats.bookCount;
   return (
@@ -265,7 +271,14 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
   }).join(' · ');
   const legOf = (o, book) => slipLeg(event, m, o, book);
   return (
-    <div className="card" onClick={onToggle}>
+    <div className="card" role="button" tabIndex={0} aria-expanded={isOpen} onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onToggle();
+        }
+      }}>
+      <span className="chevron" aria-hidden="true">{chevron(isOpen)}</span>{' '}
       {event.live && <><span className="badge live">LIVE</span>{' '}</>}
       <b>{event.away} @ {event.home}</b>{' '}
       <span className="mut">{event.sport} · {new Date(event.start).toLocaleString()}</span>
@@ -303,7 +316,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
 }
 
 /** Odds Screen tab: every book's prices per event, with best price, hold and fair odds. */
-export function OddsScreen() {
+export function OddsScreen({welcome = false}) {
   const [sport, setSport] = useStored('oddsSport', '');
   const [market, setMarket] = useStored('oddsMarket', 'moneyline');
   const [format, setFormat] = useStored('oddsFormat', 'american');
@@ -323,7 +336,7 @@ export function OddsScreen() {
 
   return (
     <>
-      <TabIntro tab="Odds Screen" />
+      {introVisible(welcome) && <TabIntro tab="Odds Screen" />}
       <div className="bar wrap">
         <select value={sport} onChange={(e) => {
           setSport(e.target.value);
@@ -339,10 +352,11 @@ export function OddsScreen() {
         }}>
           {Object.entries(FORMATS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <button className="chip" onClick={() => {
+        <button className="chip" title={booksHelp(shown.length, books.length)} onClick={() => {
           setShowBooks(!showBooks);
         }}>Books ({shown.length}/{books.length})</button>
       </div>
+      {showBooks && <div className="mut small">{booksHelp(shown.length, books.length)}</div>}
       {showBooks && <BookPicker books={books} hidden={hidden} setHidden={setHidden} />}
       <div className="subnav">
         {markets.map((m) => (
