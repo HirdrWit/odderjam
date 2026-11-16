@@ -529,15 +529,12 @@ function Arbs() {
 const PROMOS = {
   'bonus-bet': [
     'Bonus bet',
-    'Stake is not returned. Bonus goes on the long side; hedge the other side with cash.',
   ],
   'profit-boost': [
     'Profit boost',
-    'Cash bet with winnings boosted. Max caps the extra winnings ($).',
   ],
   'second-chance': [
     'Second chance / no-sweat',
-    'Cash bet; a loss is refunded as a bonus bet worth the assumed conversion rate.',
   ],
 };
 
@@ -607,6 +604,7 @@ function Promos() {
   };
   return (
     <>
+      <TabIntro tab="Promos" />
       <div className="bar wrap">
         <select value={kind} onChange={(e) => {
           setKind(e.target.value);
@@ -645,7 +643,6 @@ function Promos() {
           {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </div>
-      <p className="mut">{PROMOS[kind][1]}</p>
       {(Array.isArray(data) ? data : []).map((r, i) => (
         <PromoCard key={i} promo={r} onTrack={() => {
           track(r);
@@ -732,6 +729,7 @@ function Parlay() {
   };
   return (
     <>
+      <TabIntro tab="Parlay" />
       <div className="bar">
         <Term id="kelly">Kelly</Term> <input type="number" step="0.05" value={kelly} onChange={(e) => {
           setKelly(Number(e.target.value));
@@ -821,6 +819,7 @@ function LowHold() {
       `/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${marketParam}`);
   return (
     <>
+      <TabIntro tab="Low Hold" />
       <div className="bar">
         Max hold % <input type="number" step="0.25" value={maxHold} onChange={(e) => {
           setMaxHold(parseNumberInput(e.target.value, maxHold));
@@ -904,6 +903,7 @@ function Middles() {
   };
   return (
     <>
+      <TabIntro tab="Middles" />
       <div className="bar">
         Market <select value={market} onChange={(e) => {
           setMarket(e.target.value);
@@ -1147,6 +1147,7 @@ function SharpMoney() {
       `&k=${k}&min_volume=${minVolume}`);
   return (
     <>
+      <TabIntro tab="Sharp Money" />
       <div className="bar">
         Last <input type="number" step="1" min="1" value={windowMin} onChange={(e) => {
           setWindowMin(positiveInput(e.target.value, windowMin));

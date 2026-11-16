@@ -26,6 +26,30 @@ export const INTRO_COPY = {
     what: 'Get told when a good bet appears, so you do not have to keep watching the screen, and it never spends extra API credits.',
     how: 'Add a rule with the minimum percent you care about, and set a Discord webhook if you want messages there.',
   },
+  'Parlay': {
+    what: 'Combine legs from +EV into one slip (a single bet that needs every leg to win) and see which book pays the most for the whole slip.',
+    how: 'Add at least two legs from the +EV tab, then compare the books listed below your slip.',
+  },
+  'Low Hold': {
+    what: 'Markets where the sportsbook\'s built-in cut, called the hold (the percent it keeps), is small, so bets cost less to place.',
+    how: 'Start with the lowest Max hold % and place the legs shown at the stakes listed.',
+  },
+  'Middles': {
+    what: 'Bet both sides of a spread or total at different lines, so you can win both bets if the final score lands between them.',
+    how: 'Set the most you will risk on a miss in Max cost, then place both legs at the stakes shown.',
+  },
+  'Sharp Money': {
+    what: 'Exchange markets (where bettors trade against each other) where trading volume just spiked, a hint that informed bettors are moving the price.',
+    how: 'Start with Spike ×, the multiple of the usual volume that counts as a spike, and raise it to see fewer, stronger signals.',
+  },
+  'Promos': {
+    what: 'Turn a free bet (a bonus bet whose stake is not returned), a profit boost or a second-chance bet (a loss comes back as a bonus bet) into the most guaranteed cash.',
+    how: 'Pick your promo type, then your book and amount, and for a profit boost use Max to cap the extra winnings.',
+  },
+  'Pick\'em': {
+    what: 'Find the best slips for PrizePicks or Underdog-style contests, where you pick players\' lines and the payout is fixed.',
+    how: 'Import or add your lines first, then choose Power or Flex and the slip sizes you want.',
+  },
 };
 
 /**

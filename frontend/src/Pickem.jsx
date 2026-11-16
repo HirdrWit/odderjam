@@ -1,5 +1,6 @@
 import {useState} from 'react';
 
+import {TabIntro} from './TabIntro.jsx';
 import {postJson, toast, useApi, useStored} from './hooks.jsx';
 import {formatTable, parseTableText} from './pickem.js';
 
@@ -88,6 +89,7 @@ export function Pickem() {
 
   return (
     <>
+      <TabIntro tab="Pick'em" />
       <h3>Lines</h3>
       <textarea rows={4} cols={60} value={importText} onChange={(e) => setImportText(e.target.value)}
         placeholder="player, market, line[, over|under] (one per row)" />
