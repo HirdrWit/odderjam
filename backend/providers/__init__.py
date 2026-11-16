@@ -4,14 +4,37 @@ Live fetches only happen when the cache is older than ODDS_CACHE_MINUTES
 (default 120) or when refresh() is called explicitly.
 """
 import json
+import logging
 import os
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Versioned so a cache written in an older event shape is never read back.
-CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v2.json"
+CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v3.json"
 _lock = threading.Lock()
+log = logging.getLogger(__name__)
+MOCK_HISTORY_SECONDS = 300  # mock odds change every call; only keep one snapshot per 5 minutes
+
+# Called with each newly fetched live snapshot (see on_fetch). Never causes a fetch itself.
+_listeners: list = []
+
+
+def on_fetch(fn) -> None:
+    """Register fn(events) to run after every successful live fetch."""
+    if fn not in _listeners:
+        _listeners.append(fn)
+
+
+def off_fetch(fn) -> None:
+    if fn in _listeners:
+        _listeners.remove(fn)
+
+
+def _fetched(data: list[dict]) -> None:
+    for fn in list(_listeners):
+        threading.Thread(target=fn, args=(data,), daemon=True).start()
 
 
 def _live() -> bool:
@@ -30,7 +53,8 @@ def _fetch() -> list[dict]:
 
 def cache_info() -> dict:
     meta = CACHE.parent / ".odds_meta.json"
-    info = {"live": _live(), "age_seconds": None, "ttl_seconds": _ttl()}
+    from .theoddsapi import PROP_MARKETS  # lazy: keeps httpx out of mock mode
+    info = {"live": _live(), "age_seconds": None, "ttl_seconds": _ttl(), "prop_markets": PROP_MARKETS}
     if CACHE.exists():
         info["age_seconds"] = time.time() - CACHE.stat().st_mtime
     if meta.exists():
@@ -38,10 +62,36 @@ def cache_info() -> dict:
     return info
 
 
-def get_snapshot(force: bool = False) -> list[dict]:
+def _store(data: list[dict], min_gap: float = 0) -> None:
+    """Save a fetched snapshot to the odds history and fill any closing lines now due.
+    Skips the save if the newest stored snapshot is under min_gap seconds old.
+    History problems must never stop odds from being served."""
+    from .. import history  # local import: history imports providers.books, which would be circular
+    try:
+        last = history.last_fetched_at()
+        if min_gap and last and last > history.ts(datetime.now(timezone.utc) - timedelta(seconds=min_gap)):
+            return
+        history.record(data)
+        history.capture_closing()
+    except Exception:
+        log.exception("could not store odds history")
+
+
+def peek_snapshot() -> list[dict]:
+    """The latest snapshot already on hand (mock data or the disk cache). Never fetches."""
     if not _live():
         from .mock import snapshot
         return snapshot()
+    with _lock:
+        return json.loads(CACHE.read_text()) if CACHE.exists() else []
+
+
+def get_snapshot(force: bool = False) -> list[dict]:
+    if not _live():
+        from .mock import snapshot
+        data = snapshot()
+        _store(data, 0 if force else MOCK_HISTORY_SECONDS)
+        return data
     with _lock:
         fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < _ttl()
         if fresh and not force:
@@ -54,6 +104,16 @@ def get_snapshot(force: bool = False) -> list[dict]:
             raise
         if data:
             CACHE.write_text(json.dumps(data))
+            _store(data)
+            _fetched(data)
         elif CACHE.exists():
             return json.loads(CACHE.read_text())
         return data
+
+
+def get_scores(sports: list[str]) -> list[dict]:
+    """Final/live scores for auto-settling bets. Live API only: spends credits on every call."""
+    if not _live():
+        raise RuntimeError("auto-settle needs ODDS_API_KEY (live scores)")
+    from .theoddsapi import scores
+    return scores(sports)
