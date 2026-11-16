@@ -994,9 +994,9 @@ function AlertWatcher() {
   };
   return (
     <div className="refresh">
-      <label className="mut">
-        <input type="checkbox" checked={on && notificationsAllowed()} onChange={toggle} /> Browser
-        alerts
+      <label className="chk mut">
+        <input type="checkbox" checked={on && notificationsAllowed()} onChange={toggle} />
+        Browser alerts
       </label>
       {permission === 'denied' && (
         <div className="mut small">Notifications are blocked in this browser</div>
