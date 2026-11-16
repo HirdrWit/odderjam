@@ -3,10 +3,9 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import main
+from backend import db, main
 from backend.engine import promo
 from backend.providers import mock
-from backend.routes import bets
 
 
 def _outcome(name, point, **prices):
@@ -112,9 +111,8 @@ def test_promo_endpoint_rejects_bad_input(client):
 # ---- tracker ----
 
 @pytest.fixture
-def db_client(tmp_path, monkeypatch):
-    monkeypatch.setattr(bets, "DB", tmp_path / "t.db")
-    return TestClient(main.app)
+def db_client():
+    return TestClient(main.app)  # conftest points db.DB at a temp file
 
 
 def test_bonus_bet_tracker_pl(db_client):
@@ -140,6 +138,6 @@ def test_old_db_gets_is_bonus_column(tmp_path, monkeypatch):
             sport TEXT, market TEXT DEFAULT 'moneyline', pick TEXT NOT NULL, book TEXT, odds REAL NOT NULL,
             stake REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending', closing_odds REAL, ev_pct REAL, notes TEXT)""")
         c.execute("INSERT INTO bets (placed_at,pick,odds,stake,status) VALUES ('t','X',100,10,'lost')")
-    monkeypatch.setattr(bets, "DB", path)
+    monkeypatch.setattr(db, "DB", path)
     (b,) = TestClient(main.app).get("/api/bets").json()
     assert b["is_bonus"] is False and b["profit"] == -10
