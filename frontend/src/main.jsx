@@ -8,6 +8,7 @@ import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
+import {arbsEmptyText, lowHoldEmptyText, sharpEmptyText} from './empty.js';
 import {legKey, useSlip} from './hooks.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {ageText, isProp} from './odds.js';
@@ -290,6 +291,10 @@ function ApiError({data}) {
   return <div className="bad">{text}</div>;
 }
 
+function EmptyState({text}) {
+  return text ? <div className="mut">{text}</div> : null;
+}
+
 function PositiveEv() {
   const [minEv, setMinEv] = useStored('evMin', 1);
   const [method, setMethod] = useStored('evMethod', 'multiplicative');
@@ -503,6 +508,7 @@ function Arbs() {
         <PropsFilter value={props} onChange={setProps} />
       </div>
       <ApiError data={data} />
+      <EmptyState text={arbsEmptyText(data, min)} />
       {(Array.isArray(data) ? data : []).map((r, i) => (
         <ArbCard key={i} arb={r} onTrack={() => {
           track(r);
@@ -846,6 +852,7 @@ function LowHold() {
           ))}
         </tbody>
       </table>
+      <EmptyState text={lowHoldEmptyText(data, maxHold)} />
     </>
   );
 }
@@ -1175,6 +1182,7 @@ function SharpMoney() {
           ))}
         </tbody>
       </table>
+      <EmptyState text={sharpEmptyText(data, k, windowMin)} />
     </>
   );
 }

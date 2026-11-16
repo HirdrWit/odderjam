@@ -1,32 +1,47 @@
 /**
  * @fileoverview Empty-state messages for list tabs (no React), tested in
- * empty.test.js.
+ * empty.test.js. Each helper returns text only once the API has answered
+ * with an empty list: null while loading (`null`), on an error body
+ * (`{detail}`, shown by ApiError) and when there are rows.
  */
 
 /**
  * @param {*} data The API response.
+ * @return {boolean} True when data is a loaded, empty list.
+ */
+function isEmptyList(data) {
+  return Array.isArray(data) && data.length === 0;
+}
+
+/**
+ * @param {*} data The /api/arbs response.
  * @param {number} min Min profit %.
  * @return {?string}
  */
 export function arbsEmptyText(data, min) {
-  return null;
+  if (!isEmptyList(data)) return null;
+  return `No arbs at >= ${min}% right now. Lower Min profit % or refresh odds.`;
 }
 
 /**
- * @param {*} data The API response.
+ * @param {*} data The /api/lowhold response.
  * @param {number} maxHold Max hold %.
  * @return {?string}
  */
 export function lowHoldEmptyText(data, maxHold) {
-  return null;
+  if (!isEmptyList(data)) return null;
+  return `No markets with hold <= ${maxHold}% right now. Raise Max hold %, widen the book or market ` +
+      'filter, or refresh odds.';
 }
 
 /**
- * @param {*} data The API response.
+ * @param {*} data The /api/sharp-money response.
  * @param {number} k Spike multiple.
  * @param {number} windowMin Window in minutes.
  * @return {?string}
  */
 export function sharpEmptyText(data, k, windowMin) {
-  return null;
+  if (!isEmptyList(data)) return null;
+  return `No exchange volume spike of ${k}× or more in the last ${windowMin} min. ` +
+      'Lower Spike × or Min contracts, or check back later.';
 }
