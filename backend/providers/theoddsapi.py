@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 
+from ..engine.exchange import apply_commission, fee_for
 from ..engine.markets import is_prop
 from .books import REFERENCE_ONLY, us_name
 
@@ -62,6 +63,7 @@ def parse_event(e: dict, sport: str) -> dict:
         name = REFERENCE_ONLY.get(bk["key"]) or us_name(bk["title"])
         if name is None:
             continue  # not available to US bettors
+        fee = fee_for(name)  # exchanges quoted in American odds may take a commission on winnings
         for m in bk["markets"]:
             key = m["key"] if is_prop(m["key"]) else MARKET_KEYS.get(m["key"])
             if key is None:
@@ -74,7 +76,10 @@ def parse_event(e: dict, sport: str) -> dict:
                 if player:
                     new["player"] = player
                 outcome = outcomes.setdefault((o["name"], player, point), new)
-                outcome["prices"][name] = o["price"]
+                price = apply_commission(o["price"], fee)
+                if price is None:
+                    continue
+                outcome["prices"][name] = price
                 link = _link(o.get("link"), m.get("link"), bk.get("link"))
                 if link:
                     outcome.setdefault("links", {})[name] = link

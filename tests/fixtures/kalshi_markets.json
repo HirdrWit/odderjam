@@ -1,0 +1,33 @@
+{
+  "cursor": "",
+  "markets": [
+    {"ticker": "KXNBAGAME-26NOV16BOSLAL-LAL", "event_ticker": "KXNBAGAME-26NOV16BOSLAL", "status": "active",
+     "title": "Boston at Los Angeles L Winner?", "yes_sub_title": "Los Angeles L",
+     "yes_bid_dollars": "0.3800", "yes_ask_dollars": "0.4000", "no_bid_dollars": "0.6000", "no_ask_dollars": "0.6300",
+     "expected_expiration_time": "2026-11-17T06:00:00Z", "close_time": "2026-11-30T03:30:00Z"},
+    {"ticker": "KXNBAGAME-26NOV16BOSLAL-BOS", "event_ticker": "KXNBAGAME-26NOV16BOSLAL", "status": "active",
+     "title": "Boston at Los Angeles L Winner?", "yes_sub_title": "Boston",
+     "yes_bid_dollars": "0.6000", "yes_ask_dollars": "0.6200", "no_bid_dollars": "0.3600", "no_ask_dollars": "0.3800",
+     "expected_expiration_time": "2026-11-17T06:00:00Z", "close_time": "2026-11-30T03:30:00Z"},
+    {"ticker": "KXNBAGAME-26NOV16DENGSW-GSW", "event_ticker": "KXNBAGAME-26NOV16DENGSW", "status": "active",
+     "title": "Denver at Golden State Winner?", "yes_sub_title": "Golden State",
+     "yes_bid": 53, "yes_ask": 55, "no_bid": 43, "no_ask": 47,
+     "expected_expiration_time": "2026-11-17T06:30:00Z", "close_time": "2026-11-30T03:30:00Z"},
+    {"ticker": "KXNBAGAME-26NOV16DENGSW-DEN", "event_ticker": "KXNBAGAME-26NOV16DENGSW", "status": "active",
+     "title": "Denver at Golden State Winner?", "yes_sub_title": "Denver",
+     "yes_bid": 44, "yes_ask": 46, "no_bid": 52, "no_ask": 56,
+     "expected_expiration_time": "2026-11-17T06:30:00Z", "close_time": "2026-11-30T03:30:00Z"},
+    {"ticker": "KXNBAGAME-26NOV16MIAMIL-MIL", "event_ticker": "KXNBAGAME-26NOV16MIAMIL", "status": "active",
+     "title": "Miami at Milwaukee Winner?", "yes_sub_title": "Milwaukee",
+     "yes_ask_dollars": "0.5100", "no_ask_dollars": "0.5100",
+     "expected_expiration_time": "2026-11-17T04:00:00Z", "close_time": "2026-11-30T03:30:00Z"},
+    {"ticker": "KXNBAGAME-26NOV14NYKPHI-PHI", "event_ticker": "KXNBAGAME-26NOV14NYKPHI", "status": "finalized",
+     "title": "New York at Philadelphia Winner?", "yes_sub_title": "Philadelphia",
+     "yes_ask_dollars": "0.9900", "no_ask_dollars": "0.0200",
+     "expected_expiration_time": "2026-11-15T03:00:00Z", "close_time": "2026-11-15T03:00:00Z"},
+    {"ticker": "KXNBAGAME-26NOV14NYKPHI-NYK", "event_ticker": "KXNBAGAME-26NOV14NYKPHI", "status": "finalized",
+     "title": "New York at Philadelphia Winner?", "yes_sub_title": "New York",
+     "yes_ask_dollars": "0.0200", "no_ask_dollars": "0.9900",
+     "expected_expiration_time": "2026-11-15T03:00:00Z", "close_time": "2026-11-15T03:00:00Z"}
+  ]
+}

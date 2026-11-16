@@ -135,7 +135,9 @@ const BOOKS = [
   'DraftKings', 'FanDuel', 'BetMGM', 'Caesars', 'bet365', 'BetRivers', 'Fanatics', 'ESPN BET',
   'Hard Rock Bet',
 ];
-const EV_BOOKS = [...BOOKS, ''];
+// Exchanges and prediction markets: shown where a single leg is placed, not on promo tools.
+const EXCHANGE_BOOKS = ['Kalshi', 'Polymarket', 'Novig', 'ProphetX'];
+const EV_BOOKS = [...BOOKS, ...EXCHANGE_BOOKS, ''];
 const SPORTS = ['', 'NBA', 'NFL', 'MLB', 'NHL'];
 
 function loadEvBook() {
@@ -684,7 +686,7 @@ function parseNumberInput(value, fallback) {
   return Number.isNaN(parsed) ? fallback : parsed;
 }
 
-const LOW_HOLD_BOOKS = ['', ...BOOKS];
+const LOW_HOLD_BOOKS = ['', ...BOOKS, ...EXCHANGE_BOOKS];
 
 function LowHold() {
   const [maxHold, setMaxHold] = useStored('lhMax', 1);

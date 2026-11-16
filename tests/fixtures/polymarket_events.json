@@ -1,0 +1,27 @@
+[
+  {"id": "90001", "title": "Celtics vs. Lakers", "slug": "nba-bos-lal-2026-11-16", "closed": false,
+   "startTime": "2026-11-17T03:30:00Z",
+   "markets": [
+     {"id": "m1", "question": "Celtics vs. Lakers", "sportsMarketType": "moneyline", "closed": false, "active": true,
+      "outcomes": "[\"Celtics\", \"Lakers\"]", "outcomePrices": "[\"0.605\", \"0.395\"]",
+      "bestBid": 0.6, "bestAsk": 0.61, "gameStartTime": "2026-11-17 03:30:00+00"},
+     {"id": "m2", "question": "Spread: Celtics (-3.5)", "sportsMarketType": "spreads", "closed": false, "active": true,
+      "outcomes": "[\"Celtics\", \"Lakers\"]", "outcomePrices": "[\"0.5\", \"0.5\"]",
+      "bestBid": 0.49, "bestAsk": 0.51, "gameStartTime": "2026-11-17 03:30:00+00"},
+     {"id": "m3", "question": "Will LeBron score 30+?", "closed": false, "active": true,
+      "outcomes": "[\"Yes\", \"No\"]", "outcomePrices": "[\"0.3\", \"0.7\"]",
+      "bestBid": 0.29, "bestAsk": 0.31}
+   ]},
+  {"id": "90002", "title": "Nuggets vs. Warriors", "slug": "nba-den-gsw-2026-11-16", "closed": false,
+   "startTime": "2026-11-17T04:00:00Z",
+   "markets": [
+     {"id": "m4", "question": "Nuggets vs. Warriors", "sportsMarketType": "moneyline", "closed": false, "active": true,
+      "outcomes": "[\"Nuggets\", \"Warriors\"]", "outcomePrices": "[\"0.45\", \"0.55\"]"}
+   ]},
+  {"id": "90003", "title": "Knicks vs. 76ers", "slug": "nba-nyk-phi-2026-11-14", "closed": true,
+   "startTime": "2026-11-15T00:00:00Z",
+   "markets": [
+     {"id": "m5", "question": "Knicks vs. 76ers", "sportsMarketType": "moneyline", "closed": true, "active": false,
+      "outcomes": "[\"Knicks\", \"76ers\"]", "outcomePrices": "[\"1\", \"0\"]"}
+   ]}
+]
