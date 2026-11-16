@@ -32,7 +32,7 @@ def test_stored_invalid_rules_are_dropped_and_list_loads(client):
 
 def test_stored_negative_rule_does_not_alert(client):
     insert_rule(-50.0)
-    # DraftKings +150 vs fair even money is +EV; a -50% rule would also match plenty of -EV prices.
+    # -300 vs a fair even-money line is about -33% EV: only a negative threshold matches it.
     events = [{"id": "e1", "sport": "NBA", "home": "A", "away": "B", "start": "t", "markets": {"moneyline": [
         {"name": "A", "point": None, "prices": {"Pinnacle": -110, "DraftKings": -300}},
         {"name": "B", "point": None, "prices": {"Pinnacle": -110, "FanDuel": -300}}]}}]
