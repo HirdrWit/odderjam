@@ -2,8 +2,9 @@
 
 Books flag odd amounts ($13.47) and big stakes, so stakes get rounded (e.g. to $5) and kept
 under a per-side maximum. Rounding breaks an arb's perfect balance, so the arb sizer picks the
-rounded stakes that keep the worst outcome as good as possible and reports the profit for each
-outcome. It flags when rounding turns a profitable arb into a loss on some outcome.
+rounded stakes that keep the worst outcome as good as possible, without going over the entered
+total, and reports the profit for each outcome. It flags when rounding turns a profitable arb into
+a loss on some outcome, and when no rounding fits inside the total.
 frontend/src/calc.js mirrors this module; keep them in sync.
 """
 import math
@@ -51,8 +52,10 @@ def size_arb(american_odds: list[float], total: float, increment: float | None =
     """Rounded, capped stakes for an arb (or low-hold) bet across mutually exclusive outcomes.
 
     The ideal split of `total` is scaled down if a side would exceed `max_per_side`, then each
-    stake is rounded down or up one increment. Of those combinations the one with the best
-    worst-case return (as % of total staked) wins; ties go to the total nearest the target.
+    stake is rounded down or up one increment. Of those combinations that add up to at most
+    `total`, the one with the best worst-case return (as % of total staked) wins; ties go to the
+    total nearest the target. If none fits (a side's ideal stake is under one increment), the best
+    of all combinations is used and `over_total` is set.
     """
     dec = [american_to_decimal(a) for a in american_odds]
     ideal = arb(american_odds, total)
@@ -66,11 +69,20 @@ def size_arb(american_odds: list[float], total: float, increment: float | None =
         worst = min(s * d for s, d in zip(stakes, dec)) - staked
         return round(worst / staked, 9), -abs(staked - target_total)
 
-    stakes = list(max(product(*(_choices(t, inc, cap) for t in targets)), key=score))
+    combos = list(product(*(_choices(t, inc, cap) for t in targets)))
+    within = [c for c in combos if sum(c) <= total + EPS]
+    stakes = list(max(within or combos, key=score))
     staked = round(sum(stakes), 2)
     profits = [s * d - staked for s, d in zip(stakes, dec)]
     lo, hi = min(profits), max(profits)
     rounding_loss = ideal["profit_pct"] >= 0 and lo < -EPS
+    over_total = staked > total + EPS
+    warnings = []
+    if over_total:
+        warnings.append(f"Rounded stakes total ${staked:.2f}, ${staked - total:.2f} over the ${total:.2f} entered; "
+                        "use a smaller increment or a larger total")
+    if rounding_loss:
+        warnings.append(f"Rounded stakes lose up to ${-lo:.2f} on one outcome; use a smaller increment")
     return {
         "stakes": stakes,
         "ideal_stakes": targets,
@@ -82,9 +94,8 @@ def size_arb(american_odds: list[float], total: float, increment: float | None =
         "ideal_profit_pct": ideal["profit_pct"],
         "capped": scale < 1.0,
         "rounding_loss": rounding_loss,
-        "over_total": False,
-        "warning": (f"Rounded stakes lose up to ${-lo:.2f} on one outcome; use a smaller increment"
-                    if rounding_loss else None),
+        "over_total": over_total,
+        "warning": "; ".join(warnings) or None,
     }
 
 
