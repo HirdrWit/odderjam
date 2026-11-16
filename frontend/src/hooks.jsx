@@ -39,6 +39,18 @@ export function Toaster() {
   );
 }
 
+/** Returns the first validation message from a failed API response, if any. */
+export async function errorDetail(response) {
+  try {
+    const {detail} = await response.json();
+    if (!Array.isArray(detail)) return detail;
+    const [first] = detail;
+    return first && `${first.loc?.at(-1) ?? 'input'}: ${first.msg}`;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Sends `body` as JSON to `url`.
  * @param {string} url

@@ -18,7 +18,7 @@ from typing import Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import db, providers, scan
 from .engine import sharp
@@ -160,7 +160,8 @@ def out(r) -> dict:
 class RuleIn(BaseModel):
     name: str = ""
     kind: Kind = "ev"
-    min_value: float = 0.0
+    # A negative threshold matches losing bets (and floods the feed); inf/NaN can't be stored or serialised.
+    min_value: float = Field(0.0, ge=0, allow_inf_nan=False)
     book: str = ""
     market: str = ""
     sport: str = ""
