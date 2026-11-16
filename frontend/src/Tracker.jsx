@@ -291,6 +291,8 @@ export function Tracker() {
   const stats = useApi(`/api/bets/stats?${query}`, 600000);
   const [form, setForm] = useState(BLANK_BET);
   const [formError, setFormError] = useState(null);
+  // Bumped when an edit is rejected, so the row remounts and shows the stored values again.
+  const [rejected, setRejected] = useState(0);
   const [busy, setBusy] = useState(false);
   const reload = () => {
     window.dispatchEvent(new Event('data-changed'));
@@ -316,6 +318,7 @@ export function Tracker() {
     if (!response.ok) {
       const detail = await errorDetail(response);
       toast(`Could not update bet${detail ? `: ${detail}` : ''}`, 'err');
+      setRejected((n) => n + 1);
     }
     reload();
   };
@@ -453,7 +456,7 @@ export function Tracker() {
         </thead>
         <tbody>
           {(bets || []).map((b) => (
-            <BetRow key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}`} bet={b}
+            <BetRow key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}-${rejected}`} bet={b}
               onPatch={(change) => {
                 patch(b, change);
               }}
