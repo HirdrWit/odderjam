@@ -69,6 +69,11 @@ def middle(line_a: float, odds_a: float, line_b: float, odds_b: float, stake: fl
     }
 
 
+def can_hit(line_a: float, line_b: float) -> bool:
+    """Whether some whole-number result lies strictly inside the window (both legs can win)."""
+    return False
+
+
 def outcome_pmf(center: float, sd: float, key_mult: dict[int, float] | None = None,
                 lo: float | None = None) -> dict[int, float]:
     """Probability of each whole-number result: a normal discretised to integers.

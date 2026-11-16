@@ -121,3 +121,45 @@ def test_endpoint_on_mock_snapshot(monkeypatch):
     rows = TestClient(main.app).get("/api/middles").json()
     assert rows and all(r["window"] > 0 and r["high"] > r["low"] for r in rows)
     assert rows == sorted(rows, key=lambda r: -r["ev_pct"])
+
+
+@pytest.mark.parametrize("line_a, line_b, expected", [
+    (54, 54.5, False),   # half point above a whole line: 54 pushes the over, nothing wins both
+    (54.5, 55, False),   # half point below a whole line: 55 pushes the under
+    (3, 4, False),       # two whole lines: each end pushes one leg
+    (-6, -5.5, False),
+    (44.5, 46.5, True),  # 45, 46
+    (2.5, 3.5, True),    # 3
+    (54, 55.5, True),    # 55
+    (3, 5, True),        # 4
+    (-6.5, -5.5, True),  # -6
+])
+def test_can_hit_needs_a_whole_number_inside_the_window(line_a, line_b, expected):
+    assert middles.can_hit(line_a, line_b) is expected
+
+
+def _snapshot_client(monkeypatch, markets):
+    ev = {"id": "x", "sport": "NFL", "home": "A", "away": "B", "start": "t", "markets": markets}
+    monkeypatch.setattr(main, "get_snapshot", lambda: [ev])
+    return TestClient(main.app)
+
+
+def test_endpoint_skips_total_window_with_no_whole_number(monkeypatch):
+    client = _snapshot_client(monkeypatch, {"totals": [
+        make_outcome("Over", 54, BetRivers=-110), make_outcome("Under", 54.5, DraftKings=-110),
+        make_outcome("Under", 55.5, FanDuel=-110)]})
+    rows = client.get("/api/middles", params={"min_window": 0}).json()
+    assert [(r["low"], r["high"]) for r in rows] == [(54, 55.5)]
+    assert rows[0]["hit_prob"] > 0
+
+
+def test_endpoint_skips_spread_window_with_no_whole_number(monkeypatch):
+    # Home -6 wins on margin > 6, away +6.5 on margin < 6.5: no whole margin wins both.
+    # Home -5.5 with away +6.5 middles on exactly 6.
+    client = _snapshot_client(monkeypatch, {"spreads": [
+        make_outcome("A", -6, BetMGM=-110), make_outcome("A", -5.5, Caesars=-115),
+        make_outcome("B", 6.5, FanDuel=-110)]})
+    rows = client.get("/api/middles", params={"min_window": 0}).json()
+    assert [(r["low"], r["high"]) for r in rows] == [(5.5, 6.5)]
+    assert [leg["pick"] for leg in rows[0]["legs"]] == ["A -5.5", "B +6.5"]
+    assert rows[0]["hit_prob"] > 0
