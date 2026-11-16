@@ -1,6 +1,8 @@
 import {useState} from 'react';
 
+import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
+import {trackerEmptyText} from './empty.js';
 import {errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {formatOdds} from './odds.js';
 import {PROFIT, betFormError, calendarWeeks, filterQuery, plColor, scaleSeries} from './tracker.js';
@@ -49,6 +51,8 @@ const BLANK_BET = {
   status: 'pending',
   is_bonus: false,
 };
+/** Stat tiles whose label is glossary jargon, by tile label. */
+const TILE_TERMS = {'Avg CLV': 'clv', 'Sharp CLV': 'sharp-clv'};
 const NO_FILTERS = {date_from: '', date_to: '', status: '', sport: '', book: '', strategy: ''};
 const DAYS_OF_WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -367,8 +371,10 @@ export function Tracker() {
     ['Pending', stats.pending],
   ];
   const strategyOptions = PICKABLE_STRATEGIES.map(([k, v]) => <option key={k} value={k}>{v}</option>);
+  const emptyText = trackerEmptyText(all);
   return (
     <>
+      <TabIntro tab="Tracker" />
       <div className="bar wrap filters">
         From <input type="date" value={filters.date_from} onChange={filterField('date_from')} />
         To <input type="date" value={filters.date_to} onChange={filterField('date_to')} />
@@ -399,7 +405,7 @@ export function Tracker() {
       <div className="tiles">
         {(tiles || []).map(([label, value, cls]) => (
           <div className="card tile" key={label}>
-            <div className="mut">{label}</div>
+            <div className="mut">{TILE_TERMS[label] ? <Term id={TILE_TERMS[label]}>{label}</Term> : label}</div>
             <b className={cls}>{value}</b>
           </div>
         ))}
@@ -418,6 +424,7 @@ export function Tracker() {
           {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           <option value="prop">Prop / other</option>
         </select>
+        <Term id="strategy">Strategy</Term>
         <select value={form.strategy} onChange={field('strategy')}>
           <option value="">Manual</option>{strategyOptions}
         </select>
@@ -429,7 +436,7 @@ export function Tracker() {
         <label className="chk" title="Bonus bet: stake is not returned, a loss costs $0">
           <input type="checkbox" checked={form.is_bonus} onChange={(e) => {
             setForm({...form, is_bonus: e.target.checked});
-          }} /> Bonus bet
+          }} /> <Term id="bonus-bet">Bonus bet</Term>
         </label>
         <button className="primary">Add bet</button>
         {formError && <span className="bad" role="alert">{formError}</span>}
@@ -438,8 +445,8 @@ export function Tracker() {
         <thead>
           <tr>
             <th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Type</th><th>Odds</th>
-            <th>Stake</th><th>Close</th><th><Term id="clv">CLV</Term></th>
-            <th title="CLV vs the sharp no-vig closing line">Sharp CLV</th>
+            <th>Stake</th><th><Term id="closing-odds">Close</Term></th><th><Term id="clv">CLV</Term></th>
+            <th><Term id="sharp-clv">Sharp CLV</Term></th>
             <th>Status</th><th>P/L</th><th></th>
           </tr>
         </thead>
@@ -455,6 +462,7 @@ export function Tracker() {
           ))}
         </tbody>
       </table>
+      {emptyText && <p className="mut">{emptyText}</p>}
       {stats && (
         <div className="groups">
           <GroupTable title="Strategy" rows={stats.by_strategy}

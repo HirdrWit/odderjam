@@ -18,6 +18,14 @@ export const INTRO_COPY = {
     what: 'Bet both sides of a game at different books to lock in a profit whichever side wins.',
     how: 'Place every leg at the stake shown, and do it quickly before the prices move.',
   },
+  'Tracker': {
+    what: 'Log every bet you place, and the stats show whether you really beat the market or just got lucky.',
+    how: 'Add each bet below, or click Track on any +EV or Arbitrage row, and fill in the closing odds once the game starts.',
+  },
+  'Alerts': {
+    what: 'Get told when a good bet appears, so you do not have to keep watching the screen, and it never spends extra API credits.',
+    how: 'Add a rule with the minimum percent you care about, and set a Discord webhook if you want messages there.',
+  },
 };
 
 /**

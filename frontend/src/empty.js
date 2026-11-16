@@ -45,3 +45,12 @@ export function sharpEmptyText(data, k, windowMin) {
   return `No exchange volume spike above ${k}× the usual rate in the last ${windowMin} min. ` +
       'Lower Spike × or Min contracts, or check back later.';
 }
+
+/**
+ * @param {*} data The unfiltered /api/bets response.
+ * @return {?string}
+ */
+export function trackerEmptyText(data) {
+  if (!isEmptyList(data)) return null;
+  return 'No bets yet. Add one below, or click Track on any +EV or Arbitrage row.';
+}

@@ -75,6 +75,36 @@ export const GLOSSARY = [
     definition: 'Prices shown as the total payout per $1 staked, stake included.',
     example: '2.50 means $10 returns $25, which is $15 profit.',
   },
+  {
+    id: 'closing-odds', label: 'Closing odds',
+    definition: 'The final price on a bet just before the game starts. Enter it after the game starts to see if you beat the market (CLV).',
+    example: 'You bet +120 and the line closed at +105: enter 105.',
+  },
+  {
+    id: 'bonus-bet', label: 'Bonus bet',
+    definition: 'A free bet from a sportsbook promo: the stake is not returned when you win, and a loss costs you $0.',
+    example: 'A $50 bonus bet at +200 pays $100 profit if it wins, not $150.',
+  },
+  {
+    id: 'sharp-clv', label: 'Sharp CLV',
+    definition: 'CLV measured against the closing price of sharp books with their margin removed, the best guide to the true price.',
+    example: 'You bet +120 and the sharp no-vig close is +105: your Sharp CLV is positive.',
+  },
+  {
+    id: 'strategy', label: 'Strategy',
+    definition: 'Why you made the bet, such as +EV, arbitrage or a promo. Stats are grouped by it so you can see what works.',
+    example: 'Pick +EV for a bet from the +EV tab and Manual for a hunch.',
+  },
+  {
+    id: 'min-percent', label: 'Min %',
+    definition: 'The smallest edge (for +EV) or profit (for arbitrage) that triggers an alert. Higher means fewer, better alerts.',
+    example: 'Min 3 on a +EV rule only alerts for bets with an edge of 3% or more.',
+  },
+  {
+    id: 'discord-webhook', label: 'Discord webhook',
+    definition: 'A private Discord link that lets odderjam post alerts to a channel. Create one in Discord under Channel Settings, Integrations, Webhooks, then set it as DISCORD_WEBHOOK_URL and restart.',
+    example: 'DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... in your .env file.',
+  },
 ];
 
 /**
