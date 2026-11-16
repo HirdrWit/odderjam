@@ -5,14 +5,12 @@ from fastapi.testclient import TestClient
 
 from backend import main
 from backend.providers import mock
-from backend.routes import bets
 from backend.routes.filters import FilterSet
 from tests.test_markets import make_outcome
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(bets, "DB", tmp_path / "t.db")
+def client(monkeypatch):  # conftest gives each test its own DB
     monkeypatch.setattr(main, "get_snapshot", lambda: mock.snapshot(seed=1))
     return TestClient(main.app)
 

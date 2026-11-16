@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from . import bets
+from .. import db
 
 router = APIRouter(prefix="/api/filters")
 
@@ -91,7 +91,7 @@ class PresetIn(BaseModel):
 
 
 def conn() -> sqlite3.Connection:
-    c = bets.conn()
+    c = db.conn()  # same database file as the bet tracker
     c.execute("""CREATE TABLE IF NOT EXISTS filters (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, params TEXT NOT NULL,
         created_at TEXT NOT NULL)""")
