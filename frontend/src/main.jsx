@@ -9,6 +9,7 @@ import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
+import {NAV_GROUPS, NAV_SUBTITLES} from './navgroups.js';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
 import {arbsEmptyText, lowHoldEmptyText, sharpEmptyText} from './empty.js';
@@ -1269,10 +1270,19 @@ function App() {
     <div className="app">
       <nav>
         <h1>Odderjam</h1>
-        {Object.keys(TABS).map((t) => (
-          <button key={t} className={t === tab ? 'on' : ''} onClick={() => {
-            go(t);
-          }}>{t}</button>
+        {NAV_GROUPS.map((g) => (
+          <div className="nav-group" key={g.title} role="group" aria-label={g.title}>
+            <h2>{g.title}</h2>
+            {g.tabs.map((t) => (
+              <button key={t} className={t === tab ? 'on' : ''} title={NAV_SUBTITLES[t]}
+                aria-current={t === tab ? 'page' : undefined} onClick={() => {
+                  go(t);
+                }}>
+                {t}
+                <span className="sub">{NAV_SUBTITLES[t]}</span>
+              </button>
+            ))}
+          </div>
         ))}
         <button className="link" onClick={() => {
           setWelcome(true);
