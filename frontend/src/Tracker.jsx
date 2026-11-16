@@ -5,7 +5,10 @@ import {Term} from './Term.jsx';
 import {trackerEmptyText} from './empty.js';
 import {errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {formatOdds} from './odds.js';
-import {PROFIT, betFormError, calendarWeeks, filterQuery, plColor, scaleSeries} from './tracker.js';
+import {
+  PROFIT, betFormError, calendarWeeks, chartNote, chartReady, clvTileText, filterQuery, latestMonth, plColor,
+  scaleSeries, statusClass,
+} from './tracker.js';
 
 // Field names such as `closing_odds` and `roi_pct` come straight from the
 // backend's JSON API, so they keep the backend's snake_case.
@@ -112,12 +115,12 @@ function ProfitChart({daily}) {
 }
 
 function Calendar({daily}) {
-  const latest = daily.length ?
-      daily[daily.length - 1].date :
-      new Date().toISOString().slice(0, 10);
-  const [yearMonth, setYearMonth] = useState(null);
-  const [year, month] = yearMonth ||
-      [Number(latest.slice(0, 4)), Number(latest.slice(5, 7)) - 1];
+  const [openYear, openMonth] = latestMonth(daily, new Date().toISOString().slice(0, 10));
+  const openKey = `${openYear}-${openMonth}`;
+  // The user's navigation applies only until the latest month with bets changes.
+  const [nav, setNav] = useState({key: openKey, ym: null});
+  const yearMonth = nav.key === openKey ? nav.ym : null;
+  const [year, month] = yearMonth || [openYear, openMonth];
   const [hover, setHover] = useState(null);
   const byDay = Object.fromEntries(daily.map((d) => [d.date, d]));
   const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -126,7 +129,7 @@ function Calendar({daily}) {
   const total = monthDays.reduce((s, d) => s + d.profit, 0);
   const shift = (k) => {
     const d = new Date(Date.UTC(year, month + k, 1));
-    setYearMonth([d.getUTCFullYear(), d.getUTCMonth()]);
+    setNav({key: openKey, ym: [d.getUTCFullYear(), d.getUTCMonth()]});
   };
   const hovered = hover && byDay[hover];
   const title = new Date(Date.UTC(year, month, 1)).toLocaleString(
@@ -252,7 +255,8 @@ function BetRow({bet, onPatch, onDelete}) {
         {formatPct(bet.clv_sharp_pct)}
       </td>
       <td>
-        <select value={bet.status} onChange={(e) => {
+        <span className={statusClass(bet.status)}>{bet.status}</span>
+        <select value={bet.status} aria-label="Change status" onChange={(e) => {
           onPatch({status: e.target.value});
         }}>
           {STATUSES.map((s) => <option key={s}>{s}</option>)}
@@ -366,8 +370,8 @@ export function Tracker() {
     ['ROI', formatPct(stats.roi_pct)],
     ['Win rate', formatPct(stats.win_rate_pct)],
     ['Staked', formatMoney(stats.staked)],
-    ['Avg CLV', formatPct(stats.avg_clv_pct)],
-    ['Sharp CLV', formatPct(stats.avg_clv_sharp_pct)],
+    ['Avg CLV', clvTileText(stats.avg_clv_pct, 'clv')],
+    ['Sharp CLV', clvTileText(stats.avg_clv_sharp_pct, 'sharp')],
     ['Pending', stats.pending],
   ];
   const strategyOptions = PICKABLE_STRATEGIES.map(([k, v]) => <option key={k} value={k}>{v}</option>);
@@ -406,13 +410,15 @@ export function Tracker() {
         {(tiles || []).map(([label, value, cls]) => (
           <div className="card tile" key={label}>
             <div className="mut">{TILE_TERMS[label] ? <Term id={TILE_TERMS[label]}>{label}</Term> : label}</div>
-            <b className={cls}>{value}</b>
+            <b className={`${cls || ''}${value.length > 12 ? ' small' : ''}`}>{value}</b>
           </div>
         ))}
       </div>
       {stats && stats.daily.length > 0 && (
         <div className="charts">
-          <ProfitChart daily={stats.daily} />
+          {chartReady(stats.daily) ?
+            <ProfitChart daily={stats.daily} /> :
+            <div className="card chart mut">{chartNote(stats.daily)}</div>}
           <Calendar daily={stats.daily} />
         </div>
       )}

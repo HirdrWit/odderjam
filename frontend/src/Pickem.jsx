@@ -2,7 +2,7 @@ import {useState} from 'react';
 
 import {TabIntro} from './TabIntro.jsx';
 import {postJson, toast, useApi, useStored} from './hooks.jsx';
-import {formatTable, parseTableText} from './pickem.js';
+import {EXAMPLE_LINE, formatTable, noMatchReason, noSlipsReason, parseTableText} from './pickem.js';
 
 const SIZES = [2, 3, 4, 5, 6];
 const BLANK = {player: '', market: '', point: '', side: ''};
@@ -108,6 +108,16 @@ export function Pickem() {
         </select>
         <button onClick={addLine}>Add</button>
       </div>
+      {lines.length === 0 && (
+        <table className="odds">
+          <tbody>
+            <tr className="mut">
+              <td>{EXAMPLE_LINE.player}</td><td>{EXAMPLE_LINE.market}</td><td>{EXAMPLE_LINE.point}</td>
+              <td>either</td><td><i>Example only: add your own lines above.</i></td>
+            </tr>
+          </tbody>
+        </table>
+      )}
       {lines.length > 0 && (
         <table className="odds">
           <tbody>
@@ -159,8 +169,8 @@ export function Pickem() {
                 <tr key={i} style={l.matched ? undefined : {opacity: 0.5}}>
                   <td>{l.player}</td><td>{l.market}</td><td>{l.point}</td>
                   <td>{l.matched ? l.side : '—'}</td>
-                  <td>{l.matched ? pct(l.prob) : 'no match'}</td>
-                  <td className="mut">{l.matched ? l.source : ''}</td>
+                  <td title={noMatchReason(l)}>{l.matched ? pct(l.prob) : 'no match'}</td>
+                  <td className="mut">{l.matched ? l.source : noMatchReason(l)}</td>
                   <td className="mut">{l.event || ''}</td>
                 </tr>
               ))}
@@ -170,7 +180,7 @@ export function Pickem() {
             <div key={size}>
               <h3>{size}-pick slips</h3>
               <p className="mut">Break-even: {pct(result.breakeven[size])} per leg</p>
-              {result.slips[size].length === 0 && <p className="mut">No eligible slips.</p>}
+              {result.slips[size].length === 0 && <p className="mut">No eligible slips. {noSlipsReason(Number(size), result.legs)}</p>}
               <table className="odds">
                 <tbody>
                   {result.slips[size].map((s, i) => (

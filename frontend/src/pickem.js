@@ -57,3 +57,31 @@ export function parseTableText(text) {
   });
   return table;
 }
+
+/** Sample line shown (not sent to the backend) until the user adds real lines. */
+export const EXAMPLE_LINE = {player: 'LeBron James', market: 'Points', point: 24.5, side: null, example: true};
+
+/**
+ * Explains why a line has no Hit %.
+ * @param {{matched: boolean, point: number}} leg
+ * @return {string}
+ */
+export function noMatchReason(leg) {
+  if (leg.matched) return '';
+  return `No sportsbook has this player and market at exactly ${leg.point}. Check the spelling and the line.`;
+}
+
+/**
+ * Explains why a slip size has no slips.
+ * @param {number} size
+ * @param {!Array<{matched: boolean}>} legs
+ * @return {string}
+ */
+export function noSlipsReason(size, legs) {
+  const matched = legs.filter((l) => l.matched).length;
+  if (!matched) return 'No lines matched a sportsbook line, so there is nothing to build slips from.';
+  if (matched < size) {
+    return `Only ${matched} of ${legs.length} lines matched; a ${size}-pick slip needs ${size} matched lines.`;
+  }
+  return 'Enough lines matched, but slips cannot use two lines from the same player or the same game.';
+}

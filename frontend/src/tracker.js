@@ -120,3 +120,50 @@ function isAmericanOdds(value) {
   const odds = toNumber(value);
   return Number.isFinite(odds) && Math.abs(odds) >= 100;
 }
+
+/**
+ * Returns the badge classes for a bet status.
+ * @param {string} status
+ * @return {string}
+ */
+export function statusClass(status) {
+  return `badge ${status}`;
+}
+
+/**
+ * Text for an average-CLV tile: the value, or why there is none.
+ * @param {?number} value
+ * @param {string} kind 'clv' or 'sharp'.
+ * @return {string}
+ */
+export function clvTileText(value, kind) {
+  if (value != null) return `${value.toFixed(1)}%`;
+  return kind === 'sharp' ? 'Needs a sharp-book closing line' : 'Enter closing odds to see CLV';
+}
+
+/**
+ * @param {!Array<*>} daily Daily rows.
+ * @return {boolean} True when there are enough points to draw a line.
+ */
+export function chartReady(daily) {
+  return daily.length >= 2;
+}
+
+/**
+ * @param {!Array<*>} daily Daily rows.
+ * @return {?string} A note shown in place of the chart, or null when it can be drawn.
+ */
+export function chartNote(daily) {
+  return chartReady(daily) ? null : 'The profit chart appears once bets are settled on 2 days.';
+}
+
+/**
+ * Returns the [year, 0-based month] the calendar should open on.
+ * @param {!Array<{date: string}>} daily Daily rows in date order.
+ * @param {string} today 'YYYY-MM-DD' fallback when there are no rows.
+ * @return {!Array<number>}
+ */
+export function latestMonth(daily, today) {
+  const date = daily.length ? daily[daily.length - 1].date : today;
+  return [Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1];
+}
