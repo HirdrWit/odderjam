@@ -9,7 +9,7 @@ const pct = (n) => (n == null ? "—" : `${n.toFixed(1)}%`);
 const STRATEGIES = { ev: "+EV", arb: "Arb", promo: "Promo", middle: "Middle", manual: "Manual" };
 const MARKETS = { moneyline: "Moneyline", spreads: "Spread", totals: "Total" };
 const STATUSES = ["pending", "won", "lost", "push", "void"];
-const blank = { event: "", sport: "", market: "moneyline", strategy: "", pick: "", book: "", odds: "", stake: "", closing_odds: "", status: "pending" };
+const blank = { event: "", sport: "", market: "moneyline", strategy: "", pick: "", book: "", odds: "", stake: "", closing_odds: "", status: "pending", is_bonus: false };
 const noFilters = { date_from: "", date_to: "", status: "", sport: "", book: "", strategy: "" };
 
 function ProfitChart({ daily }) {
@@ -181,11 +181,13 @@ export default function Tracker() {
         <input placeholder="Book" value={f.book} onChange={set("book")} />
         <input placeholder="Odds *" required type="number" value={f.odds} onChange={set("odds")} />
         <input placeholder="Stake *" required type="number" step="0.01" value={f.stake} onChange={set("stake")} />
+        <label className="chk" title="Bonus bet: stake is not returned, a loss costs $0">
+          <input type="checkbox" checked={f.is_bonus} onChange={(e) => setF({ ...f, is_bonus: e.target.checked })} /> Bonus bet</label>
         <button className="primary">Add bet</button>
       </form>
       <table><thead><tr><th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Type</th><th>Odds</th><th>Stake</th><th>Close</th><th>CLV</th><th title="CLV vs the sharp no-vig closing line">Sharp CLV</th><th>Status</th><th>P/L</th><th></th></tr></thead><tbody>
         {(bets || []).map((b) => (
-          <tr key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}`}><td>{new Date(b.placed_at).toLocaleDateString()}</td><td>{b.pick}</td><td>{b.event}</td><td>{b.book}</td>
+          <tr key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}`}><td>{new Date(b.placed_at).toLocaleDateString()}</td><td>{b.pick}{b.is_bonus && <span className="mut" title="Bonus bet"> · bonus</span>}</td><td>{b.event}</td><td>{b.book}</td>
             <td className="mut">{MARKETS[b.market] || b.market}{b.strategy ? ` · ${STRATEGIES[b.strategy]}` : ""}</td>
             <td><input className="mini" type="number" defaultValue={b.odds}
               onBlur={(e) => e.target.value !== "" && +e.target.value !== b.odds && patch(b, { odds: e.target.value })} /></td>

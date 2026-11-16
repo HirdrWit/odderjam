@@ -47,15 +47,22 @@ class BetIn(BaseModel):
     # Set by the +EV "Track" button so the closing line can be captured automatically.
     event_start: str | None = None
     closing_sharp_odds: float | None = None
+    is_bonus: bool = False  # bonus bet / free bet: stake is not cash and is not returned
 
 
 FIELDS = list(BetIn.model_fields)
 
 
 def profit(b) -> float:
+    """Cash P/L. A bonus bet pays winnings only when it wins and costs $0 when it loses."""
     if b["status"] == "won":
         return b["stake"] * (american_to_decimal(b["odds"]) - 1)
-    return -b["stake"] if b["status"] == "lost" else 0.0
+    return -cash_stake(b) if b["status"] == "lost" else 0.0
+
+
+def cash_stake(b) -> float:
+    """Real money put at risk: zero for a bonus bet."""
+    return 0.0 if b["is_bonus"] else b["stake"]
 
 
 def clv(b, key: str = "closing_odds") -> float | None:
@@ -66,6 +73,7 @@ def clv(b, key: str = "closing_odds") -> float | None:
 
 def out(b) -> dict:
     d = dict(b)
+    d["is_bonus"] = bool(b["is_bonus"])
     d["profit"] = profit(b)
     d["clv_pct"] = clv(b)
     d["clv_sharp_pct"] = clv(b, "closing_sharp_odds")
@@ -166,7 +174,7 @@ def group(settled: list, key) -> list[dict]:
     for r in settled:
         x = g[(key(r) if callable(key) else r[key]) or "—"]
         x["bets"] += 1
-        x["staked"] += r["stake"]
+        x["staked"] += cash_stake(r)
         x["profit"] += profit(r)
     return [{"name": k, **v, "roi_pct": v["profit"] / v["staked"] * 100 if v["staked"] else 0}
             for k, v in sorted(g.items(), key=lambda kv: -kv[1]["profit"])]
@@ -188,7 +196,7 @@ def daily(settled: list) -> list[dict]:
 
 def summarize(rows: list) -> dict:
     settled = [r for r in rows if r["status"] in SETTLED]
-    staked = sum(r["stake"] for r in settled)
+    staked = sum(cash_stake(r) for r in settled)
     net = sum(profit(r) for r in settled)
     decided = [r for r in settled if r["status"] in ("won", "lost")]
     clvs = [v for r in rows if (v := clv(r)) is not None]
@@ -309,7 +317,7 @@ def bankroll_info() -> dict:
     starting = row["value"] if row else 100.0
     pl = sum(profit(r) for r in rows)
     return {"starting": starting, "profit": pl, "current": starting + pl,
-            "pending_stake": sum(r["stake"] for r in rows if r["status"] == "pending")}
+            "pending_stake": sum(cash_stake(r) for r in rows if r["status"] == "pending")}
 
 
 bankroll_router = APIRouter(prefix="/api/bankroll")
