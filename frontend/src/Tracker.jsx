@@ -1,6 +1,6 @@
 import {useState} from 'react';
 
-import {postJson, toast, useApi, useStored} from './hooks.jsx';
+import {errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {formatOdds} from './odds.js';
 import {PROFIT, betFormError, calendarWeeks, filterQuery, plColor, scaleSeries} from './tracker.js';
 
@@ -206,18 +206,6 @@ function betBody(bet) {
     strategy: bet.strategy || null,
     closing_odds: closing,
   };
-}
-
-/** Returns the first validation message from a failed API response, if any. */
-async function errorDetail(response) {
-  try {
-    const {detail} = await response.json();
-    if (!Array.isArray(detail)) return detail;
-    const [first] = detail;
-    return first && `${first.loc?.at(-1) ?? 'input'}: ${first.msg}`;
-  } catch {
-    return undefined;
-  }
 }
 
 function BetRow({bet, onPatch, onDelete}) {

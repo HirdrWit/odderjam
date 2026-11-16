@@ -7,8 +7,9 @@ import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {Tracker} from './Tracker.jsx';
+import {ruleFormError} from './alerts.js';
 import {legKey, useSlip} from './hooks.js';
-import {Toaster, postJson, toast, useApi, useStored} from './hooks.jsx';
+import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {ageText, isProp} from './odds.js';
 
 // Field names such as `age_seconds` and `ev_pct` come straight from the
@@ -1013,6 +1014,7 @@ function Alerts() {
   const rules = useApi(`/api/alerts/rules?t=${tick}`, 600000);
   const feed = useApi(`/api/alerts?t=${tick}`, 30000);
   const [form, setForm] = useState(BLANK_RULE);
+  const [formError, setFormError] = useState(null);
   const reload = () => {
     setTick((t) => t + 1);
   };
@@ -1021,11 +1023,14 @@ function Alerts() {
   };
   const add = async (e) => {
     e.preventDefault();
-    await fetch('/api/alerts/rules', {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify({...form, min_value: Number(form.min_value)}),
-    });
+    const invalid = ruleFormError(form);
+    setFormError(invalid);
+    if (invalid) return;
+    const response = await postJson('/api/alerts/rules', {...form, min_value: Number(form.min_value)});
+    if (!response.ok) {
+      setFormError((await errorDetail(response)) || 'Could not add alert');
+      return;
+    }
     setForm(BLANK_RULE);
     reload();
   };
@@ -1063,6 +1068,7 @@ function Alerts() {
         </select>
         <input placeholder="Name (optional)" value={form.name} onChange={field('name')} />
         <button className="primary">Add alert</button>
+        {formError && <span className="bad" role="alert">{formError}</span>}
       </form>
       <table>
         <thead>
