@@ -7,6 +7,8 @@ listed keys that belong to it (see SPORT_PROPS); keys we don't know are sent to 
 """
 import json
 import os
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -59,10 +61,13 @@ def _link(*candidates: str | None) -> str | None:
 def parse_event(e: dict, sport: str) -> dict:
     """Convert one Odds API event into our event shape."""
     markets: dict[str, dict[tuple[str, float | None], dict]] = {}
+    updated: dict[str, str] = {}
     for bk in e["bookmakers"]:
         name = REFERENCE_ONLY.get(bk["key"]) or us_name(bk["title"])
         if name is None:
             continue  # not available to US bettors
+        if bk.get("last_update"):
+            updated[name] = bk["last_update"]
         fee = fee_for(name)  # exchanges quoted in American odds may take a commission on winnings
         for m in bk["markets"]:
             key = m["key"] if is_prop(m["key"]) else MARKET_KEYS.get(m["key"])
@@ -84,7 +89,12 @@ def parse_event(e: dict, sport: str) -> dict:
                 if link:
                     outcome.setdefault("links", {})[name] = link
     return {"id": e["id"], "sport": sport, "home": e["home_team"], "away": e["away_team"],
-            "start": e["commence_time"], "markets": {k: list(v.values()) for k, v in markets.items()}}
+            "start": e["commence_time"], "markets": {k: list(v.values()) for k, v in markets.items()}, "updated": updated}
+
+
+def fetch_cost() -> int:
+    """Credits one live snapshot(live_only=True) costs: sports x regions x markets (no props)."""
+    return len(SPORTS) * len(REGIONS.split(",")) * len(MARKETS)
 
 
 def props_for(sport: str) -> list[str]:
@@ -111,14 +121,23 @@ def _add_props(event: dict, sport_key: str, markets: list[str]) -> None:
     event["markets"].update({k: v for k, v in props.items() if is_prop(k)})
 
 
-def snapshot() -> list[dict]:
+def snapshot(live_only: bool = False, now: float | None = None) -> list[dict]:
+    """Fetch all sports. With live_only, only events that have already started (commenceTimeTo=now).
+
+    Live fetches skip player props: they cost extra credits per event, which fetch_cost() and the
+    live budget do not count.
+    """
+    params = {"markets": ",".join(MARKETS), "includeLinks": "true"}
+    if live_only:
+        ts = time.time() if now is None else now
+        params["commenceTimeTo"] = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     events = []
     for sport, k in SPORTS.items():
-        r = _get(f"{BASE}/{k}/odds", {"markets": ",".join(MARKETS), "includeLinks": "true"})
+        r = _get(f"{BASE}/{k}/odds", dict(params))
         if r.status_code != 200:
             continue
         sport_events = [parse_event(e, sport) for e in r.json()]
-        if props := props_for(sport):
+        if not live_only and (props := props_for(sport)):
             for e in sport_events:
                 _add_props(e, k, props)
         events.extend(sport_events)

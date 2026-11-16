@@ -1,9 +1,10 @@
-import {useState} from 'react';
+import {Fragment, useState} from 'react';
 
 import {americanToProb} from './calc.js';
 import {useApi, useSlip, useStored} from './hooks.js';
 import {
   FORMATS,
+  ageText,
   allBooks,
   filterEvents,
   formatOdds,
@@ -12,6 +13,7 @@ import {
   lineGroups,
   mainGroup,
   outcomeLabel,
+  splitLive,
 } from './odds.js';
 
 // Field names such as `event_id` and `fetched_at` come straight from the
@@ -272,6 +274,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
   };
   return (
     <div className="card" onClick={onToggle}>
+      {event.live && <><span className="badge live">LIVE</span>{' '}</>}
       <b>{event.away} @ {event.home}</b>{' '}
       <span className="mut">{event.sport} · {new Date(event.start).toLocaleString()}</span>
       <div className="mut">
@@ -282,6 +285,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
             {groups.length > 1 && ` · ${groups.length} lines`}
           </>
         )}
+        {' · '}prices {ageText(event.price_age_seconds)} old
       </div>
       {isOpen && (
         <div onClick={(e) => {
@@ -323,6 +327,7 @@ export function OddsScreen() {
   const shown = books.filter((b) => !hidden.includes(b));
   const markets = [...new Set([...MARKET_ORDER, ...data.flatMap((e) => Object.keys(e.markets))])];
   const events = filterEvents(data, query);
+  const {live, upcoming} = splitLive(events);
 
   return (
     <>
@@ -355,15 +360,20 @@ export function OddsScreen() {
       </div>
       {!shown.length && <div className="mut">No books selected.</div>}
       {events.length === 0 && data.length > 0 && <div className="mut">No events match “{query}”.</div>}
-      {shown.length > 0 && events.map((e) => (
-        <EventCard key={e.id} event={e} market={market} books={shown} format={format} slip={slip}
-          isOpen={open === e.id} eventMarket={eventMarket[e.id]}
-          onToggle={() => {
-            setOpen(open === e.id ? null : e.id);
-          }}
-          onPickMarket={(k) => {
-            setEventMarket({...eventMarket, [e.id]: k});
-          }} />
+      {shown.length > 0 && [['Live', live], ['Upcoming', upcoming]].map(([title, list]) => list.length > 0 && (
+        <Fragment key={title}>
+          <h3 className="section">{title}</h3>
+          {list.map((e) => (
+            <EventCard key={e.id} event={e} market={market} books={shown} format={format} slip={slip}
+              isOpen={open === e.id} eventMarket={eventMarket[e.id]}
+              onToggle={() => {
+                setOpen(open === e.id ? null : e.id);
+              }}
+              onPickMarket={(k) => {
+                setEventMarket({...eventMarket, [e.id]: k});
+              }} />
+          ))}
+        </Fragment>
       ))}
     </>
   );

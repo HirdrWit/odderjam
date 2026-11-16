@@ -1,8 +1,10 @@
 """Opportunity scanners shared by the API endpoints and the alert job."""
+import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
-from .engine import arb as arbm, ev, markets as mk, odds, sharp, sizing
+from .engine import arb as arbm, ev, live, markets as mk, odds, sharp, sizing
+from .providers import live_config
 from .providers.books import SHARP, US_BOOKS, bet_link, us_only
 
 if TYPE_CHECKING:
@@ -42,6 +44,23 @@ def _filtered_groups(events: list[dict], market: str | None, props: bool, sport:
             yield e, key, g
 
 
+def freshness(e: dict, books, now: float) -> dict | None:
+    """Row fields for a tool row on event `e` priced at `books`; None if the row must be dropped.
+
+    With live mode on, a live event's row is dropped when any of its prices is older than
+    max_price_age (or has no timestamp): a stale in-play price is a phantom edge. Pre-game rows are kept.
+    """
+    is_live = live.is_live(e, now)
+    updated = e.get("updated", {})
+    age = live.price_age(updated, books, now)
+    if any(b not in updated for b in books):
+        age = None  # a leg without a timestamp makes the row's age unknown
+    cfg = live_config()
+    if cfg["enabled"] and is_live and live.is_stale(age, cfg["max_price_age"]):
+        return None
+    return {"event_id": e["id"], "live": is_live, "price_age_seconds": age}
+
+
 def _price_ok(filters: "FilterSet | None", book: str, price: float) -> bool:
     return filters is None or (filters.book_ok(book) and filters.odds_ok(price))
 
@@ -50,11 +69,13 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
             method: str = "multiplicative", kelly: float = 0.25, market: str | None = None,
             sport: str | None = None, bankroll: float = 0.0, round_to: float = 1.0,
             max_side: float | None = None, props: bool = True,
-            filters: "FilterSet | None" = None) -> list[dict]:
+            filters: "FilterSet | None" = None, now: float | None = None) -> list[dict]:
     """+EV rows priced against the weighted sharp consensus (sharps holding over `max_hold` % are dropped).
 
     `filters` narrows events, lines and bet prices (sports, start window, markets, sharp hold, books, odds range).
+    Stale in-play rows are dropped (see freshness); the book and every sharp used must be fresh.
     """
+    now = time.time() if now is None else now
     rows = []
     for e, key, g in _filtered_groups(events, market, props, sport, filters):
         # Only sharps pricing every side of this exact line can devig it.
@@ -67,7 +88,10 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         or not _price_ok(filters, book_name, price):
                     continue
                 v = ev.ev_pct(fp, price)
-                if v >= min_ev:
+                if v < min_ev:
+                    continue
+                fresh = freshness(e, [book_name, *(u["book"] for u in fair["sharps"])], now)
+                if fresh is not None:
                     kelly_stake = bankroll * ev.kelly_fraction(fp, price, kelly)
                     rows.append({
                         "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
@@ -78,18 +102,20 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                         "stake": sizing.round_stake(kelly_stake, round_to, max_side),
                         "kelly_stake": kelly_stake,
-                        "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"],
+                        "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"], **fresh,
                     })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 
 
 def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = None, sport: str | None = None,
              total: float = 100.0, round_to: float = 1.0, max_side: float | None = None,
-             props: bool = True, filters: "FilterSet | None" = None) -> list[dict]:
+             props: bool = True, filters: "FilterSet | None" = None, now: float | None = None) -> list[dict]:
     """Arbs sized to `total`, rounded to `round_to`, capped at `max_side`.
 
     `filters` narrows events and lines, and limits each leg to the allowed books and odds range.
+    Stale in-play rows are dropped (see freshness).
     """
+    now = time.time() if now is None else now
     rows = []
     for e, key, g in _filtered_groups(events, market, props, sport, filters):
         best = []
@@ -102,7 +128,10 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
             if len({book for _, book, _ in best}) < 2:
                 continue
             result = arbm.arb([price for _, _, price in best])
-            if result["profit_pct"] >= min_profit:
+            if result["profit_pct"] < min_profit:
+                continue
+            fresh = freshness(e, [book for _, book, _ in best], now)
+            if fresh is not None:
                 sized = sizing.size_arb([price for _, _, price in best], total, round_to, max_side)
                 rows.append({"event": f'{e["away"]} @ {e["home"]}', "event_id": e["id"], "sport": e["sport"],
                              "start": e["start"], "market": key, "player": g["player"], "point": g["point"],
@@ -113,5 +142,5 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
                                       in zip(best, sized["stakes"], sized["ideal_stakes"], sized["profits"])],
                              "profit_pct": result["profit_pct"],
                              **{k: sized[k] for k in ("total_stake", "min_profit", "max_profit", "min_profit_pct",
-                                                      "capped", "rounding_loss", "warning")}})
+                                                      "capped", "rounding_loss", "warning")}, **fresh})
     return sorted(rows, key=lambda r: -r["profit_pct"])

@@ -8,7 +8,7 @@ import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {Tracker} from './Tracker.jsx';
 import {legKey, useSlip} from './hooks.js';
 import {Toaster, postJson, toast, useApi, useStored} from './hooks.jsx';
-import {isProp} from './odds.js';
+import {ageText, isProp} from './odds.js';
 
 // Field names such as `age_seconds` and `ev_pct` come straight from the
 // backend's JSON API, so they keep the backend's snake_case.
@@ -37,6 +37,95 @@ function formatAge(seconds) {
   if (seconds < 90) return `${Math.round(seconds)}s ago`;
   if (seconds < 5400) return `${Math.round(seconds / 60)}m ago`;
   return `${(seconds / 3600).toFixed(1)}h ago`;
+}
+
+/** Formats a number to `digits` decimals; "—" when missing. */
+function formatNumber(value, digits = 0) {
+  return value == null ? '—' : value.toFixed(digits);
+}
+
+/**
+ * Live-mode toggle and credit budget (GET/POST /api/live). While live mode is
+ * on, refetches the tables every refresh interval.
+ */
+function LiveBox() {
+  const [status, setStatus] = useState(null);
+  // Bumped on a rejected save to remount the inputs with the unchanged settings.
+  const [saves, setSaves] = useState(0);
+  const load = () => fetch('/api/live').then((r) => r.json()).then(setStatus);
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 30000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+  const every = status?.enabled ? Math.max(10, status.interval_seconds) * 1000 : null;
+  useEffect(() => {
+    if (!every) return undefined;
+    const timer = setInterval(() => {
+      notifyDataChanged();
+      load();
+    }, every);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [every]);
+  const save = async (change) => {
+    const response = await fetch('/api/live', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(change),
+    });
+    if (response.ok) {
+      setStatus(await response.json());
+    } else {
+      setSaves((n) => n + 1);
+      load();
+    }
+  };
+  const field = (key, label, min) => (
+    <label className="fld">{label}
+      <input key={`${key}-${status[key]}-${saves}`} type="number" min={min} defaultValue={status[key]}
+        onBlur={(e) => {
+          if (e.target.value !== '' && Number(e.target.value) !== status[key]) {
+            save({[key]: Number(e.target.value)});
+          }
+        }} />
+    </label>
+  );
+  if (!status) return null;
+  return (
+    <div className="livebox">
+      <label className="chk">
+        <input type="checkbox" checked={status.enabled} onChange={(e) => {
+          save({enabled: e.target.checked});
+        }} /> Live mode
+        {status.live_events > 0 && <span className="mut small">({status.live_events} live)</span>}
+      </label>
+      {status.enabled && (
+        <>
+          {field('credits_per_hour', 'Credits/hour cap', 0)}
+          {field('interval_seconds', 'Refresh every (s)', 5)}
+          {field('max_price_age', 'Max price age (s)', 1)}
+          <div className="mut small">
+            burn {formatNumber(status.planned_rate)}/h · used {formatNumber(status.used_last_hour)} last hour
+            {status.projected_hours != null && ` · ~${formatNumber(status.projected_hours, 1)}h left`}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Live badge and price age shown next to the event name in the tool tables. */
+function LiveTag({row}) {
+  return (
+    <>
+      {row.live && <span className="badge live">LIVE</span>}{' '}
+      <span className="mut small">{ageText(row.price_age_seconds)}</span>
+    </>
+  );
 }
 
 function RefreshBox() {
@@ -83,6 +172,7 @@ function RefreshBox() {
           credits per game
         </div>
       )}
+      <LiveBox />
     </div>
   );
 }
@@ -295,7 +385,7 @@ function PositiveEv() {
               <td className="best">{r.ev_pct.toFixed(1)}%</td>
               <td>{r.pick}</td>
               <td>{marketName(r.market)}</td>
-              <td>{r.event}</td>
+              <td>{r.event} <LiveTag row={r} /></td>
               <td>{r.book}</td>
               <td>{formatOdds(r.odds)}</td>
               <td>{formatOdds(r.fair_odds)}</td>
@@ -335,7 +425,7 @@ function PropsFilter({value, onChange}) {
 function ArbCard({arb, onTrack}) {
   return (
     <div className="card">
-      <b className="best">{arb.profit_pct.toFixed(2)}%</b> {arb.event}{' '}
+      <b className="best">{arb.profit_pct.toFixed(2)}%</b> {arb.event} <LiveTag row={arb} />{' '}
       <span className="mut">{arb.sport} · {marketName(arb.market)}</span>
       <button className="track right" onClick={onTrack}>Track legs</button>
       {arb.legs.map((leg, j) => (
@@ -725,7 +815,7 @@ function LowHold() {
           {(data || []).map((r, i) => (
             <tr key={i}>
               <td className={r.hold_pct <= 0 ? 'best' : ''}>{r.hold_pct.toFixed(2)}%</td>
-              <td>{r.event} <span className="mut">{r.sport}</span></td>
+              <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
               <td>{marketName(r.market)}</td>
               <td>
                 {r.legs.map((l, j) => (
@@ -805,7 +895,7 @@ function Middles() {
           {(data || []).map((r, i) => (
             <tr key={i}>
               <td className={r.ev_pct >= 0 ? 'best' : 'bad'}>{r.ev_pct.toFixed(1)}%</td>
-              <td>{r.event} <span className="mut">{r.sport}</span></td>
+              <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
               <td>{marketName(r.market)}</td>
               <td>{r.window}</td>
               <td>

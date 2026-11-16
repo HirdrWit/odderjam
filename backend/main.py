@@ -1,20 +1,25 @@
+import math
+import time
 from contextlib import asynccontextmanager
 from math import prod
 from pathlib import Path
 from statistics import median
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import alerts, history, scan
 from .scan import groups as _groups
-from .engine import devig, lowhold, markets as mk, middles as mid, odds, parlay as pm, promo, sharp, sizing
+from .engine import (devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, promo,
+                     sharp, sizing)
 from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets, filters as flt
 from .routes.filters import FilterSet
-from .providers import cache_info, get_snapshot
+from .providers import cache_info, get_snapshot, live_status, set_live
 
 
 @asynccontextmanager
@@ -31,6 +36,13 @@ app.include_router(alerts.router)
 app.include_router(flt.router)
 
 
+@app.exception_handler(RequestValidationError)
+async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """422 without echoing the input: a NaN or infinite input would make the error body invalid JSON."""
+    detail = [{k: v for k, v in e.items() if k in ("type", "loc", "msg")} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": detail})
+
+
 def _us_markets(markets: dict) -> dict:
     """Markets with prices filtered to US books; outcomes and markets left empty are dropped."""
     out = {}
@@ -42,11 +54,30 @@ def _us_markets(markets: dict) -> dict:
     return out
 
 
+def _now() -> float:
+    return time.time()
+
+
+def _shown_books(markets: dict) -> set[str]:
+    return {b for outcomes in markets.values() for o in outcomes for b in o["prices"]}
+
+
 @app.get("/api/odds")
-def odds_screen(sport: str | None = None):
-    shown = [{**e, "markets": _us_markets(e["markets"])} for e in get_snapshot()
-             if not sport or e["sport"] == sport]
-    return [e for e in shown if e["markets"]]
+def odds_screen(sport: str | None = None, live: bool | None = None):
+    now = _now()
+    rows = []
+    for e in get_snapshot():
+        if sport and e["sport"] != sport:
+            continue
+        is_live = _live_mod.is_live(e, now)
+        if live is not None and is_live != live:
+            continue
+        markets = _us_markets(e["markets"])
+        if not markets:
+            continue
+        rows.append({**e, "markets": markets, "live": is_live,
+                     "price_age_seconds": _live_mod.price_age(e.get("updated", {}), _shown_books(markets), now)})
+    return rows
 
 
 @app.get("/api/sharps")
@@ -71,7 +102,7 @@ def positive_ev(method: str = "multiplicative", kelly: float = 0.25, sharps: str
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     min_ev = f.min_ev if f.min_ev is not None else 0.0
     return scan.ev_rows(get_snapshot(), weights, max_hold, min_ev=min_ev, method=method, kelly=kelly,
-                        bankroll=bankroll, round_to=round_to, max_side=max_side, props=props, filters=f)
+                        bankroll=bankroll, round_to=round_to, max_side=max_side, props=props, filters=f, now=_now())
 
 
 def _check_sizing(round_to: float, max_side: float | None) -> None:
@@ -91,7 +122,7 @@ def arbs(total: float | None = None, round_to: float = 1.0, max_side: float | No
         total = total if total > 0 else 100.0
     min_profit = f.min_profit if f.min_profit is not None else 0.0
     return scan.arb_rows(get_snapshot(), min_profit=min_profit, total=total, round_to=round_to,
-                         max_side=max_side, props=props, filters=f)
+                         max_side=max_side, props=props, filters=f, now=_now())
 
 
 PromoKind = Literal["bonus-bet", "profit-boost", "second-chance"]
@@ -239,6 +270,7 @@ def low_hold(max_hold: float = 1.0, book: str | None = None, stake: float = 100.
 
     With ``book`` set, one leg must be at that book. Sorted by hold, lowest first.
     """
+    now = _now()
     rows = []
     for e in get_snapshot():
         for key, g in _groups(e):
@@ -249,10 +281,13 @@ def low_hold(max_hold: float = 1.0, book: str | None = None, stake: float = 100.
             pair = lowhold.best_pair(us_only(a["prices"]), us_only(b["prices"]), book or None, stake)
             if pair is None or pair["hold_pct"] > max_hold:
                 continue
+            fresh = scan.freshness(e, [leg["book"] for leg in pair["legs"]], now)
+            if fresh is None:
+                continue
             for o, leg in zip(g["outcomes"], pair["legs"]):
                 leg.update(pick=mk.label(o), point=o["point"])
             rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
-                         "market": key, "point": g["point"], "stake": stake, **pair})
+                         "market": key, "point": g["point"], "stake": stake, **pair, **fresh})
     return sorted(rows, key=lambda r: r["hold_pct"])
 
 
@@ -300,6 +335,7 @@ def middles(
     stake: float = 100.0,
 ) -> list[dict]:
     """Middles across books. `max_cost` caps the worst-case loss as a percent of total stake."""
+    now = _now()
     rows = []
     for e in get_snapshot():
         for key in ("spreads", "totals"):
@@ -325,15 +361,46 @@ def middles(
                     cost_pct = max(-m["worst_case"], 0.0) / stake * 100
                     if max_cost is not None and cost_pct > max_cost:
                         continue
+                    fresh = scan.freshness(e, [ba, bb], now)
+                    if fresh is None:
+                        continue
                     rows.append({
                         "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                         "market": key, "window": m["window"], "low": la, "high": lb,
                         "legs": [{"pick": mk.label(o), "point": o["point"], "book": b, "odds": p, "stake": s}
                                  for o, b, p, s in ((oa, ba, pa, m["stake_a"]), (ob, bb, pb, m["stake_b"]))],
                         "win_both": m["win_both"], "worst_case": m["worst_case"], "cost_pct": cost_pct,
-                        **mid.middle_ev(m, la, pa, lb, pb, pmf),
+                        **mid.middle_ev(m, la, pa, lb, pb, pmf), **fresh,
                     })
     return sorted(rows, key=lambda r: -r["ev_pct"])
+
+
+class LiveSettings(BaseModel):
+    """Live-mode settings; every field optional, only those sent are changed."""
+    enabled: bool | None = None
+    interval_seconds: float | None = Field(default=None, gt=0)
+    credits_per_hour: float | None = Field(default=None, ge=0)
+    max_price_age: float | None = Field(default=None, gt=0)
+
+
+def _live_payload() -> dict:
+    now = _now()
+    return {**live_status(), "live_events": sum(_live_mod.is_live(e, now) for e in get_snapshot())}
+
+
+@app.get("/api/live")
+def live_get():
+    return _live_payload()
+
+
+@app.post("/api/live")
+def live_post(body: LiveSettings):
+    changes = body.model_dump(exclude_none=True)
+    # +inf passes gt=0/ge=0 and would lift the cap; reject it here.
+    if any(isinstance(v, float) and not math.isfinite(v) for v in changes.values()):
+        raise HTTPException(422, "settings must be finite numbers")
+    set_live(**changes)
+    return _live_payload()
 
 
 @app.post("/api/refresh")

@@ -80,3 +80,19 @@ test('filterEvents searches teams and sorts by start', () => {
 test('allBooks collects every book', () => {
   assert.deepEqual(odds.allBooks([{markets: {spreads: SPREADS}}]), ['A', 'B', 'C']);
 });
+
+test('ageText formats price age compactly', () => {
+  assert.equal(odds.ageText(null), '—');
+  assert.equal(odds.ageText(undefined), '—');
+  assert.equal(odds.ageText(4.4), '4s');
+  assert.equal(odds.ageText(89), '89s');
+  assert.equal(odds.ageText(600), '10m');
+  assert.equal(odds.ageText(7200), '2.0h');
+});
+
+test('splitLive separates in-play from upcoming events, keeping order', () => {
+  const evs = [{id: 1, live: false}, {id: 2, live: true}, {id: 3}, {id: 4, live: true}];
+  const {live, upcoming} = odds.splitLive(evs);
+  assert.deepEqual(live.map((e) => e.id), [2, 4]);
+  assert.deepEqual(upcoming.map((e) => e.id), [1, 3]);
+});
