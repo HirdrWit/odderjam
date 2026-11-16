@@ -2,7 +2,7 @@ import {useState} from 'react';
 
 import {postJson, toast, useApi, useStored} from './hooks.jsx';
 import {formatOdds} from './odds.js';
-import {PROFIT, calendarWeeks, filterQuery, plColor, scaleSeries} from './tracker.js';
+import {PROFIT, betFormError, calendarWeeks, filterQuery, plColor, scaleSeries} from './tracker.js';
 
 // Field names such as `closing_odds` and `roi_pct` come straight from the
 // backend's JSON API, so they keep the backend's snake_case.
@@ -208,6 +208,18 @@ function betBody(bet) {
   };
 }
 
+/** Returns the first validation message from a failed API response, if any. */
+async function errorDetail(response) {
+  try {
+    const {detail} = await response.json();
+    if (!Array.isArray(detail)) return detail;
+    const [first] = detail;
+    return first && `${first.loc?.at(-1) ?? 'input'}: ${first.msg}`;
+  } catch {
+    return undefined;
+  }
+}
+
 function BetRow({bet, onPatch, onDelete}) {
   const patchNumber = (field, current) => (e) => {
     const value = e.target.value;
@@ -278,14 +290,20 @@ export function Tracker() {
   const bets = useApi(`/api/bets?${query}`, 600000);
   const stats = useApi(`/api/bets/stats?${query}`, 600000);
   const [form, setForm] = useState(BLANK_BET);
+  const [formError, setFormError] = useState(null);
   const [busy, setBusy] = useState(false);
   const reload = () => {
     window.dispatchEvent(new Event('data-changed'));
   };
   const add = async (e) => {
     e.preventDefault();
+    const invalid = betFormError(form);
+    setFormError(invalid);
+    if (invalid) return;
     const response = await postJson('/api/bets', betBody(form));
     if (!response.ok) {
+      const detail = await errorDetail(response);
+      setFormError(detail || 'Could not add bet');
       toast('Could not add bet', 'err');
       return;
     }
@@ -295,7 +313,10 @@ export function Tracker() {
   };
   const patch = async (bet, change) => {
     const response = await postJson(`/api/bets/${bet.id}`, betBody({...bet, ...change}), 'PUT');
-    if (!response.ok) toast('Could not update bet', 'err');
+    if (!response.ok) {
+      const detail = await errorDetail(response);
+      toast(`Could not update bet${detail ? `: ${detail}` : ''}`, 'err');
+    }
     reload();
   };
   const remove = async (bet) => {
@@ -419,6 +440,7 @@ export function Tracker() {
           }} /> Bonus bet
         </label>
         <button className="primary">Add bet</button>
+        {formError && <span className="bad" role="alert">{formError}</span>}
       </form>
       <table>
         <thead>

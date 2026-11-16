@@ -4,11 +4,11 @@ import io
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel, ValidationError
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints, ValidationError
 
 from .. import history, providers
 from ..db import conn
@@ -24,6 +24,16 @@ SETTLED = ("won", "lost", "push")
 NEW_COLUMNS = {"strategy": "TEXT", "event_id": "TEXT", "selection": "TEXT", "point": "REAL", "settled_at": "TEXT"}
 
 
+def _american(odds: float) -> float:
+    """American prices start at +/-100; anything in between (0, 50, -99.5) is not a price."""
+    if abs(odds) < 100:
+        raise ValueError("American odds must be +100 or more, or -100 or less")
+    return odds
+
+
+AmericanOdds = Annotated[float, Field(allow_inf_nan=False), AfterValidator(_american)]
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -32,12 +42,12 @@ class BetIn(BaseModel):
     event: str = ""
     sport: str = ""
     market: str = "moneyline"
-    pick: str
+    pick: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     book: str = ""
-    odds: float
-    stake: float
+    odds: AmericanOdds
+    stake: float = Field(gt=0, allow_inf_nan=False)
     status: Status = "pending"
-    closing_odds: float | None = None
+    closing_odds: AmericanOdds | None = None
     ev_pct: float | None = None
     notes: str = ""
     strategy: Strategy | None = None
@@ -46,7 +56,7 @@ class BetIn(BaseModel):
     point: float | None = None
     # Set by the +EV "Track" button so the closing line can be captured automatically.
     event_start: str | None = None
-    closing_sharp_odds: float | None = None
+    closing_sharp_odds: AmericanOdds | None = None
     is_bonus: bool = False  # bonus bet / free bet: stake is not cash and is not returned
 
 
@@ -306,7 +316,7 @@ def auto_settle():
 
 
 class BankrollIn(BaseModel):
-    starting: float
+    starting: float = Field(ge=0, allow_inf_nan=False)
 
 
 def bankroll_info() -> dict:
