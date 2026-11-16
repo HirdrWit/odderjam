@@ -277,6 +277,18 @@ function SharpWeights({cfg, weights, maxHold, canReset, onWeight, onMaxHold, onR
   );
 }
 
+/**
+ * Shows the API's validation message when a list endpoint rejects the query (422) instead of returning rows.
+ * @param {{data: *}} props
+ */
+function ApiError({data}) {
+  const detail = data && !Array.isArray(data) ? data.detail : null;
+  if (!detail) return null;
+  const text = typeof detail === 'string' ? detail :
+      detail.map((e) => `${(e.loc || []).slice(-1)[0] ?? ''}: ${e.msg}`).join('; ');
+  return <div className="bad">{text}</div>;
+}
+
 function PositiveEv() {
   const [minEv, setMinEv] = useStored('evMin', 1);
   const [method, setMethod] = useStored('evMethod', 'multiplicative');
@@ -375,6 +387,7 @@ function PositiveEv() {
             setMaxHold(null);
           }} />
       )}
+      <ApiError data={data} />
       <table>
         <thead>
           <tr>
@@ -383,7 +396,7 @@ function PositiveEv() {
           </tr>
         </thead>
         <tbody>
-          {(data || []).map((r, i) => (
+          {(Array.isArray(data) ? data : []).map((r, i) => (
             <tr key={i}>
               <td className="best">{r.ev_pct.toFixed(1)}%</td>
               <td>{r.pick}</td>
@@ -488,7 +501,8 @@ function Arbs() {
         <SizingBar s={sizing} showTotal totalHint={bank ? bank.current.toFixed(0) : 'bankroll'} />
         <PropsFilter value={props} onChange={setProps} />
       </div>
-      {(data || []).map((r, i) => (
+      <ApiError data={data} />
+      {(Array.isArray(data) ? data : []).map((r, i) => (
         <ArbCard key={i} arb={r} onTrack={() => {
           track(r);
         }} />
@@ -810,12 +824,13 @@ function LowHold() {
           setStake(parseNumberInput(e.target.value, stake));
         }} />
       </div>
+      <ApiError data={data} />
       <table>
         <thead>
           <tr><th>Hold</th><th>Event</th><th>Market</th><th>Legs</th><th>Exp. loss</th></tr>
         </thead>
         <tbody>
-          {(data || []).map((r, i) => (
+          {(Array.isArray(data) ? data : []).map((r, i) => (
             <tr key={i}>
               <td className={r.hold_pct <= 0 ? 'best' : ''}>{r.hold_pct.toFixed(2)}%</td>
               <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
@@ -895,7 +910,7 @@ function Middles() {
           </tr>
         </thead>
         <tbody>
-          {(data || []).map((r, i) => (
+          {(Array.isArray(data) ? data : []).map((r, i) => (
             <tr key={i}>
               <td className={r.ev_pct >= 0 ? 'best' : 'bad'}>{r.ev_pct.toFixed(1)}%</td>
               <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>

@@ -2,9 +2,10 @@
 import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from .. import db
 
@@ -63,8 +64,8 @@ def query_filters(
     sports: list[str] | None = Query(None),
     books: list[str] | None = Query(None),
     markets: list[str] | None = Query(None),
-    odds_min: float | None = None,
-    odds_max: float | None = None,
+    odds_min: Annotated[float | None, Query(allow_inf_nan=False)] = None,
+    odds_max: Annotated[float | None, Query(allow_inf_nan=False)] = None,
     start_within_hours: float | None = None,
     min_ev: float | None = None,
     min_profit: float | None = None,
@@ -82,12 +83,29 @@ def query_filters(
              "markets": _split(markets) + _split([market] if market else None),
              "odds_min": odds_min, "odds_max": odds_max, "start_within_hours": start_within_hours,
              "min_ev": min_ev, "min_profit": min_profit, "max_sharp_hold": max_sharp_hold}
-    return FilterSet(**{**base, **{k: v for k, v in given.items() if v not in (None, [])}})
+    fs = FilterSet(**{**base, **{k: v for k, v in given.items() if v not in (None, [])}})
+    if err := odds_range_error(fs):
+        raise HTTPException(422, err)
+    return fs
+
+
+def odds_range_error(fs: FilterSet) -> str | None:
+    """Message when the odds range is inverted (it would match nothing), else None."""
+    if fs.odds_min is not None and fs.odds_max is not None and fs.odds_min > fs.odds_max:
+        return f"odds_min ({fs.odds_min:g}) is greater than odds_max ({fs.odds_max:g})"
+    return None
 
 
 class PresetIn(BaseModel):
     name: str
     filters: FilterSet = FilterSet()
+
+    # Checked on save rather than on FilterSet, so presets stored before this check still load.
+    @model_validator(mode="after")
+    def _odds_range(self):
+        if err := odds_range_error(self.filters):
+            raise ValueError(err)
+        return self
 
 
 def conn() -> sqlite3.Connection:

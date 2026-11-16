@@ -87,9 +87,15 @@ def sharp_settings():
             "max_hold": max_sharp_hold(), "methods": list(devig.METHODS)}
 
 
+# Numeric query params: finite, and positive unless zero has a meaning (round_to=0 rounds to cents).
+PositiveFloat = Annotated[float, Query(gt=0, allow_inf_nan=False)]
+RoundTo = Annotated[float, Query(ge=0, allow_inf_nan=False)]
+
+
 @app.get("/api/ev")
-def positive_ev(method: str = "multiplicative", kelly: float = 0.25, sharps: str | None = None,
-                max_hold: float | None = None, round_to: float = 1.0, max_side: float | None = None,
+def positive_ev(method: str = "multiplicative", kelly: PositiveFloat = 0.25, sharps: str | None = None,
+                max_hold: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
+                round_to: RoundTo = 1.0, max_side: PositiveFloat | None = None,
                 props: bool = True, f: FilterSet = Depends(flt.query_filters)):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
     more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price.
@@ -113,11 +119,11 @@ def _check_sizing(round_to: float, max_side: float | None) -> None:
 
 
 @app.get("/api/arbs")
-def arbs(total: float | None = None, round_to: float = 1.0, max_side: float | None = None, props: bool = True,
-         f: FilterSet = Depends(flt.query_filters)):
+def arbs(total: PositiveFloat | None = None, round_to: RoundTo = 1.0, max_side: PositiveFloat | None = None,
+         props: bool = True, f: FilterSet = Depends(flt.query_filters)):
     """Arbs sized to `total` (default: current bankroll), rounded to `round_to`, capped at `max_side`."""
     _check_sizing(round_to, max_side)
-    if total is None or total <= 0:
+    if total is None:
         total = bets.bankroll_info()["current"]
         total = total if total > 0 else 100.0
     min_profit = f.min_profit if f.min_profit is not None else 0.0
@@ -381,7 +387,8 @@ def pickem_optimize(p: PickemIn):
 
 
 @app.get("/api/lowhold")
-def low_hold(max_hold: float = 1.0, book: str | None = None, stake: float = 100.0, market: str | None = None):
+def low_hold(max_hold: Annotated[float, Query(allow_inf_nan=False)] = 1.0, book: str | None = None,
+             stake: PositiveFloat = 100.0, market: str | None = None):
     """Two-sided bets that cover both outcomes for the smallest hold, for clearing rollover.
 
     With ``book`` set, one leg must be at that book. Sorted by hold, lowest first.
