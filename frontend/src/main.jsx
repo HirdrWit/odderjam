@@ -740,7 +740,7 @@ function Arbs() {
   const setters = {min: setMin, props: setProps, total: sizing.setTotal};
   const chips = arbChips(filters);
   const track = async (row) => {
-    const responses = await Promise.all(row.legs.map((leg) => postJson('/api/bets', {
+    const result = await trackLegs(row.legs, (leg) => postJson('/api/bets', {
       event: row.event,
       event_id: row.event_id,
       sport: row.sport,
@@ -752,11 +752,11 @@ function Arbs() {
       odds: leg.odds,
       stake: Number(leg.stake.toFixed(2)),
       strategy: 'arb',
-    })));
-    if (responses.every((x) => x.ok)) {
+    }));
+    if (result.ok) {
       toast(`Tracked ${row.legs.length} legs of ${row.event} (${formatMoney(row.total_stake)} total)`);
     } else {
-      toast('Could not track every leg', 'err');
+      toast(result.message, 'err');
     }
     notifyDataChanged();
   };
