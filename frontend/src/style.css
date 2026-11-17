@@ -204,3 +204,14 @@ table.grid td.bestcell { background: rgba(60, 180, 110, 0.22); color: var(--posi
 table.grid td.num { cursor: pointer; }
 table.grid tbody.suspect td.bestcell { background: none; color: inherit; font-weight: normal; }
 @media (max-width: 640px) { table.grid .gamecol { min-width: 110px; max-width: 130px; } }
+
+/* Tracker add-bet panel and filter menu (odderjam-101). */
+.filters { flex-wrap: wrap; }
+.filters label { display: inline-flex; gap: 6px; align-items: center; }
+.addbet { margin-bottom: 14px; }
+.formgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin-bottom: 10px; }
+.formgrid .fld { display: flex; flex-direction: column; gap: 4px; }
+.formgrid .err { font-size: 12px; }
+.more { position: relative; }
+.more summary { list-style: none; cursor: pointer; padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); }
+.more .menu { position: absolute; right: 0; z-index: 5; display: flex; flex-direction: column; gap: 6px; padding: 8px; margin-top: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; white-space: nowrap; }

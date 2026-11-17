@@ -9,8 +9,8 @@ import {eventTime, money, percent, signClass} from './fmt.js';
 import {formatOdds} from './odds.js';
 import {oddsKey} from './sorttable.js';
 import {
-  PROFIT, betFormError, calendarWeeks, chartNote, chartReady, clvTileText, filterQuery, latestMonth, plColor,
-  scaleSeries, statusClass,
+  ADD_BET_FIELDS, PROFIT, betFieldErrors, calendarWeeks, chartNote, chartReady, clvTileText, filterQuery, latestMonth, parseOddsInput,
+  plColor, scaleSeries, statusClass,
 } from './tracker.js';
 
 // Field names such as `closing_odds` and `roi_pct` come straight from the
@@ -303,6 +303,9 @@ export function Tracker() {
   const stats = useApi(`/api/bets/stats?${query}`, 600000);
   const [sort, onSort, sorted] = useSort('Tracker', {key: 'date', dir: 'desc'});
   const [form, setForm] = useState(BLANK_BET);
+  const [format] = useStored('oddsFormat', 'american');
+  const [showForm, setShowForm] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState(null);
   // Bumped when an edit is rejected, so the row remounts and shows the stored values again.
   const [rejected, setRejected] = useState(0);
@@ -312,10 +315,11 @@ export function Tracker() {
   };
   const add = async (e) => {
     e.preventDefault();
-    const invalid = betFormError(form);
-    setFormError(invalid);
-    if (invalid) return;
-    const response = await postJson('/api/bets', betBody(form));
+    const errors = betFieldErrors(form, format);
+    setFieldErrors(errors);
+    setFormError(null);
+    if (Object.keys(errors).length) return;
+    const response = await postJson('/api/bets', betBody({...form, odds: parseOddsInput(form.odds, format)}));
     if (!response.ok) {
       const detail = await errorDetail(response);
       setFormError(detail || 'Could not add bet');
@@ -324,6 +328,7 @@ export function Tracker() {
     }
     toast(`Added ${form.pick}`);
     setForm(BLANK_BET);
+    setShowForm(false);
     reload();
   };
   const patch = async (bet, change) => {
@@ -395,21 +400,21 @@ export function Tracker() {
   return (
     <>
       <TabIntro tab="Tracker" />
-      <div className="bar wrap filters">
-        From <input type="date" value={filters.date_from} onChange={filterField('date_from')} />
-        To <input type="date" value={filters.date_to} onChange={filterField('date_to')} />
-        <select value={filters.status} onChange={filterField('status')}>
+      <div className="bar filters">
+        <label>From <input type="date" value={filters.date_from} onChange={filterField('date_from')} /></label>
+        <label>To <input type="date" value={filters.date_to} onChange={filterField('date_to')} /></label>
+        <select aria-label="Status" value={filters.status} onChange={filterField('status')}>
           <option value="">All statuses</option>{STATUSES.map((s) => <option key={s}>{s}</option>)}
         </select>
-        <select value={filters.sport} onChange={filterField('sport')}>
+        <select aria-label="Sport" value={filters.sport} onChange={filterField('sport')}>
           <option value="">All sports</option>
           {optionsFor('sport').map((s) => <option key={s}>{s}</option>)}
         </select>
-        <select value={filters.book} onChange={filterField('book')}>
+        <select aria-label="Book" value={filters.book} onChange={filterField('book')}>
           <option value="">All books</option>
           {optionsFor('book').map((s) => <option key={s}>{s}</option>)}
         </select>
-        <select value={filters.strategy} onChange={filterField('strategy')}>
+        <select aria-label="Strategy" value={filters.strategy} onChange={filterField('strategy')}>
           <option value="">All strategies</option>{strategyOptions}
         </select>
         {query && <button className="x" onClick={() => {
@@ -417,10 +422,18 @@ export function Tracker() {
         }}>Clear</button>}
         <span className="spacer" />
         <button onClick={settle} disabled={busy}>{busy ? 'Settling…' : 'Auto-settle'}</button>
-        <a className="btn" href={`/api/bets/export.csv${query ? `?${query}` : ''}`} download>Export CSV</a>
-        <label className="btn">
-          Import CSV<input type="file" accept=".csv,text/csv" hidden onChange={importCsv} />
-        </label>
+        <button className="primary" aria-expanded={showForm} onClick={() => {
+          setShowForm((open) => !open);
+        }}>{showForm ? 'Close' : 'Add bet'}</button>
+        <details className="more">
+          <summary aria-label="More actions">⋯</summary>
+          <div className="menu">
+            <a className="btn" href={`/api/bets/export.csv${query ? `?${query}` : ''}`} download>Export CSV</a>
+            <label className="btn">
+              Import CSV<input type="file" accept=".csv,text/csv" hidden onChange={importCsv} />
+            </label>
+          </div>
+        </details>
       </div>
       <div className="tiles">
         {(tiles || []).map(([label, value, cls]) => (
@@ -438,31 +451,48 @@ export function Tracker() {
           <Calendar daily={stats.daily} />
         </div>
       )}
-      <form className="bar wrap" onSubmit={add}>
-        <input placeholder="Pick *" required value={form.pick} onChange={field('pick')} />
-        <input placeholder="Event (Away @ Home)" value={form.event} onChange={field('event')} />
-        <input placeholder="Sport" value={form.sport} onChange={field('sport')} />
-        <select value={form.market} onChange={field('market')}>
-          {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          <option value="prop">Prop / other</option>
-        </select>
-        <Term id="strategy">Strategy</Term>
-        <select value={form.strategy} onChange={field('strategy')}>
-          <option value="">Manual</option>{strategyOptions}
-        </select>
-        <input placeholder="Book" value={form.book} onChange={field('book')} />
-        <input placeholder="Odds *" required type="number" value={form.odds}
-          onChange={field('odds')} />
-        <input placeholder="Stake *" required type="number" step="0.01" value={form.stake}
-          onChange={field('stake')} />
-        <label className="chk" title="Bonus bet: stake is not returned, a loss costs $0">
-          <input type="checkbox" checked={form.is_bonus} onChange={(e) => {
-            setForm({...form, is_bonus: e.target.checked});
-          }} /> <Term id="bonus-bet">Bonus bet</Term>
-        </label>
-        <button className="primary">Add bet</button>
-        {formError && <span className="bad" role="alert">{formError}</span>}
-      </form>
+{showForm && (
+        <form className="card addbet" onSubmit={add} noValidate aria-label="Add bet">
+          <div className="formgrid">
+            {ADD_BET_FIELDS.map((f) => (
+              <div className="fld" key={f.key}>
+                <label htmlFor={f.id}>
+                  {f.key === 'strategy' ? <Term id="strategy">{f.label}</Term> : f.label}
+                  {f.required && ' *'}
+                </label>
+                {f.key === 'market' ? (
+                  <select id={f.id} value={form.market} onChange={field('market')}>
+                    {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    <option value="prop">Prop / other</option>
+                  </select>
+                ) : f.key === 'strategy' ? (
+                  <select id={f.id} value={form.strategy} onChange={field('strategy')}>
+                    <option value="">Manual</option>{strategyOptions}
+                  </select>
+                ) : (
+                  <input id={f.id} value={form[f.key]} onChange={field(f.key)} required={f.required}
+                    type={f.key === 'stake' ? 'number' : 'text'} step={f.key === 'stake' ? '0.01' : undefined}
+                    inputMode={f.key === 'odds' ? 'decimal' : undefined}
+                    aria-invalid={fieldErrors[f.key] ? true : undefined}
+                    aria-describedby={fieldErrors[f.key] ? `${f.id}-err` : undefined} />
+                )}
+                {fieldErrors[f.key] && <span className="bad err" id={`${f.id}-err`} role="alert">{fieldErrors[f.key]}</span>}
+              </div>
+            ))}
+            <div className="fld">
+              <label className="chk" htmlFor="bet-bonus" title="Bonus bet: stake is not returned, a loss costs $0">
+                <input id="bet-bonus" type="checkbox" checked={form.is_bonus} onChange={(e) => {
+                  setForm({...form, is_bonus: e.target.checked});
+                }} /> <Term id="bonus-bet">Bonus bet</Term>
+              </label>
+            </div>
+          </div>
+          <div className="bar">
+            <button className="primary">Save bet</button>
+            {formError && <span className="bad" role="alert">{formError}</span>}
+          </div>
+        </form>
+      )}
       <table>
         <thead>
           <tr>

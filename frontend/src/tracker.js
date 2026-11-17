@@ -3,6 +3,8 @@
  * under node --test).
  */
 
+import {decimalToAmerican} from './calc.js';
+
 // Diverging P/L scale: blue = profit, red = loss, gray midpoint. Validated
 // for colour vision deficiency on the dark surface.
 
@@ -108,6 +110,55 @@ export function betFormError(form) {
     return 'Closing odds must be +100 or more, or -100 or less';
   }
   return null;
+}
+
+/**
+ * Add-bet form fields, each with a visible label (WCAG 3.3.2).
+ * @const {!Array<{key: string, id: string, label: string, required: boolean}>}
+ */
+export const ADD_BET_FIELDS = [
+  {key: 'pick', id: 'bet-pick', label: 'Pick', required: true},
+  {key: 'event', id: 'bet-event', label: 'Event (Away @ Home)', required: false},
+  {key: 'sport', id: 'bet-sport', label: 'Sport', required: false},
+  {key: 'market', id: 'bet-market', label: 'Bet type', required: false},
+  {key: 'strategy', id: 'bet-strategy', label: 'Strategy', required: false},
+  {key: 'book', id: 'bet-book', label: 'Book', required: false},
+  {key: 'odds', id: 'bet-odds', label: 'Odds', required: true},
+  {key: 'stake', id: 'bet-stake', label: 'Stake', required: true},
+];
+
+/**
+ * Parses odds typed by the user into American. American is always accepted;
+ * decimal (1.01 or more, with a point) only when `format` is 'decimal'.
+ * @param {string} text
+ * @param {string} format The user's odds format.
+ * @return {number} American odds, or NaN if invalid.
+ */
+export function parseOddsInput(text, format) {
+  const value = toNumber(text);
+  if (!Number.isFinite(value)) return NaN;
+  if (isAmericanOdds(text)) return value;
+  if (format === 'decimal' && value > 1 && value < 100) return Math.round(decimalToAmerican(value));
+  return NaN;
+}
+
+/**
+ * Returns validation messages keyed by field, for showing next to each input.
+ * @param {{pick: string, odds: string, stake: string}} form
+ * @param {string} format The user's odds format.
+ * @return {!Object<string, string>}
+ */
+export function betFieldErrors(form, format) {
+  const errors = {};
+  if (!String(form.pick ?? '').trim()) errors.pick = 'Pick is required';
+  if (Number.isNaN(parseOddsInput(form.odds, format))) {
+    errors.odds = format === 'decimal' ?
+        'Odds must be decimal (1.01 or more) or American (+100 or more, -100 or less)' :
+        'Odds must be +100 or more, or -100 or less';
+  }
+  const stake = toNumber(form.stake);
+  if (!(Number.isFinite(stake) && stake > 0)) errors.stake = 'Stake must be more than 0';
+  return errors;
 }
 
 /** Parses a form value as a number; blank is NaN, not 0. */
