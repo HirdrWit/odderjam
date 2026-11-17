@@ -193,8 +193,7 @@ export function groupStats(group, books, market = null) {
 }
 
 /**
- * Returns the line most books hang (the "main" line), for the collapsed event
- * summary.
+ * Returns the line most books hang (the "main" line), for a game's grid row.
  * @param {!Array<{outcomes: !Array<!Object>}>} groups
  * @param {!Array<string>} books
  * @return {?Object}
@@ -202,6 +201,46 @@ export function groupStats(group, books, market = null) {
 export function mainGroup(groups, books) {
   const count = (g) => books.filter((b) => g.outcomes.every((o) => o.prices[b] != null)).length;
   return groups.reduce((a, g) => (!a || count(g) > count(a) ? g : a), null);
+}
+
+/**
+ * Builds the grid rows one game produces for a market: one row per line, each
+ * with a side per outcome. Non-prop markets show only the main line (the one
+ * most books hang); props show every player line. A market the game lacks
+ * gives no rows.
+ * @param {{home: string, away: string, markets: !Object<string, !Array<!Object>>}} event
+ * @param {string} market
+ * @param {!Array<string>} books Books shown as columns.
+ * @return {!Array<{key: string, player: ?string, sides: !Array<!Object>,
+ *     holdPct: ?number, suspect: boolean, bookCount: number, extraLines: number}>}
+ */
+export function gridRows(event, market, books) {
+  const outs = event.markets[market] || [];
+  const groups = lineGroups(market, outs, event.home, event.away);
+  const main = isProp(market) ? null : mainGroup(groups, books);
+  const chosen = isProp(market) ? groups : (main ? [main] : []);
+  return chosen.map((group) => {
+    const stats = groupStats(group, books, market);
+    const sides = group.outcomes.map((outcome, i) => {
+      const best = stats.best[i];
+      const prices = {};
+      const isBest = {};
+      for (const book of books) {
+        prices[book] = outcome.prices[book] ?? null;
+        isBest[book] = Boolean(best) && prices[book] === best.price;
+      }
+      return {label: outcomeLabel(outcome), outcome, prices, best, fair: stats.fair[i], isBest};
+    });
+    return {
+      key: JSON.stringify([group.player, group.point]),
+      player: group.player,
+      sides,
+      holdPct: stats.holdPct,
+      suspect: stats.suspect,
+      bookCount: stats.bookCount,
+      extraLines: isProp(market) ? 0 : groups.length - 1,
+    };
+  });
 }
 
 /**

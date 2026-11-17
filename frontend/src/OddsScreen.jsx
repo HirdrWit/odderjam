@@ -4,7 +4,7 @@ import {eventTime, percent} from './fmt.js';
 import {americanToProb} from './calc.js';
 import {useApi, useSlip, useStored} from './hooks.js';
 import {toast} from './hooks.jsx';
-import {booksHelp, chevron, holdClass, introVisible, slipToast, suspectNote} from './oddsrow.js';
+import {booksHelp, holdClass, introVisible, slipToast, suspectNote} from './oddsrow.js';
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {slipLeg} from './slip.js';
@@ -14,11 +14,8 @@ import {
   allBooks,
   filterEvents,
   formatOdds,
-  groupStats,
+  gridRows,
   isProp,
-  lineGroups,
-  mainGroup,
-  outcomeLabel,
   splitLive,
 } from './odds.js';
 
@@ -45,62 +42,6 @@ function marketLabel(market) {
 
 function holdText(holdPct) {
   return percent(holdPct, {digits: 2, signed: true});
-}
-
-function LineTable({group, market, books, format, legOf, slip}) {
-  const stats = groupStats(group, books, market);
-  const priceClass = (o, i, book) => {
-    const best = stats.best[i];
-    const isBest = o.prices[book] != null && best && o.prices[book] === best.price;
-    const leg = legOf(o);
-    return `${isBest ? 'best' : ''}${leg && slip.has(leg) ? ' inslip' : ''}`;
-  };
-  const togglePrice = (o, book) => {
-    const leg = legOf(o, book);
-    if (o.prices[book] == null || !leg) return;
-    const added = !slip.has(leg);
-    slip.toggle(leg);
-    const t = slipToast(added, slip.slip.length + (added ? 1 : -1));
-    toast(t.text, t.kind, t.action);
-  };
-  const bookCount = stats.bookCount;
-  return (
-    <table className={`odds${stats.suspect ? ' suspect' : ''}`}>
-      <thead>
-        <tr><th>Line</th><th className="num">Best</th><th className="num"><Term id="fair-odds">Fair</Term></th>{books.map((b) => <th key={b} className="num">{b}</th>)}</tr>
-      </thead>
-      <tbody>
-        {group.outcomes.map((o, i) => (
-          <tr key={`${o.name}${o.point}`}>
-            <td>{outcomeLabel(o)}</td>
-            <td className="best num">
-              {stats.best[i] ?
-                <>
-                  {formatOdds(stats.best[i].price, format)}{' '}
-                  <span className="mut small">{stats.best[i].book}</span>
-                </> :
-                '—'}
-            </td>
-            <td className="mut num">{formatOdds(stats.fair[i], format) || '—'}</td>
-            {books.map((b) => (
-              <td key={b} className={`num ${priceClass(o, i, b)}`} onClick={() => {
-                togglePrice(o, b);
-              }}>
-                {formatOdds(o.prices[b], format)}
-              </td>
-            ))}
-          </tr>
-        ))}
-        <tr className="foot">
-          <td><Term id="hold">Hold</Term> at best</td>
-          <td className={`num ${holdClass(stats.holdPct, stats.suspect)}`}>{holdText(stats.holdPct)}</td>
-          <td colSpan={books.length + 1} className="mut small">
-            {stats.suspect ? suspectNote() : bookCount ? `Fair = no-vig average of ${bookCount} book${bookCount > 1 ? 's' : ''}` : ''}
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  );
 }
 
 // Fixed categorical order (dark mode steps); a book keeps its colour whatever
@@ -253,71 +194,99 @@ function BookPicker({books, hidden, setHidden}) {
   );
 }
 
-function EventCard({event, market, books, format, slip, isOpen, onToggle, eventMarket, onPickMarket}) {
-  const m = eventMarket && event.markets[eventMarket] ? eventMarket : market;
-  const outs = event.markets[m] || [];
-  const groups = lineGroups(m, outs, event.home, event.away);
-  const main = mainGroup(groups, books);
-  const mainStats = main && groupStats(main, books, m);
-  const bestSummary = main && main.outcomes.map((o, i) => {
-    const best = mainStats.best[i];
-    return `${outcomeLabel(o)} ${best ? formatOdds(best.price, format) : '—'}`;
-  }).join(' · ');
-  const legOf = (o, book) => slipLeg(event, m, o, book);
+function GameRows({event, market, books, format, slip, historyOpen, onHistory}) {
+  const rows = gridRows(event, market, books);
+  if (!rows.length) return null;
+  const togglePrice = (side, book) => {
+    const leg = slipLeg(event, market, side.outcome, book);
+    if (side.prices[book] == null || !leg) return;
+    const added = !slip.has(leg);
+    slip.toggle(leg);
+    const t = slipToast(added, slip.slip.length + (added ? 1 : -1));
+    toast(t.text, t.kind, t.action);
+  };
+  const span = books.length + 4;
   return (
-    <div className="card" role="button" tabIndex={0} aria-expanded={isOpen} onClick={onToggle}
-      onKeyDown={(e) => {
-        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault();
-          onToggle();
-        }
-      }}>
-      <span className="chevron" aria-hidden="true">{chevron(isOpen)}</span>{' '}
-      {event.live && <><span className="badge live">LIVE</span>{' '}</>}
-      <b>{event.away} @ {event.home}</b>{' '}
-      <span className="mut">{event.sport} · {eventTime(event.start)}</span>
-      <div className="mut">
-        {!main ? `No ${marketLabel(m).toLowerCase()} odds` : (
-          <>
-            {marketLabel(m)} best: {bestSummary}
-            {' · '}<Term id="hold">hold</Term> <span className={holdClass(mainStats.holdPct, mainStats.suspect)}>{holdText(mainStats.holdPct)}</span>{mainStats.suspect && <span className="mut small"> · {suspectNote()}</span>}
-            {groups.length > 1 && ` · ${groups.length} lines`}
-          </>
-        )}
-        {' · '}prices {ageText(event.price_age_seconds)} old
-      </div>
-      {isOpen && (
-        <div onClick={(e) => {
-          e.stopPropagation();
-        }} className="detail">
-          <div className="subnav">
-            {Object.keys(event.markets).map((k) => (
-              <button key={k} className={k === m ? 'on' : ''} onClick={() => {
-                onPickMarket(k);
-              }}>{marketLabel(k)}</button>
+    <tbody className={`game${rows.some((r) => r.suspect) ? ' suspect' : ''}`}>
+      {rows.map((row, r) => row.sides.map((side, i) => {
+        const leg = slipLeg(event, market, side.outcome);
+        return (
+          <tr key={`${row.key}${i}`} className={i === 0 ? 'first' : ''}>
+            {r === 0 && i === 0 && (
+              <th scope="row" className="gamecol" rowSpan={rows.reduce((n, x) => n + x.sides.length, 0)}>
+                {event.live && <><span className="badge live">LIVE</span>{' '}</>}
+                <b>{event.away} @ {event.home}</b>
+                <div className="mut small">{event.sport} · {eventTime(event.start)} · prices {ageText(event.price_age_seconds)} old</div>
+                {row.extraLines > 0 && <div className="mut small">Main line of {row.extraLines + 1}</div>}
+                {market === 'moneyline' && event.markets.moneyline && (
+                  <button className="chip" aria-expanded={historyOpen} onClick={onHistory}>Price history</button>
+                )}
+              </th>
+            )}
+            <td className="line">{row.player && i === 0 ? <div className="mut small">{row.player}</div> : null}{side.label}</td>
+            <td className="num">
+              {side.best ? <>{formatOdds(side.best.price, format)}{' '}<span className="mut small">{side.best.book}</span></> : '—'}
+            </td>
+            <td className="mut num">{formatOdds(side.fair, format) || '—'}</td>
+            {books.map((b) => (
+              <td key={b} className={`num${side.isBest[b] ? ' bestcell' : ''}${leg && slip.has(slipLeg(event, market, side.outcome, b)) ? ' inslip' : ''}`}
+                onClick={() => {
+                  togglePrice(side, b);
+                }}>
+                {formatOdds(side.prices[b], format)}
+              </td>
             ))}
-          </div>
-          {!isProp(m) && <div className="mut small">Click a price to add it to the parlay slip.</div>}
-          {groups.map((g) => (
-            <LineTable key={`${g.player ?? ''}${g.point}`} group={g} market={m} books={books} format={format}
-              slip={slip} legOf={legOf} />
+          </tr>
+        );
+      }))}
+      <tr className="foot">
+        <td colSpan={span} className="mut small">
+          {rows.map((row) => (
+            <span key={row.key}>
+              <Term id="hold">Hold</Term> at best <span className={holdClass(row.holdPct, row.suspect)}>{holdText(row.holdPct)}</span>
+              {row.suspect && <> · {suspectNote()}</>}{' '}
+            </span>
           ))}
-          <LineMovement event={event} books={books} format={format} />
-        </div>
+        </td>
+      </tr>
+      {historyOpen && (
+        <tr><td colSpan={span}><LineMovement event={event} books={books} format={format} /></td></tr>
       )}
+    </tbody>
+  );
+}
+
+function GameGrid({events, market, books, format, slip, history, setHistory}) {
+  return (
+    <div className="gridwrap">
+      <table className="odds grid">
+        <thead>
+          <tr>
+            <th className="gamecol">Game</th><th>Line</th><th className="num">Best</th>
+            <th className="num"><Term id="fair-odds">Fair</Term></th>
+            {books.map((b) => <th key={b} className="num">{b}</th>)}
+          </tr>
+        </thead>
+        {events.map((e) => (
+          <GameRows key={e.id} event={e} market={market} books={books} format={format} slip={slip}
+            historyOpen={history === e.id}
+            onHistory={() => {
+              setHistory(history === e.id ? null : e.id);
+            }} />
+        ))}
+      </table>
     </div>
   );
 }
 
-/** Odds Screen tab: every book's prices per event, with best price, hold and fair odds. */
+/** Odds Screen tab: a games x books grid with best price, hold and fair odds. */
 export function OddsScreen({welcome = false}) {
   const [sport, setSport] = useStored('oddsSport', '');
   const [market, setMarket] = useStored('oddsMarket', 'moneyline');
   const [format, setFormat] = useStored('oddsFormat', 'american');
   const [hidden, setHidden] = useStored('oddsHiddenBooks', []);
   const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(null);
-  const [eventMarket, setEventMarket] = useState({});
+  const [history, setHistory] = useState(null);
   const [showBooks, setShowBooks] = useState(false);
   const slip = useSlip();
   const data = useApi(`/api/odds${sport ? `?sport=${sport}` : ''}`) || [];
@@ -356,7 +325,6 @@ export function OddsScreen({welcome = false}) {
         {markets.map((m) => (
           <button key={m} className={m === market ? 'on' : ''} onClick={() => {
             setMarket(m);
-            setEventMarket({});
           }}>{marketLabel(m)}</button>
         ))}
       </div>
@@ -365,16 +333,8 @@ export function OddsScreen({welcome = false}) {
       {shown.length > 0 && [['Live', live], ['Upcoming', upcoming]].map(([title, list]) => list.length > 0 && (
         <Fragment key={title}>
           <h3 className="section">{title}</h3>
-          {list.map((e) => (
-            <EventCard key={e.id} event={e} market={market} books={shown} format={format} slip={slip}
-              isOpen={open === e.id} eventMarket={eventMarket[e.id]}
-              onToggle={() => {
-                setOpen(open === e.id ? null : e.id);
-              }}
-              onPickMarket={(k) => {
-                setEventMarket({...eventMarket, [e.id]: k});
-              }} />
-          ))}
+          <GameGrid events={list} market={market} books={shown} format={format} slip={slip}
+            history={history} setHistory={setHistory} />
         </Fragment>
       ))}
     </>

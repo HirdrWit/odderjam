@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {booksHelp, chevron, introVisible, slipToast} from './oddsrow.js';
-
-test('chevron differs for open and closed rows', () => {
-  assert.ok(chevron(true));
-  assert.ok(chevron(false));
-  assert.notEqual(chevron(true), chevron(false));
-});
+import {booksHelp, introVisible, slipToast} from './oddsrow.js';
 
 test('adding a price confirms and links to Parlay', () => {
   const t = slipToast(true);

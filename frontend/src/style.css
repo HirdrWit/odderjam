@@ -104,7 +104,7 @@ button.chip { background: var(--surface-2); color: inherit; border: 1px solid va
 .detail { cursor: default; margin-top: 10px; } .detail .subnav { margin-bottom: var(--sp-1); }
 table.odds { font-size: var(--fs-2); } table.odds th, table.odds td { padding: 5px var(--sp-2); white-space: nowrap; }
 table.odds tr.foot td { border-bottom: 0; }
-.card .mut.small, table.odds .mut { margin-left: 2px; }
+table.odds .mut { margin-left: 2px; }
 .badge.live { display: inline-block; background: var(--danger); color: var(--on-accent); font-size: var(--fs-badge); font-weight: 700; letter-spacing: .04em; padding: 1px 6px; border-radius: 8px; vertical-align: middle; }
 h3.section { font-size: var(--fs-2); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: var(--sp-4) 0 var(--sp-2); }
 .livebox { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--divider); padding-top: var(--sp-2); }
@@ -159,9 +159,6 @@ input.bankroll-start { width: 90px; }
 .badge.won { background: var(--info); color: var(--on-accent); } .badge.lost { background: var(--danger); color: var(--on-accent); }
 .badge.push, .badge.void { background: var(--neutral); color: var(--on-accent); } .badge.pending { background: var(--caution); color: var(--on-accent); }
 .tile b.small { font-size: var(--fs-1); font-weight: 600; }
-.card:hover { background: var(--surface-2); }
-.card:focus-visible { outline: 2px solid var(--accent); }
-.card .chevron { color: var(--text-muted); display: inline-block; width: 1em; }
 .toast button.link { background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
 td.row-actions { white-space: nowrap; }
 td.row-actions .row-actions-inner { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: stretch; }
@@ -195,3 +192,15 @@ table.odds.suspect td.best { color: inherit; font-weight: normal; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .chip { padding: 2px 8px; border-radius: 12px; font-size: 12px; }
 .panel { border: 1px solid var(--divider); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; }
+
+/* Odds Screen grid (odderjam-99) */
+.gridwrap { overflow-x: auto; overflow-y: auto; max-height: 75vh; margin-bottom: var(--sp-3); }
+table.grid { border-collapse: separate; border-spacing: 0; }
+table.grid thead th { position: sticky; top: 0; z-index: 3; background: #18202a; background: var(--surface-1); }
+table.grid .gamecol { position: sticky; left: 0; z-index: 2; text-align: left; vertical-align: top; white-space: normal; min-width: 150px; max-width: 220px; background: #18202a; background: var(--surface-1); border-right: 1px solid var(--divider); }
+table.grid thead th.gamecol { z-index: 4; }
+table.grid tr.first td, table.grid tr.first th { border-top: 1px solid var(--divider); }
+table.grid td.bestcell { background: rgba(60, 180, 110, 0.22); color: var(--positive); font-weight: 700; }
+table.grid td.num { cursor: pointer; }
+table.grid tbody.suspect td.bestcell { background: none; color: inherit; font-weight: normal; }
+@media (max-width: 640px) { table.grid .gamecol { min-width: 110px; max-width: 130px; } }

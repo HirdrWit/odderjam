@@ -4,14 +4,6 @@
  */
 
 /**
- * @param {boolean} isOpen
- * @return {string} The chevron shown on a game row.
- */
-export function chevron(isOpen) {
-  return isOpen ? '▾' : '▸';
-}
-
-/**
  * @param {boolean} added True when a price was added, false when removed.
  * @param {?number=} count Legs on the slip after the change.
  * @return {{text: string, kind: string, action: (!Object|undefined)}}
