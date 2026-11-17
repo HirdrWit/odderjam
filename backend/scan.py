@@ -3,7 +3,7 @@ import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
-from .engine import arb as arbm, ev, live, markets as mk, odds, sharp, sizing
+from .engine import arb as arbm, ev, live, markets as mk, odds, sharp, sizing, suspect
 from .providers import live_config
 from .providers.books import SHARP, US_BOOKS, bet_link, us_only
 
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 def groups(e: dict, market: str | None = None, props: bool = True) -> Iterator[tuple[str, dict]]:
-    """Yield (market_key, line_group) for every complete line group in an event.
+    """Yield (market_key, line_group) for every complete, non-suspect line group in an event.
 
     `market` keeps one market key only; `props=False` drops player props (mainlines only).
     """
@@ -20,7 +20,8 @@ def groups(e: dict, market: str | None = None, props: bool = True) -> Iterator[t
         if (market and key != market) or (not props and mk.is_prop(key)):
             continue
         for g in mk.line_groups(key, outcomes, e["home"], e["away"]):
-            yield key, g
+            if not suspect.is_suspect_market(key, g["outcomes"]):  # stale or mismatched prices
+                yield key, g
 
 
 def sharp_line_hold(g: dict) -> float | None:

@@ -16,8 +16,8 @@ def event(eid, markets, home="A", away="B"):
 
 EVENTS = [
     # Best prices DraftKings +105 / FanDuel -105 -> hold ~0%. Pinnacle (non-US) must be ignored.
-    event("1", {"moneyline": [outcome("A", None, DraftKings=105, BetMGM=-110, Pinnacle=200),
-                              outcome("B", None, FanDuel=-105, BetMGM=-110, Pinnacle=200)]}),
+    event("1", {"moneyline": [outcome("A", None, DraftKings=105, BetMGM=-110, Pinnacle=106),
+                              outcome("B", None, FanDuel=-105, BetMGM=-110, Pinnacle=106)]}),
     # -110 / -110 both at BetMGM -> hold ~4.5%.
     event("2", {"totals": [outcome("Over", 220.5, BetMGM=-110), outcome("Under", 220.5, BetMGM=-110)]}),
     # Three-way market: skipped.

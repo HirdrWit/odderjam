@@ -4,6 +4,7 @@ import {test} from 'node:test';
 
 import {americanToProb} from './calc.js';
 import * as odds from './odds.js';
+import * as oddsrow from './oddsrow.js';
 
 function close(a, b, tol = 1e-6) {
   assert.ok(Math.abs(a - b) <= tol, `${a} != ${b}`);
@@ -95,4 +96,52 @@ test('splitLive separates in-play from upcoming events, keeping order', () => {
   const {live, upcoming} = odds.splitLive(evs);
   assert.deepEqual(live.map((e) => e.id), [2, 4]);
   assert.deepEqual(upcoming.map((e) => e.id), [1, 3]);
+});
+
+const SUSPECT_SPREAD = {
+  complete: true,
+  outcomes: [
+    {name: 'Nets', point: -3.5, prices: {MGM: -10000, DK: -110}},
+    {name: '76ers', point: 3.5, prices: {MGM: 1350, DK: -110}},
+  ],
+};
+
+test('isSuspectMarket flags the -97% hold example and passes an ordinary market', () => {
+  assert.equal(odds.isSuspectMarket('spreads', SUSPECT_SPREAD, ['MGM', 'DK']), true);
+  const ordinary = {complete: true, outcomes: SPREADS.slice(0, 2)};
+  assert.equal(odds.isSuspectMarket('spreads', ordinary, ['A', 'B']), false);
+});
+
+test('isSuspectMarket: hold floor and odds cap', () => {
+  const ml = (a, b) => ({complete: true, outcomes: [
+    {name: 'A', point: null, prices: {X: a}}, {name: 'B', point: null, prices: {X: b}}]});
+  assert.equal(odds.isSuspectMarket('moneyline', ml(400, 400), ['X']), true);
+  assert.equal(odds.isSuspectMarket('moneyline', ml(110, 110), ['X']), false);
+  assert.equal(odds.isSuspectMarket('moneyline', ml(-6000, 2500), ['X']), false);
+  const tot = (p) => ({complete: true, outcomes: [
+    {name: 'Over', point: 220.5, prices: {X: p}}, {name: 'Under', point: 220.5, prices: {X: -110}}]});
+  assert.equal(odds.isSuspectMarket('totals', tot(-5001), ['X']), true);
+  assert.equal(odds.isSuspectMarket('totals', tot(-5000), ['X']), false);
+});
+
+test('groupStats on a suspect market has no best price, hold or fair price', () => {
+  const s = odds.groupStats(SUSPECT_SPREAD, ['MGM', 'DK'], 'spreads');
+  assert.equal(s.suspect, true);
+  assert.deepEqual(s.best, [null, null]);
+  assert.equal(s.holdPct, null);
+  assert.deepEqual(s.fair, [null, null]);
+});
+
+test('groupStats on an ordinary market is not suspect', () => {
+  const s = odds.groupStats({complete: true, outcomes: SPREADS.slice(0, 2)}, ['A', 'B'], 'spreads');
+  assert.equal(s.suspect, false);
+  assert.ok(s.best[0] != null && s.holdPct != null);
+});
+
+test('suspectNote and holdClass never color a suspect or negative-floor hold as good', () => {
+  assert.equal(oddsrow.suspectNote(), 'Prices look stale or mismatched');
+  assert.equal(oddsrow.holdClass(-97.02, true), '');
+  assert.equal(oddsrow.holdClass(-97.02, false), '');
+  assert.equal(oddsrow.holdClass(-1, false), 'best');
+  assert.equal(oddsrow.holdClass(8, false), 'bad');
 });

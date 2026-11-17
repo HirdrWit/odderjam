@@ -30,7 +30,9 @@ test('required color tokens exist on :root', () => {
 });
 
 test('no raw hex outside the :root token block', () => {
-  const hits = rest.match(/#[0-9a-fA-F]{3,8}\b/g) || [];
+  // A hex fallback declared straight before the same property's var() is allowed (sticky header).
+  const withoutFallbacks = rest.replace(/([\w-]+)\s*:\s*#[0-9a-fA-F]{3,8}\s*;\s*(?=\1\s*:\s*var\()/g, '');
+  const hits = withoutFallbacks.match(/#[0-9a-fA-F]{3,8}\b/g) || [];
   assert.deepEqual(hits, []);
 });
 

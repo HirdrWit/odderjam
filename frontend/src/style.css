@@ -183,3 +183,6 @@ th.num button.sort { text-align: right; }
 .age-chip { font-size: var(--fs-1); color: var(--text-muted); }
 .age-chip.stale { background: var(--caution); color: var(--on-accent); font-weight: 700; padding: 1px 6px; border-radius: 8px; }
 tr:has(.age-chip.stale) > td { opacity: .6; }
+
+table.odds.suspect { opacity: 0.5; }
+table.odds.suspect td.best { color: inherit; font-weight: normal; }

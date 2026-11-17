@@ -116,6 +116,34 @@ export function lineGroups(market, outcomes, home, away) {
       (a.point == null) - (b.point == null) || (a.point ?? 0) - (b.point ?? 0));
 }
 
+/** Best-price hold below this is impossible for a real market (mirror of backend/engine/suspect.py). */
+export const HOLD_FLOOR_PCT = -10;
+/** |American odds| above this on a spread or total is a stale or mismatched price. */
+export const ODDS_CAP = 5000;
+
+/**
+ * True when a line's prices look stale or mismatched: the hold at the best
+ * prices is below the floor, or a spread/total price is beyond the cap. The
+ * Odds Screen uses this; backend/engine/suspect.py is the scanners' copy.
+ * @param {string} market
+ * @param {{outcomes: !Array<!Object>}} group
+ * @param {!Array<string>=} books Books to look at; all books when omitted.
+ * @return {boolean}
+ */
+export function isSuspectMarket(market, group, books) {
+  const sides = group.outcomes.map((o) => Object.entries(o.prices)
+      .filter(([book, p]) => p != null && (!books || books.includes(book)))
+      .map(([, p]) => p));
+  if ((market === 'spreads' || market === 'totals') &&
+      sides.some((side) => side.some((p) => Math.abs(p) > ODDS_CAP))) {
+    return true;
+  }
+  if (sides.length && sides.every((side) => side.length)) {
+    return hold(sides.map((side) => Math.max(...side))).holdPct < HOLD_FLOOR_PCT;
+  }
+  return false;
+}
+
 /**
  * Returns the best (highest) price for an outcome among the given books.
  * @param {{prices: !Object<string, number>}} outcome
@@ -143,10 +171,11 @@ export function bestPrice(outcome, books) {
  * @return {{best: !Array<?{book: string, price: number}>, holdPct: ?number,
  *     fair: !Array<?number>, bookCount: number}}
  */
-export function groupStats(group, books) {
-  const best = group.outcomes.map((o) => bestPrice(o, books));
-  const out = {best, holdPct: null, fair: group.outcomes.map(() => null), bookCount: 0};
-  if (!group.complete) return out;
+export function groupStats(group, books, market = null) {
+  const suspect = market != null && isSuspectMarket(market, group, books);
+  const best = suspect ? group.outcomes.map(() => null) : group.outcomes.map((o) => bestPrice(o, books));
+  const out = {best, holdPct: null, fair: group.outcomes.map(() => null), bookCount: 0, suspect};
+  if (suspect || !group.complete) return out;
   if (best.every((b) => b != null)) out.holdPct = hold(best.map((b) => b.price)).holdPct;
   const full = books.filter((b) => group.outcomes.every((o) => o.prices[b] != null));
   out.bookCount = full.length;

@@ -4,7 +4,7 @@ import {eventTime, percent} from './fmt.js';
 import {americanToProb} from './calc.js';
 import {useApi, useSlip, useStored} from './hooks.js';
 import {toast} from './hooks.jsx';
-import {booksHelp, chevron, introVisible, slipToast} from './oddsrow.js';
+import {booksHelp, chevron, holdClass, introVisible, slipToast, suspectNote} from './oddsrow.js';
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {slipLeg} from './slip.js';
@@ -47,14 +47,8 @@ function holdText(holdPct) {
   return percent(holdPct, {digits: 2, signed: true});
 }
 
-function holdClass(holdPct) {
-  if (holdPct == null) return '';
-  if (holdPct <= 0) return 'best';
-  return holdPct > 5 ? 'bad' : '';
-}
-
-function LineTable({group, books, format, legOf, slip}) {
-  const stats = groupStats(group, books);
+function LineTable({group, market, books, format, legOf, slip}) {
+  const stats = groupStats(group, books, market);
   const priceClass = (o, i, book) => {
     const best = stats.best[i];
     const isBest = o.prices[book] != null && best && o.prices[book] === best.price;
@@ -71,7 +65,7 @@ function LineTable({group, books, format, legOf, slip}) {
   };
   const bookCount = stats.bookCount;
   return (
-    <table className="odds">
+    <table className={`odds${stats.suspect ? ' suspect' : ''}`}>
       <thead>
         <tr><th>Line</th><th className="num">Best</th><th className="num"><Term id="fair-odds">Fair</Term></th>{books.map((b) => <th key={b} className="num">{b}</th>)}</tr>
       </thead>
@@ -99,9 +93,9 @@ function LineTable({group, books, format, legOf, slip}) {
         ))}
         <tr className="foot">
           <td><Term id="hold">Hold</Term> at best</td>
-          <td className={`num ${holdClass(stats.holdPct)}`}>{holdText(stats.holdPct)}</td>
+          <td className={`num ${holdClass(stats.holdPct, stats.suspect)}`}>{holdText(stats.holdPct)}</td>
           <td colSpan={books.length + 1} className="mut small">
-            {bookCount ? `Fair = no-vig average of ${bookCount} book${bookCount > 1 ? 's' : ''}` : ''}
+            {stats.suspect ? suspectNote() : bookCount ? `Fair = no-vig average of ${bookCount} book${bookCount > 1 ? 's' : ''}` : ''}
           </td>
         </tr>
       </tbody>
@@ -264,7 +258,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
   const outs = event.markets[m] || [];
   const groups = lineGroups(m, outs, event.home, event.away);
   const main = mainGroup(groups, books);
-  const mainStats = main && groupStats(main, books);
+  const mainStats = main && groupStats(main, books, m);
   const bestSummary = main && main.outcomes.map((o, i) => {
     const best = mainStats.best[i];
     return `${outcomeLabel(o)} ${best ? formatOdds(best.price, format) : '—'}`;
@@ -286,7 +280,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
         {!main ? `No ${marketLabel(m).toLowerCase()} odds` : (
           <>
             {marketLabel(m)} best: {bestSummary}
-            {' · '}<Term id="hold">hold</Term> <span className={holdClass(mainStats.holdPct)}>{holdText(mainStats.holdPct)}</span>
+            {' · '}<Term id="hold">hold</Term> <span className={holdClass(mainStats.holdPct, mainStats.suspect)}>{holdText(mainStats.holdPct)}</span>{mainStats.suspect && <span className="mut small"> · {suspectNote()}</span>}
             {groups.length > 1 && ` · ${groups.length} lines`}
           </>
         )}
@@ -305,7 +299,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
           </div>
           {!isProp(m) && <div className="mut small">Click a price to add it to the parlay slip.</div>}
           {groups.map((g) => (
-            <LineTable key={`${g.player ?? ''}${g.point}`} group={g} books={books} format={format}
+            <LineTable key={`${g.player ?? ''}${g.point}`} group={g} market={m} books={books} format={format}
               slip={slip} legOf={legOf} />
           ))}
           <LineMovement event={event} books={books} format={format} />

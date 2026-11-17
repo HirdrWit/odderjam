@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from . import alerts, history, scan, sharp_money
 from .scan import groups as _groups
 from .engine import (devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
-                     promo, sharp, sizing)
+                     promo, sharp, sizing, suspect)
 from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets, filters as flt
 from .routes.filters import FilterSet
@@ -454,6 +454,13 @@ def _center(key: str, outcomes: list[dict], home: str) -> float:
     return median(sharp or lines)
 
 
+def _unsuspect_outcomes(key: str, e: dict) -> list[dict]:
+    """The event's outcomes for a market, minus every line whose prices look stale or mismatched."""
+    bad = {id(o) for g in mk.line_groups(key, e["markets"][key], e["home"], e["away"])
+           if suspect.is_suspect_market(key, g["outcomes"]) for o in g["outcomes"]}
+    return [o for o in e["markets"][key] if id(o) not in bad]
+
+
 @app.get("/api/middles")
 def middles(
     min_window: float = 0.0,
@@ -470,7 +477,7 @@ def middles(
         for key in ("spreads", "totals"):
             if (market and key != market) or not e["markets"].get(key):
                 continue
-            outcomes = e["markets"][key]
+            outcomes = _unsuspect_outcomes(key, e)
             over, under = _middle_sides(key, outcomes, e["home"])
             pmf = mid.model_pmf(e["sport"], key, _center(key, outcomes, e["home"]))
             for la, overs in over.items():

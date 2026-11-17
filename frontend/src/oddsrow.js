@@ -42,3 +42,19 @@ export function booksHelp(shown, total) {
 export function introVisible(welcomeShown) {
   return !welcomeShown;
 }
+
+/** @return {string} The note shown on a market whose prices fail the sanity check. */
+export function suspectNote() {
+  return 'Prices look stale or mismatched';
+}
+
+/**
+ * @param {?number} holdPct
+ * @param {boolean=} suspect True for a suspect market: never colored.
+ * @return {string} CSS class for a hold figure: green only for a real zero or negative hold.
+ */
+export function holdClass(holdPct, suspect = false) {
+  if (holdPct == null || suspect || holdPct < -10) return '';
+  if (holdPct <= 0) return 'best';
+  return holdPct > 5 ? 'bad' : '';
+}
