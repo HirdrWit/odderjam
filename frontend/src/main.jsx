@@ -14,6 +14,8 @@ import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
+import {activeChips, clearFilter, resetFilters, sportsParam} from './evfilters.js';
+import {stakingSummary} from './staking.js';
 import {TabIntro, WelcomeContext} from './TabIntro.jsx';
 import {afterNavigate, initialWelcome} from './onboarding.js';
 import {Term} from './Term.jsx';
@@ -357,6 +359,8 @@ function PositiveEv() {
   const [method, setMethod] = useStored('evMethod', 'multiplicative');
   const [kelly, setKelly] = useStored('evKelly', 0.25);
   const [props, setProps] = useStored('evProps', 'include');
+  const [sport, setSport] = useStored('evSport', '');
+  const [panel, setPanel] = useState(null);
   const [book, setBook] = useState(() => loadEvBook());
   const [sort, onSort, sorted] = useSort('+EV', {key: 'ev', dir: 'desc'});
   const bank = useApi('/api/bankroll', 30000);
@@ -378,6 +382,11 @@ function PositiveEv() {
     } catch {
       // Storage can be unavailable; the choice just is not remembered.
     }
+  };
+  const setters = {book: pickBook, minEv: setMinEv, sport: setSport, props: setProps};
+  const chips = activeChips({book, minEv, sport, props});
+  const resetAll = (d) => {
+    Object.keys(d).forEach((key) => setters[key](d[key]));
   };
   const [tracked, setTracked] = useState(() => new Set());
   const track = async (row) => {
@@ -427,12 +436,12 @@ function PositiveEv() {
       null;
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}` +
-      `${sizingQuery(sizing)}${propsParam(props)}`;
+      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}`;
   const data = useApi(cfg && `/api/ev?${query}`);
   return (
     <>
       <TabIntro tab="+EV" />
-      <div className="bar">
+      <div className="bar filter-bar">
         Book <select value={book} onChange={(e) => {
           pickBook(e.target.value);
         }}>
@@ -441,27 +450,60 @@ function PositiveEv() {
         Min <Term id="ev">EV</Term> % <input type="number" step="0.5" value={minEv} onChange={(e) => {
           setMinEv(Number(e.target.value));
         }} />
-        <Term id="devig">Devig</Term><FilterHelp help="devig" /> <select value={method} onChange={(e) => {
-          setMethod(e.target.value);
+        Sport <select value={sport} onChange={(e) => {
+          setSport(e.target.value);
         }}>
-          {(cfg?.methods || [method]).map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}
+          {SPORTS.map((x) => <option key={x} value={x}>{x || 'Any sport'}</option>)}
         </select>
-        {bank && <Bankroll key={`${bank.starting}-${startRejected}`} bank={bank} onSetStart={(v) => {
-          setStart(v);
-        }} />}
-        <Term id="kelly">Kelly</Term><FilterHelp help="kelly" /> <input type="number" step="0.05" value={kelly} onChange={(e) => {
-          setKelly(Number(e.target.value));
-        }} />
-        <SizingBar s={sizing} />
-        <PropsFilter value={props} onChange={setProps} />
+        Market <PropsFilter value={props} onChange={setProps} />
+        <button type="button" className="link" onClick={() => {
+          resetAll(resetFilters());
+        }}>Reset</button>
+        <button type="button" aria-expanded={panel === 'model'} onClick={() => {
+          setPanel(panel === 'model' ? null : 'model');
+        }}>Model settings</button>
+        <button type="button" aria-expanded={panel === 'staking'} onClick={() => {
+          setPanel(panel === 'staking' ? null : 'staking');
+        }}>Bankroll &amp; staking</button>
       </div>
-      {cfg && sharpWeights && (
-        <SharpWeights cfg={cfg} weights={sharpWeights} maxHold={sharpMaxHold}
-          canReset={Boolean(weights) || maxHold != null} onWeight={setWeight} onMaxHold={setMaxHold}
-          onReset={() => {
-            setWeights(null);
-            setMaxHold(null);
+      {chips.length > 0 && (
+        <div className="chips">
+          {chips.map((c) => (
+            <button key={c.key} type="button" className="chip" aria-label={`Remove filter ${c.label}`} onClick={() => {
+              setters[c.key](clearFilter({book, minEv, sport, props}, c.key)[c.key]);
+            }}>{c.label} ✕</button>
+          ))}
+        </div>
+      )}
+      {panel === 'model' && (
+        <div className="panel">
+          <div className="bar">
+            <Term id="devig">Devig</Term><FilterHelp help="devig" /> <select value={method} onChange={(e) => {
+              setMethod(e.target.value);
+            }}>
+              {(cfg?.methods || [method]).map((m) => <option key={m} value={m}>{methodLabel(m)}</option>)}
+            </select>
+          </div>
+          {cfg && sharpWeights && (
+            <SharpWeights cfg={cfg} weights={sharpWeights} maxHold={sharpMaxHold}
+              canReset={Boolean(weights) || maxHold != null} onWeight={setWeight} onMaxHold={setMaxHold}
+              onReset={() => {
+                setWeights(null);
+                setMaxHold(null);
+              }} />
+          )}
+        </div>
+      )}
+      {panel === 'staking' && (
+        <div className="panel bar wrap">
+          {bank && <Bankroll key={`${bank.starting}-${startRejected}`} bank={bank} onSetStart={(v) => {
+            setStart(v);
+          }} />}
+          <Term id="kelly">Kelly</Term><FilterHelp help="kelly" /> <input type="number" step="0.05" value={kelly} onChange={(e) => {
+            setKelly(Number(e.target.value));
           }} />
+          <SizingBar s={sizing} />
+        </div>
       )}
       <ApiError data={data} />
       <table>
@@ -763,7 +805,8 @@ function Parlay() {
   const {slip, toggle, clear} = useSlip();
   const [restored] = useState(() => slip.length > 0);
   const [method] = useStored('evMethod', 'multiplicative');
-  const [kelly, setKelly] = useStored('evKelly', 0.25);
+  const [kelly] = useStored('evKelly', 0.25);
+  const sizing = useSizing();
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const legs = slip.map(({event_id, market, name, point}) => ({event_id, market, name, point}));
@@ -819,9 +862,10 @@ function Parlay() {
     <>
       <TabIntro tab="Parlay" />
       <div className="bar">
-        <Term id="kelly">Kelly</Term> <input type="number" step="0.05" value={kelly} onChange={(e) => {
-          setKelly(Number(e.target.value));
-        }} />
+        <span className="mut">{stakingSummary({kelly, round: sizing.round, max: sizing.max})}</span>
+        <button type="button" className="link" onClick={() => {
+          window.dispatchEvent(new CustomEvent(GOTO_EVENT, {detail: '+EV'}));
+        }}>Change in +EV: Bankroll &amp; staking</button>
         <span className="mut">{devigLabel(method)}</span>
         {slip.length > 0 && <button className="track on" onClick={() => {
           clear();

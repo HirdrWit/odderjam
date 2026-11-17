@@ -3,6 +3,7 @@ import {createContext, useContext, useState} from 'react';
 import * as calc from './calc.js';
 import {CALC_GUIDE, CALC_QUESTIONS, explainRow} from './calcguide.js';
 import {SizingBar, useSizing} from './Sizing.jsx';
+import {useApi, useStored} from './hooks.js';
 
 /** Formats American odds with a leading sign, or a dash if invalid. */
 function formatAmerican(odds) {
@@ -141,10 +142,12 @@ function ExpectedValue() {
 }
 
 function Kelly() {
-  const [bank, setBank] = useState(1000);
+  const shared = useApi('/api/bankroll', 30000);
+  const [typedBank, setBank] = useState(null);
+  const bank = typedBank ?? (shared ? Math.round(shared.current) : 1000);
   const [odds, setOdds] = useState(110);
   const [win, setWin] = useState(52);
-  const [mult, setMult] = useState(0.25);
+  const [mult] = useStored('evKelly', 0.25);
   const prob = win / 100;
   const valid = isValidAmerican(odds) && prob > 0 && prob < 1;
   const full = valid ? calc.kellyFraction(prob, odds, 1) : NaN;
@@ -156,7 +159,7 @@ function Kelly() {
         <Num label="Bankroll $" value={bank} set={setBank} />
         <Num label="Odds" value={odds} set={setOdds} />
         <Num label="Win %" value={win} set={setWin} step={0.5} />
-        <Num label="Kelly multiplier" value={mult} set={setMult} step={0.05} />
+        <span className="mut">Kelly {mult} (set in +EV: Bankroll &amp; staking)</span>
       </div>
       <Out rows={[
         ['Recommended stake', formatUsd(bank * fraction), 'best'],
