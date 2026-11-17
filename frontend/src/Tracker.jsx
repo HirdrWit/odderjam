@@ -1,11 +1,13 @@
 import {useState} from 'react';
 
+import {SortTh, useSort} from './SortTable.jsx';
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {trackerEmptyText} from './empty.js';
 import {errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {formatOdds} from './odds.js';
+import {oddsKey} from './sorttable.js';
 import {
   PROFIT, betFormError, calendarWeeks, chartNote, chartReady, clvTileText, filterQuery, latestMonth, plColor,
   scaleSeries, statusClass,
@@ -273,6 +275,25 @@ const SETTLE_PROMPT =
     'Fetch final scores from The Odds API to settle pending moneyline, spread and total bets?\n' +
     'This costs 2 API credits per sport with pending bets. Props stay manual.';
 
+const BET_COLUMNS = [
+  ['date', 'Date', 'desc'], ['pick', 'Pick'], ['event', 'Event'], ['book', 'Book'], ['type', 'Type'],
+  ['odds', 'Odds', 'desc'], ['stake', 'Stake', 'desc'], ['close', 'Close', 'desc'],
+  ['clv', 'CLV', 'desc'], ['sharpClv', 'Sharp CLV', 'desc'], ['status', 'Status'],
+  ['profit', 'P/L', 'desc'],
+];
+const BET_TERM_LABELS = {
+  close: <Term id="closing-odds">ⓘ</Term>,
+  clv: <Term id="clv">ⓘ</Term>,
+  sharpClv: <Term id="sharp-clv">ⓘ</Term>,
+};
+const BET_NUM = new Set(['odds', 'stake', 'close', 'clv', 'sharpClv', 'profit']);
+const BET_SORT = {
+  date: (b) => Date.parse(b.placed_at), pick: (b) => b.pick, event: (b) => b.event, book: (b) => b.book,
+  type: (b) => MARKETS[b.market] || b.market, odds: (b) => oddsKey(b.odds), stake: (b) => b.stake,
+  close: (b) => (b.closing_odds == null ? null : oddsKey(b.closing_odds)), clv: (b) => b.clv_pct,
+  sharpClv: (b) => b.clv_sharp_pct, status: (b) => b.status, profit: (b) => b.profit,
+};
+
 /** Tracker tab: logged bets, filters, P/L charts and per-group stats. */
 export function Tracker() {
   const [filters, setFilters] = useStored('trackerFilters', NO_FILTERS);
@@ -280,6 +301,7 @@ export function Tracker() {
   const all = useApi('/api/bets', 600000);
   const bets = useApi(`/api/bets?${query}`, 600000);
   const stats = useApi(`/api/bets/stats?${query}`, 600000);
+  const [sort, onSort, sorted] = useSort('Tracker', {key: 'date', dir: 'desc'});
   const [form, setForm] = useState(BLANK_BET);
   const [formError, setFormError] = useState(null);
   // Bumped when an edit is rejected, so the row remounts and shows the stored values again.
@@ -444,14 +466,17 @@ export function Tracker() {
       <table>
         <thead>
           <tr>
-            <th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Type</th><th className="num">Odds</th>
-            <th className="num">Stake</th><th className="num"><Term id="closing-odds">Close</Term></th><th className="num"><Term id="clv">CLV</Term></th>
-            <th className="num"><Term id="sharp-clv">Sharp CLV</Term></th>
-            <th>Status</th><th className="num">P/L</th><th></th>
+            {BET_COLUMNS.map(([id, label, defaultDir]) => (
+              <SortTh key={id} id={id} label={label} sort={sort} onSort={onSort} defaultDir={defaultDir}
+                num={BET_NUM.has(id)}>
+                {BET_TERM_LABELS[id]}
+              </SortTh>
+            ))}
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          {(bets || []).map((b) => (
+          {sorted(bets || [], BET_SORT).map((b) => (
             <BetRow key={`${b.id}-${b.odds}-${b.stake}-${b.closing_odds}-${rejected}`} bet={b}
               onPatch={(change) => {
                 patch(b, change);

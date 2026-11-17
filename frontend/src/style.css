@@ -164,3 +164,10 @@ input.bankroll-start { width: 90px; }
 td.row-actions { white-space: nowrap; }
 td.row-actions .row-actions-inner { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: stretch; }
 td.row-actions .row-actions-inner > * { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: var(--sp-1) 10px; font-size: var(--fs-1); line-height: 1.2; white-space: nowrap; }
+/* Sortable tables: the header row stays in view while the rows scroll (odderjam-93). */
+thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-1); border-bottom: 2px solid var(--border); }
+th button.sort { background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: inherit; text-align: left; cursor: pointer; }
+th button.sort:focus-visible, .bar button.sort:focus-visible { outline: 2px solid var(--accent); }
+th button.sort .arrow { display: inline-block; min-width: 1em; color: var(--text-muted); }
+button.sort[aria-pressed="true"] { border-color: var(--accent); }
+th.num button.sort { text-align: right; }

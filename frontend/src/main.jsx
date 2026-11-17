@@ -4,6 +4,8 @@ import {createRoot} from 'react-dom/client';
 import './style.css';
 import {Calculators} from './Calculators.jsx';
 import {RowExample, Th} from './ColumnHelp.jsx';
+import {SortBar, SortTh, useSort} from './SortTable.jsx';
+import {oddsKey} from './sorttable.js';
 import {zeroStakeReason} from './columns.js';
 import {parseStakeInput, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
 import {Glossary} from './Glossary.jsx';
@@ -320,12 +322,24 @@ function EmptyState({text}) {
   return text ? <div className="mut">{text}</div> : null;
 }
 
+const EV_COLUMNS = [
+  ['ev', 'EV%', 'desc'], ['pick', 'Pick'], ['market', 'Market'], ['event', 'Event'], ['book', 'Book'],
+  ['odds', 'Odds', 'desc'], ['fair', 'Fair', 'desc'], ['sharps', 'Sharps (hold)'], ['stake', 'Stake', 'desc'],
+];
+const EV_NUM = new Set(['ev', 'odds', 'fair', 'stake']);
+const EV_SORT = {
+  ev: (r) => r.ev_pct, pick: (r) => r.pick, market: (r) => marketName(r.market), event: (r) => r.event,
+  book: (r) => r.book, odds: (r) => oddsKey(r.odds), fair: (r) => oddsKey(r.fair_odds), sharps: (r) => r.sharps.length,
+  stake: (r) => r.stake,
+};
+
 function PositiveEv() {
   const [minEv, setMinEv] = useStored('evMin', 1);
   const [method, setMethod] = useStored('evMethod', 'multiplicative');
   const [kelly, setKelly] = useStored('evKelly', 0.25);
   const [props, setProps] = useStored('evProps', 'include');
   const [book, setBook] = useState(() => loadEvBook());
+  const [sort, onSort, sorted] = useSort('+EV', {key: 'ev', dir: 'desc'});
   const bank = useApi('/api/bankroll', 30000);
   const sizing = useSizing();
   // Bumped when a start bankroll is rejected, so the input remounts showing the stored value.
@@ -434,14 +448,15 @@ function PositiveEv() {
       <table>
         <thead>
           <tr>
-            <Th tab="+EV" label="EV%" num /><Th tab="+EV" label="Pick" /><Th tab="+EV" label="Market" />
-            <Th tab="+EV" label="Event" /><Th tab="+EV" label="Book" /><Th tab="+EV" label="Odds" num />
-            <Th tab="+EV" label="Fair" num /><Th tab="+EV" label="Sharps (hold)" /><Th tab="+EV" label="Stake" num />
+            {EV_COLUMNS.map(([id, label, defaultDir]) => (
+              <SortTh key={id} tab="+EV" id={id} label={label} sort={sort} onSort={onSort} defaultDir={defaultDir}
+                num={EV_NUM.has(id)} />
+            ))}
             <th aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
-          {(Array.isArray(data) ? data : []).map((r, i) => (
+          {sorted(Array.isArray(data) ? data : [], EV_SORT).map((r, i) => (
             <tr key={i}>
               <td className={`num ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
               <td>{r.pick}</td>
@@ -520,9 +535,16 @@ function ArbCard({arb, onTrack}) {
   );
 }
 
+const ARB_SORT_OPTIONS = [
+  {id: 'profit', label: 'Profit %', defaultDir: 'desc'}, {id: 'event', label: 'Event'},
+  {id: 'stake', label: 'Total stake', defaultDir: 'desc'},
+];
+const ARB_SORT = {profit: (r) => r.profit_pct, event: (r) => r.event, stake: (r) => r.total_stake};
+
 function Arbs() {
   const [min, setMin] = useStored('arbMin', 0);
   const [props, setProps] = useStored('arbProps', 'include');
+  const [sort, onSort, sorted] = useSort('Arbitrage', {key: 'profit', dir: 'desc'});
   const sizing = useSizing();
   const bank = useApi('/api/bankroll', 30000);
   const data = useApi(`/api/arbs?min_profit=${min}${sizingQuery(sizing, true)}${propsParam(props)}`);
@@ -562,7 +584,8 @@ function Arbs() {
       <ApiError data={data} />
       <EmptyState text={arbsEmptyText(data, min)} />
       <RowExample tab="Arbitrage" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
-      {(Array.isArray(data) ? data : []).map((r, i) => (
+      <SortBar options={ARB_SORT_OPTIONS} sort={sort} onSort={onSort} />
+      {sorted(Array.isArray(data) ? data : [], ARB_SORT).map((r, i) => (
         <ArbCard key={i} arb={r} onTrack={() => {
           track(r);
         }} />
@@ -856,11 +879,20 @@ function parseNumberInput(value, fallback) {
 
 const LOW_HOLD_BOOKS = ['', ...BOOKS, ...EXCHANGE_BOOKS];
 
+const LOW_HOLD_COLUMNS = [
+  ['hold', 'Hold'], ['event', 'Event'], ['market', 'Market'], ['legs', 'Legs'], ['loss', 'Exp. loss'],
+];
+const LOW_HOLD_SORT = {
+  hold: (r) => r.hold_pct, event: (r) => r.event, market: (r) => marketName(r.market), legs: (r) => r.legs.length,
+  loss: (r) => r.expected_loss,
+};
+
 function LowHold() {
   const [maxHold, setMaxHold] = useStored('lhMax', LOW_HOLD_DEFAULT_MAX);
   const [book, setBook] = useStored('lhBook', '');
   const [stake, setStake] = useStored('lhStake', 100);
   const [market, setMarket] = useStored('lhMarket', '');
+  const [sort, onSort, sorted] = useSort('Low Hold', {key: 'hold', dir: 'asc'});
   const marketParam = market ? `&market=${market}` : '';
   const data = useApi(
       `/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${marketParam}`);
@@ -894,12 +926,14 @@ function LowHold() {
       <table>
         <thead>
           <tr>
-            <Th tab="Low Hold" label="Hold" num /><Th tab="Low Hold" label="Event" /><Th tab="Low Hold" label="Market" />
-            <Th tab="Low Hold" label="Legs" /><Th tab="Low Hold" label="Exp. loss" num />
+            {LOW_HOLD_COLUMNS.map(([id, label]) => (
+              <SortTh key={id} tab="Low Hold" id={id} label={label} sort={sort} onSort={onSort}
+                num={id === 'hold' || id === 'loss'} />
+            ))}
           </tr>
         </thead>
         <tbody>
-          {(Array.isArray(data) ? data : []).map((r, i) => (
+          {sorted(Array.isArray(data) ? data : [], LOW_HOLD_SORT).map((r, i) => (
             <tr key={i}>
               <td className={`num ${signClass(-r.hold_pct)}`}>{percent(r.hold_pct, {digits: 2, signed: true})}</td>
               <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
@@ -920,11 +954,22 @@ function LowHold() {
   );
 }
 
+const MIDDLES_COLUMNS = [
+  ['ev', 'EV%', 'desc'], ['hit', 'Hit %', 'desc'], ['event', 'Event'], ['market', 'Market'], ['window', 'Window', 'desc'],
+  ['legs', 'Legs'], ['worst', 'Worst case', 'desc'], ['both', 'Win both', 'desc'],
+];
+const MIDDLES_NUM = new Set(['ev', 'hit', 'worst', 'both']);
+const MIDDLES_SORT = {
+  ev: (r) => r.ev_pct, hit: (r) => r.hit_prob, event: (r) => r.event, market: (r) => marketName(r.market),
+  window: (r) => r.window, legs: (r) => r.legs.length, worst: (r) => r.worst_case, both: (r) => r.win_both,
+};
+
 function Middles() {
   const [minWindow, setMinWindow] = useStored('midWindow', 0.5);
   const [maxCost, setMaxCost] = useStored('midCost', 5);
   const [minEv, setMinEv] = useStored('midMinEv', 0);
   const [market, setMarket] = useStored('midMarket', '');
+  const [sort, onSort, sorted] = useSort('Middles', {key: 'ev', dir: 'desc'});
   const params = new URLSearchParams({min_window: minWindow});
   if (minEv !== '') params.set('min_ev', minEv);
   if (maxCost !== '') params.set('max_cost', maxCost);
@@ -984,13 +1029,15 @@ function Middles() {
       <table>
         <thead>
           <tr>
-            <Th tab="Middles" label="EV%" num /><Th tab="Middles" label="Hit %" num /><Th tab="Middles" label="Event" />
-            <Th tab="Middles" label="Market" /><Th tab="Middles" label="Window" /><Th tab="Middles" label="Legs" />
-            <Th tab="Middles" label="Worst case" num /><Th tab="Middles" label="Win both" num /><th aria-label="Actions"></th>
+            {MIDDLES_COLUMNS.map(([id, label, defaultDir]) => (
+              <SortTh key={id} tab="Middles" id={id} label={label} sort={sort} onSort={onSort}
+                defaultDir={defaultDir} num={MIDDLES_NUM.has(id)} />
+            ))}
+            <th aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
-          {(Array.isArray(data) ? data : []).map((r, i) => (
+          {sorted(Array.isArray(data) ? data : [], MIDDLES_SORT).map((r, i) => (
             <tr key={i}>
               <td className={`num ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
               <td className="num">{percent(r.hit_prob * 100)}</td>
