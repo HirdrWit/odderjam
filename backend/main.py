@@ -361,8 +361,11 @@ def _prop_index(events: list[dict]) -> dict[tuple[str, float], list[tuple[dict, 
 
 
 def _pickem_flags(e: dict, g: dict, now: float) -> list[str]:
-    """Risk flags for a pick'em prop: in_play when the game is live, stale when its prices are older than max_price_age."""
-    flags = ["in_play"] if _live_mod.is_live(e, now) else []
+    """Risk flags for a pick'em prop: in_play when the game is live, stale when a live game's prices are older than max_price_age."""
+    live = _live_mod.is_live(e, now)
+    flags = ["in_play"] if live else []
+    if not live:
+        return flags  # stale is a live-only rule, as in scan.freshness(); pre-game caches are old by design
     books = {b for o in g["outcomes"] for b in o["prices"]}
     age = _live_mod.price_age(e.get("updated", {}), books, now)
     if age is not None and _live_mod.is_stale(age, live_config()["max_price_age"]):
