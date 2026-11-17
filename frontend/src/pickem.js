@@ -118,3 +118,14 @@ export function noSlipsReason(size, legs) {
   }
   return 'Enough lines matched, but slips cannot use two lines from the same player or the same game.';
 }
+
+/**
+ * What the Payouts section shows: the table, a loading line, or a failed load with Retry.
+ * A failed first load must not render an empty table under its header.
+ * @param {{defaults: ?Object, error: ?string, edited: ?Array}} s
+ * @return {string} 'table' | 'loading' | 'failed'
+ */
+export function payoutsView({defaults, error, edited}) {
+  if (edited != null || defaults != null) return 'table';
+  return error ? 'failed' : 'loading';
+}

@@ -1,8 +1,8 @@
 import {useState} from 'react';
 
 import {TabIntro} from './TabIntro.jsx';
-import {postJson, toast, useApi, useStored} from './hooks.jsx';
-import {EXAMPLE_LINE, noMatchReason, noSlipsReason, payoutRows, rowsToTable} from './pickem.js';
+import {postJson, toast, useApiStatus, useStored} from './hooks.jsx';
+import {EXAMPLE_LINE, noMatchReason, noSlipsReason, payoutRows, payoutsView, rowsToTable} from './pickem.js';
 
 const BLANK = {player: '', market: '', point: '', side: ''};
 
@@ -33,7 +33,8 @@ export function Pickem() {
   const [edited, setEdited] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
-  const defaults = useApi('/api/pickem/payouts', 3600000);
+  const {data: defaults, error: loadError, retry} = useApiStatus('/api/pickem/payouts', 3600000);
+  const view = payoutsView({defaults, error: loadError, edited});
 
   const defaultRows = defaults && defaults[payout] ? payoutRows(defaults[payout]) : [];
   const rows = edited == null ? defaultRows : edited;
@@ -140,7 +141,14 @@ export function Pickem() {
             <option value="flex">Flex</option>
           </select></div>
       </div>
-      <table className="payouts">
+      {view === 'failed' && (
+        <div role="alert">
+          <div className="bad">Couldn't load payout tables. {loadError}</div>
+          <button type="button" onClick={retry}>Retry</button>
+        </div>
+      )}
+      {view === 'loading' && <p className="mut" aria-busy="true">Loading payout tables…</p>}
+      {view === 'table' && <table className="payouts">
         <thead><tr><th>Slip size</th><th>Hits</th><th className="num">Payout multiplier</th><th>Include</th></tr></thead>
         <tbody>
           {rows.map((r, i) => (
@@ -159,7 +167,7 @@ export function Pickem() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table>}
       <div className="bar">
         <button onClick={() => setEdited(null)} disabled={edited == null}>Reset to default</button>
         {tableError && <span className="bad">{tableError}</span>}

@@ -81,3 +81,12 @@ test('the lines table uses natural widths with right-aligned numbers', () => {
   assert.match(jsx, /<td className="num">\{l\.point\}/);
   assert.match(css, /table\.pk-lines\s*\{[^}]*width:\s*auto/);
 });
+
+test('payoutsView: a failed defaults load with no edits is failed, never an empty table', () => {
+  assert.equal(pickem.payoutsView({defaults: null, error: 'Server error (500)', edited: null}), 'failed');
+  assert.equal(pickem.payoutsView({defaults: null, error: null, edited: null}), 'loading');
+  assert.equal(pickem.payoutsView({defaults: FLEX, error: null, edited: null}), 'table');
+  // A failed refresh keeps the last good table; edited rows always show.
+  assert.equal(pickem.payoutsView({defaults: FLEX, error: 'x', edited: null}), 'table');
+  assert.equal(pickem.payoutsView({defaults: null, error: 'x', edited: []}), 'table');
+});
