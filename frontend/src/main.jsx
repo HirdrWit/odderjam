@@ -526,7 +526,7 @@ function PositiveEv() {
     notifyDataChanged();
   };
   const {slip, has, toggle} = useSlip();
-  const cfg = useApi('/api/sharps', 600000);
+  const {data: cfg, error: cfgError, retry: cfgRetry} = useApiStatus('/api/sharps', 600000);
   const [weights, setWeights] = useStored('evSharpWeights', null);
   const [maxHold, setMaxHold] = useStored('evMaxHold', null);
   const sharpWeights = weights ?? cfg?.weights;
@@ -540,7 +540,12 @@ function PositiveEv() {
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}` +
       `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}`;
-  const {data, refreshing, error, retry} = useApiStatus(cfg && `/api/ev?${query}`);
+  const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}`);
+  const error = evError || cfgError;
+  const retry = () => {
+    cfgRetry();
+    evRetry();
+  };
   return (
     <>
       <TabIntro tab="+EV" />
