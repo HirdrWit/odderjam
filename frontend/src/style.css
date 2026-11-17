@@ -214,8 +214,16 @@ th.num button.sort { text-align: right; }
 .fresh-main { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
 .fresh-text { font-weight: 600; }
 .fresh-strip button { background: var(--accent-fill); }
-.fresh-strip .settings { margin-left: auto; }
-.fresh-strip .settings-body { display: flex; flex-direction: column; gap: 6px; padding-top: var(--sp-2); }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: var(--shadow); padding: var(--sp-4); }
+.settings-dialog { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: var(--sp-4) var(--sp-5); width: min(420px, 100%); max-height: 90vh; overflow-y: auto; font-size: var(--fs-3); }
+.settings-dialog h2 { font-size: var(--fs-4); margin: 0 0 var(--sp-3); }
+.settings-dialog label { font-size: var(--fs-3); color: var(--text); }
+.settings-dialog .mut { color: var(--text-muted); font-size: var(--fs-2); }
+.settings-dialog .settings-body { display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.settings-dialog .settings-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.settings-dialog .fld { font-size: var(--fs-3); }
+.settings-dialog select { width: auto; }
+nav button.settings-nav { margin-top: auto; border-top: 1px solid var(--divider); border-radius: 0 0 6px 6px; }
 .age-chip { font-size: var(--fs-1); color: var(--text-muted); }
 .age-chip.stale { background: var(--caution); color: var(--on-accent); font-weight: 700; padding: 1px 6px; border-radius: 8px; }
 tr:has(.age-chip.stale) > td { opacity: .6; }

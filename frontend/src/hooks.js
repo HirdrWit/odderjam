@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 
 /** Reads a JSON value from localStorage, or `fallback` if absent. */
-function loadStored(key, fallback) {
+export function loadStored(key, fallback) {
   try {
     const stored = localStorage.getItem(key);
     return stored == null ? fallback : JSON.parse(stored);

@@ -10,6 +10,8 @@ import {zeroStakeReason, stakeCellText, zeroStakeNote} from './columns.js';
 import {parseStakeInput, rowActionAria, slipButtonLabel, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
 import {Help} from './Help.jsx';
 import {GOTO_EVENT, HELP_TAB} from './help.js';
+import {loadStored} from './hooks.js';
+import {ALERTS_EVENT, PANEL_EVENT, SETTINGS_LABEL, SETTINGS_LINKS, requestPanel, takePanel} from './settings.js';
 import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
@@ -42,7 +44,7 @@ import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
-import {ageText, isProp} from './odds.js';
+import {FORMATS, ageText, isProp} from './odds.js';
 import {rowFreshness, showsStrip, stripState} from './freshness.js';
 import {dismissWelcome} from './welcome.js';
 
@@ -169,11 +171,75 @@ function LiveTag({row}) {
   );
 }
 
-/** Freshness strip above every price tab: data age, Refresh, Live toggle, and a settings area. */
-function FreshnessStrip() {
+/** Settings dialog, opened from the sidebar on every tab. */
+function SettingsDialog({live, onClose, onFormat}) {
+  const [info, setInfo] = useState(null);
+  const [format, setFormat] = useStored('oddsFormat', 'american');
+  useEffect(() => {
+    fetch('/api/cache').then((r) => {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    }).then(setInfo).catch(() => {
+      setInfo({failed: true});
+    });
+  }, []);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const propCount = info?.prop_markets?.length ?? 0;
+  const open = (panel) => {
+    onClose();
+    requestPanel(panel);
+    window.dispatchEvent(new CustomEvent(GOTO_EVENT, {detail: '+EV'}));
+    window.dispatchEvent(new Event(PANEL_EVENT));
+  };
+  return (
+    <div className="dialog-backdrop" onClick={onClose}>
+      <div className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title"
+        onClick={(e) => e.stopPropagation()}>
+        <h2 id="settings-title">Settings</h2>
+        <div className="settings-body">
+          {info?.failed && <div className="bad">Could not load API credit info. Try again later.</div>}
+          {info?.remaining != null && <div>API credits left: {info.remaining}</div>}
+          {info?.live && <div className="mut">Each refresh spends API credits</div>}
+          {info?.live && propCount > 0 && (
+            <div className="bad">
+              Player props on ({propCount} markets): each refresh costs about {propCount * 2} more
+              credits per game
+            </div>
+          )}
+          <LiveSettings live={live} />
+          <AlertWatcher role="control" />
+          <label className="fld">Odds format
+            <select value={format} onChange={(e) => {
+              setFormat(e.target.value);
+              onFormat();
+            }}>
+              {Object.entries(FORMATS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </label>
+          <div className="settings-links">
+            {SETTINGS_LINKS.map((l) => (
+              <button key={l.panel} type="button" className="secondary" onClick={() => {
+                open(l.panel);
+              }}>{l.label}</button>
+            ))}
+          </div>
+        </div>
+        <button type="button" autoFocus onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+/** Freshness strip above every price tab: data age, Refresh and the Live toggle. */
+function FreshnessStrip({live}) {
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
-  const live = useLive();
   useEffect(() => {
     const load = () => {
       fetch('/api/cache').then((r) => r.json()).then((d) => {
@@ -198,7 +264,6 @@ function FreshnessStrip() {
     }
   };
   if (!info) return null;
-  const propCount = info.prop_markets?.length ?? 0;
   const state = stripState(info, !!live.status?.enabled);
   return (
     <div className={`fresh-strip${state.stale ? ' stale' : ''}`} role="status">
@@ -210,21 +275,6 @@ function FreshnessStrip() {
           <button onClick={refresh} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
         )}
         <LiveToggle live={live} />
-        <details className="settings">
-          <summary>Settings</summary>
-          <div className="settings-body">
-            {info.remaining != null && <div className="mut">API credits left: {info.remaining}</div>}
-            {info.live && <div className="mut small">Each refresh spends API credits</div>}
-            {info.live && propCount > 0 && (
-              <div className="bad small">
-                Player props on ({propCount} markets): each refresh costs about {propCount * 2} more
-                credits per game
-              </div>
-            )}
-            <LiveSettings live={live} />
-            <AlertWatcher />
-          </div>
-        </details>
       </div>
     </div>
   );
@@ -366,7 +416,15 @@ function PositiveEv() {
   const [kelly, setKelly] = useStored('evKelly', 0.25);
   const [props, setProps] = useStored('evProps', 'include');
   const [sport, setSport] = useStored('evSport', '');
-  const [panel, setPanel] = useState(null);
+  const [panel, setPanel] = useState(() => takePanel());
+  useEffect(() => {
+    const onPanel = () => {
+      const next = takePanel();
+      if (next) setPanel(next);
+    };
+    window.addEventListener(PANEL_EVENT, onPanel);
+    return () => window.removeEventListener(PANEL_EVENT, onPanel);
+  }, []);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [book, setBook] = useState(() => loadEvBook());
   const [sort, onSort, sorted] = useSort('+EV', {key: 'ev', dir: 'desc'});
@@ -1253,11 +1311,20 @@ function initialPermission() {
  * Polls the alert feed while the tab is open and shows a browser Notification
  * for each new opportunity.
  */
-function AlertWatcher() {
+function AlertWatcher({role = 'poller'}) {
   const [on, setOn] = useStored('alertsNotify', false);
   const [permission, setPermission] = useState(() => initialPermission());
+  // The checkbox (in Settings) and the always-mounted poller are separate instances; keep them in step.
   useEffect(() => {
-    if (!on || permission !== 'granted') return undefined;
+    const resync = () => {
+      setOn(loadStored('alertsNotify', false));
+      setPermission(initialPermission());
+    };
+    window.addEventListener(ALERTS_EVENT, resync);
+    return () => window.removeEventListener(ALERTS_EVENT, resync);
+  }, []);
+  useEffect(() => {
+    if (role === 'control' || !on || permission !== 'granted') return undefined;
     let live = true;
     let after = null;
     const poll = async () => {
@@ -1286,10 +1353,11 @@ function AlertWatcher() {
       clearInterval(timer);
     };
   }, [on, permission]);
-  if (permission === 'unsupported') return null;
+  if (role === 'poller' || permission === 'unsupported') return null;
   const toggle = async () => {
     if (on) {
       setOn(false);
+      window.dispatchEvent(new Event(ALERTS_EVENT));
       return;
     }
     const next = permission === 'granted' ?
@@ -1297,6 +1365,7 @@ function AlertWatcher() {
         await Notification.requestPermission();
     setPermission(next);
     setOn(next === 'granted');
+    window.dispatchEvent(new Event(ALERTS_EVENT));
   };
   return (
     <div className="refresh">
@@ -1620,6 +1689,9 @@ function App() {
   };
   const navSlip = useSlip();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const live = useLive();
+  const [pageKey, setPageKey] = useState(0);
   const Page = TABS[tab];
   return (
     <div className="app">
@@ -1642,10 +1714,13 @@ function App() {
         <button className="link" onClick={() => {
           setWelcomeTab(tab);
         }}>Show welcome</button>
+        <button className="settings-nav" aria-haspopup="dialog" onClick={() => {
+          setSettingsOpen(true);
+        }}>{SETTINGS_LABEL}</button>
       </nav>
       <div className="content">
-        {showsStrip(tab) && <FreshnessStrip />}
-        <main>{welcome && <Welcome onJump={go} onClose={closeWelcome} />}<WelcomeContext.Provider value={welcomeTab}><Page welcome={welcome} /></WelcomeContext.Provider></main>
+        {showsStrip(tab) && <FreshnessStrip live={live} />}
+        <main>{welcome && <Welcome onJump={go} onClose={closeWelcome} />}<WelcomeContext.Provider key={pageKey} value={welcomeTab}><Page welcome={welcome} /></WelcomeContext.Provider></main>
       </div>
       <div className="bottom-bar" role="navigation" aria-label="Main">
         {MOBILE_TABS.map((t) => (
@@ -1665,6 +1740,10 @@ function App() {
               setMoreOpen(false);
               setWelcomeTab(tab);
             }}>Show welcome</button>
+            <button role="menuitem" onClick={() => {
+              setMoreOpen(false);
+              setSettingsOpen(true);
+            }}>{SETTINGS_LABEL}</button>
             {moreTabs().map((t) => (
               <button key={t} role="menuitem" className={t === tab ? 'on' : ''} onClick={() => {
                 setMoreOpen(false);
@@ -1675,6 +1754,12 @@ function App() {
         )}
       </div>
       <Toaster />
+      <AlertWatcher />
+      {settingsOpen && <SettingsDialog live={live} onClose={() => {
+        setSettingsOpen(false);
+      }} onFormat={() => {
+        setPageKey((k) => k + 1);
+      }} />}
     </div>
   );
 }
