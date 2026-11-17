@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 
 import {filterCount, filtersLabel} from './cards.js';
 import {SortTh, useSort} from './SortTable.jsx';
@@ -12,8 +12,8 @@ import {eventTime, money, percent, signClass} from './fmt.js';
 import {formatOdds} from './odds.js';
 import {oddsKey} from './sorttable.js';
 import {
-  ADD_BET_FIELDS, PROFIT, betFieldErrors, calendarWeeks, chartNote, chartReady, clvTileText, filterQuery, latestMonth, parseOddsInput,
-  plColor, scaleSeries, statusClass,
+  ADD_BET_FIELDS, AUTO_SETTLE_KEY, DUE_SETTLE_URL, PROFIT, betFieldErrors, calendarWeeks, chartNote, chartReady, clvTileText, filterQuery, latestMonth, parseOddsInput,
+  dueSettleToast, plColor, scaleSeries, shouldAutoSettle, statusClass,
 } from './tracker.js';
 
 // Field names such as `closing_odds` and `roi_pct` come straight from the
@@ -357,6 +357,18 @@ export function Tracker() {
     }
     reload();
   };
+  const [autoSettle] = useStored(AUTO_SETTLE_KEY, true);
+  // On open: settle bets whose games have probably finished. No confirm, and failures stay silent.
+  useEffect(() => {
+    if (!shouldAutoSettle(autoSettle)) return;
+    fetch(DUE_SETTLE_URL, {method: 'POST'}).then((response) => (response.ok ? response.json() : null)).then((result) => {
+      const text = dueSettleToast(result);
+      if (text) {
+        toast(text);
+        reload();
+      }
+    }).catch(() => {});
+  }, []);
   const settle = async () => {
     if (!confirm(SETTLE_PROMPT)) return;
     setBusy(true);

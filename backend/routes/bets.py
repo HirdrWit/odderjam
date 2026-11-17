@@ -3,7 +3,7 @@ import csv
 import io
 import sqlite3
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 import httpx
@@ -13,6 +13,7 @@ from pydantic import AfterValidator, BaseModel, Field, StringConstraints, Valida
 
 from .. import history, providers
 from ..db import conn
+from ..engine.gamehours import game_hours
 from ..engine.odds import american_to_decimal
 from ..engine.settle import SETTLEABLE, final_scores, grade, parse_pick
 
@@ -35,8 +36,12 @@ def _american(odds: float) -> float:
 AmericanOdds = Annotated[float, Field(allow_inf_nan=False), AfterValidator(_american)]
 
 
+def now_dt() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return now_dt().isoformat()
 
 
 class BetIn(BaseModel):
@@ -296,28 +301,55 @@ def match_game(bet, games: list[dict]) -> dict | None:
     return min(named, key=lambda g: g["commence_time"], default=None)
 
 
+SETTLE_GRACE = timedelta(minutes=30)  # after the expected end of the game
+SETTLE_RECHECK = timedelta(minutes=30)  # a bet is not re-fetched sooner than this
+SETTLE_LOOKBACK = timedelta(days=3)  # the /scores endpoint's days_from=3
+
+
+def is_due(r: sqlite3.Row, at: datetime) -> bool:
+    """True when the game has probably finished, and it is worth spending credits on."""
+    if not r["event_start"]:
+        return False
+    start = datetime.fromisoformat(r["event_start"].replace("Z", "+00:00"))
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if at - start > SETTLE_LOOKBACK or at < start + timedelta(hours=game_hours(r["sport"])) + SETTLE_GRACE:
+        return False
+    last = r["last_settle_check"]
+    return not (last and at - datetime.fromisoformat(last) < SETTLE_RECHECK)
+
+
 @router.post("/settle")
-def auto_settle():
-    """Grade pending moneyline/spread/total bets from final scores. Spends Odds API credits."""
+def auto_settle(due: bool = False):
+    """Grade pending moneyline/spread/total bets from final scores. Spends Odds API credits.
+
+    With ?due=1 only bets whose game has probably finished are checked, and a provider failure
+    is not an error: the bets stay pending and the next visit tries again.
+    """
+    at = now_dt()
     with conn() as c:
         pending = [r for r in c.execute("SELECT * FROM bets WHERE status='pending'")
-                   if r["market"] in SETTLEABLE]
+                   if r["market"] in SETTLEABLE and (not due or is_due(r, at))]
         sports = sorted({r["sport"] for r in pending if r["sport"]})
         if not sports:
             return {"checked": 0, "settled": []}
         try:
             games = providers.get_scores(sports)
-        except providers.ProviderError as e:
-            raise HTTPException(502, f"Couldn't reach the odds provider ({providers.describe_failure(e.status)}).")
-        except httpx.HTTPError:
-            raise HTTPException(502, "Couldn't reach the odds provider (offline or timed out).")
-        except RuntimeError as e:
+        except (providers.ProviderError, httpx.HTTPError, RuntimeError) as e:
+            if due:
+                return {"checked": 0, "settled": []}
+            if isinstance(e, providers.ProviderError):
+                raise HTTPException(502, f"Couldn't reach the odds provider ({providers.describe_failure(e.status)}).")
+            if isinstance(e, httpx.HTTPError):
+                raise HTTPException(502, "Couldn't reach the odds provider (offline or timed out).")
             raise HTTPException(400, str(e))
         settled = []
         for r in pending:
             g = match_game(r, games)
             score = g and final_scores(g)
             if not score:
+                if due:
+                    c.execute("UPDATE bets SET last_settle_check=? WHERE id=?", (at.isoformat(), r["id"]))
                 continue
             selection, point = r["selection"], r["point"]
             if selection is None:
@@ -327,6 +359,8 @@ def auto_settle():
                 c.execute("UPDATE bets SET status=?, settled_at=?, event_id=? WHERE id=?",
                           (status, now(), g["id"], r["id"]))
                 settled.append({"id": r["id"], "pick": r["pick"], "status": status})
+            elif due:
+                c.execute("UPDATE bets SET last_settle_check=? WHERE id=?", (at.isoformat(), r["id"]))
     return {"checked": len(pending), "settled": settled}
 
 

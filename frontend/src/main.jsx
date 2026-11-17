@@ -29,6 +29,7 @@ import {Term} from './Term.jsx';
 import {NAV_GROUPS, NAV_SUBTITLES, MOBILE_TABS, moreTabs, navLabel} from './navgroups.js';
 import {buildHash, evFiltersToParams, evParamsToFilters, parseHash} from './routes.js';
 import {Tracker} from './Tracker.jsx';
+import {AUTO_SETTLE_KEY} from './tracker.js';
 import {alertFlagBadges, BETTABLE_HELP, BLANK_RULE_FIELDS, ruleFormError} from './alerts.js';
 import {windowText} from './middles.js';
 import {PROMO_COLUMNS, PROMO_DEFAULT_SORT, PROMO_NUM, PROMO_SORT, promoLegs} from './promos.js';
@@ -243,6 +244,7 @@ function LiveTag({row}) {
 function SettingsDialog({live, onClose, onFormat}) {
   const [info, setInfo] = useState(null);
   const [format, setFormat] = useStored('oddsFormat', 'american');
+  const [autoSettle, setAutoSettle] = useStored(AUTO_SETTLE_KEY, true);
   useEffect(() => {
     fetch('/api/cache').then((r) => {
       if (!r.ok) throw new Error('bad status');
@@ -289,6 +291,11 @@ function SettingsDialog({live, onClose, onFormat}) {
             }}>
               {Object.entries(FORMATS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
+          </label>
+          <label className="fld">
+            <input type="checkbox" checked={autoSettle !== false} onChange={(e) => {
+              setAutoSettle(e.target.checked);
+            }} /> Auto-settle when I open the Tracker
           </label>
           <div className="settings-links">
             {SETTINGS_LINKS.map((l) => (

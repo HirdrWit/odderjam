@@ -218,3 +218,26 @@ export function latestMonth(daily, today) {
   const date = daily.length ? daily[daily.length - 1].date : today;
   return [Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1];
 }
+
+/** @const {string} localStorage key of the "Auto-settle when I open the Tracker" switch. */
+export const AUTO_SETTLE_KEY = 'autoSettle';
+
+/** @const {string} Due-only settle: grades just the bets whose games have probably finished. */
+export const DUE_SETTLE_URL = '/api/bets/settle?due=1';
+
+/**
+ * @param {*} stored The stored switch value; on unless explicitly false.
+ * @return {boolean} True when the Tracker should settle due bets on open.
+ */
+export function shouldAutoSettle(stored) {
+  return stored !== false;
+}
+
+/**
+ * @param {?{settled: (!Array|undefined)}} result Response of the due-only settle.
+ * @return {?string} Toast text, or null when nothing settled.
+ */
+export function dueSettleToast(result) {
+  const n = result?.settled?.length ?? 0;
+  return n ? `Settled ${n} ${n === 1 ? 'bet' : 'bets'}` : null;
+}

@@ -11,14 +11,14 @@ from datetime import datetime
 import httpx
 
 from ..engine.exchange import contract_to_american
+from ..engine.gamehours import GAME_HOURS
 
 BOOK = "Kalshi"
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
 SERIES = {"NBA": "KXNBAGAME", "NFL": "KXNFLGAME", "MLB": "KXMLBGAME", "NHL": "KXNHLGAME"}
 SPORTS = set(SERIES)
-# Hours from first pitch/tip-off to expected settlement, used when a market only carries
+# GAME_HOURS (first pitch/tip-off to expected settlement) is used when a market only carries
 # expected_expiration_time, so matching compares like with like (doubleheaders, back-to-backs).
-GAME_HOURS = {"NBA": 2.5, "NFL": 3.25, "MLB": 3.0, "NHL": 2.5}
 OPEN = {"active", "open"}
 MAX_PAGES = 10
 TRADE_TIMEOUT = 5  # seconds per trades page; polling runs inside a request
