@@ -127,3 +127,18 @@ export function bettableChip(on) {
 export function showAnyway() {
   return false;
 }
+
+/** @return {string} STUB. */
+export function legWarning(leg, on) {
+  return '';
+}
+
+/** @return {{flagged: number, summary: string, showStake: boolean}} STUB. */
+export function parlayFlagState(slip, on) {
+  return {flagged: 0, summary: '', showStake: true};
+}
+
+/** @return {string} STUB. */
+export function pickemLegMark(leg, on) {
+  return '';
+}
