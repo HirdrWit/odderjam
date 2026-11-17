@@ -22,6 +22,7 @@ class FilterSet(BaseModel):
     start_within_hours: float | None = None
     min_ev: float | None = None  # +EV only
     min_profit: float | None = None  # Arbs only
+    bettable: bool = False  # +EV only: drop rows carrying any bettable flag (engine.bettable)
     max_sharp_hold: float | None = None  # hold % of the sharp book's line; lines without a sharp price fail
 
     def sport_ok(self, sport: str) -> bool:
@@ -72,6 +73,7 @@ def query_filters(
     max_sharp_hold: float | None = None,
     book: str | None = None,
     market: str | None = None,
+    bettable: bool | None = None,
 ) -> FilterSet:
     """Build a FilterSet from query params, on top of a saved preset if one is given.
 
@@ -82,7 +84,8 @@ def query_filters(
     given = {"sports": _split(sports), "books": _split(books) + _split([book] if book else None),
              "markets": _split(markets) + _split([market] if market else None),
              "odds_min": odds_min, "odds_max": odds_max, "start_within_hours": start_within_hours,
-             "min_ev": min_ev, "min_profit": min_profit, "max_sharp_hold": max_sharp_hold}
+             "min_ev": min_ev, "min_profit": min_profit, "max_sharp_hold": max_sharp_hold,
+             "bettable": bettable}
     fs = FilterSet(**{**base, **{k: v for k, v in given.items() if v not in (None, [])}})
     if err := odds_range_error(fs):
         raise HTTPException(422, err)

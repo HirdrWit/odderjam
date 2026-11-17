@@ -3,7 +3,7 @@ import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
-from .engine import arb as arbm, ev, live, markets as mk, odds, sharp, sizing, suspect
+from .engine import arb as arbm, bettable, ev, live, markets as mk, odds, sharp, sizing, suspect
 from .providers import live_config
 from .providers.books import SHARP, US_BOOKS, bet_link, us_only
 
@@ -70,20 +70,26 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
             method: str = "multiplicative", kelly: float = 0.25, market: str | None = None,
             sport: str | None = None, bankroll: float = 0.0, round_to: float = 1.0,
             max_side: float | None = None, props: bool = True,
-            filters: "FilterSet | None" = None, now: float | None = None) -> list[dict]:
+            filters: "FilterSet | None" = None, now: float | None = None,
+            profile: dict | None = None) -> list[dict]:
     """+EV rows priced against the weighted sharp consensus (sharps holding over `max_hold` % are dropped).
 
     `filters` narrows events, lines and bet prices (sports, start window, markets, sharp hold, books, odds range).
     Stale in-play rows are dropped (see freshness); the book and every sharp used must be fresh.
+    Every row carries `flags` (see engine.bettable, `profile` overrides its thresholds); with
+    `filters.bettable` the flagged rows are dropped.
     """
     now = time.time() if now is None else now
+    profile = {**bettable.DEFAULT_PROFILE, **(profile or {})}
+    cfg = live_config()
     rows = []
     for e, key, g in _filtered_groups(events, market, props, sport, filters):
         # Only sharps pricing every side of this exact line can devig it.
         fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold)
         if fair is None:
             continue
-        for o, fp in zip(g["outcomes"], fair["probs"]):
+        worst = sharp.group_consensus(g["outcomes"], weights, "worst_case", max_hold) or fair
+        for i, (o, fp) in enumerate(zip(g["outcomes"], fair["probs"])):
             for book_name, price in o["prices"].items():
                 if book_name not in US_BOOKS or (book and book_name != book) \
                         or not _price_ok(filters, book_name, price):
@@ -93,6 +99,18 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                     continue
                 fresh = freshness(e, [book_name, *(u["book"] for u in fair["sharps"])], now)
                 if fresh is not None:
+                    updated = e.get("updated", {})
+                    flagged = bettable.flags({
+                        "market": key, "odds": price, "ev_pct": v,
+                        "worst_ev_pct": ev.ev_pct(worst["probs"][i], price),
+                        "is_live": fresh["live"], "live_enabled": cfg["enabled"],
+                        "max_price_age": cfg["max_price_age"], "price_age": fresh["price_age_seconds"],
+                        "update_times": {b: live.parse_time(updated.get(b))
+                                         for b in [book_name, *(u["book"] for u in fair["sharps"])]},
+                        "sharp_probs": [p[i] for p in fair["sharp_probs"].values()],
+                    }, profile)
+                    if filters is not None and filters.bettable and flagged:
+                        continue
                     kelly_stake = bankroll * ev.kelly_fraction(fp, price, kelly)
                     rows.append({
                         "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
@@ -103,7 +121,7 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                         "stake": sizing.round_stake(kelly_stake, round_to, max_side),
                         "kelly_stake": kelly_stake,
-                        "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"], **fresh,
+                        "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"], "flags": flagged, **fresh,
                     })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 

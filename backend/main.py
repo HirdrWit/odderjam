@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from . import alerts, history, scan, sharp_money
 from .scan import groups as _groups
-from .engine import (devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
+from .engine import (bettable, devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
                      promo, sharp, sizing, suspect)
 from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets, filters as flt
@@ -100,7 +100,13 @@ RoundTo = Annotated[float, Query(ge=0, allow_inf_nan=False)]
 def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str | None = None,
                 max_hold: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 round_to: RoundTo = 1.0, max_side: PositiveFloat | None = None,
-                props: bool = True, f: FilterSet = Depends(flt.query_filters)):
+                props: bool = True, f: FilterSet = Depends(flt.query_filters),
+                bettable_odds_min: Annotated[float | None, Query(allow_inf_nan=False)] = None,
+                bettable_odds_max: Annotated[float | None, Query(allow_inf_nan=False)] = None,
+                ev_ceiling: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
+                prop_ev_ceiling: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
+                max_skew_seconds: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
+                max_sharp_spread: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
     more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price.
     `f` (query params and/or a saved `preset`) filters sports, books, markets, odds, start time and min EV."""
@@ -109,10 +115,17 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
     weights = sharp.parse_weights(sharps if sharps is not None else sharp_weights_spec())
     max_hold = max_sharp_hold() if max_hold is None else max_hold
     _check_sizing(round_to, max_side)
+    profile = {k: v for k, v in {"odds_min": bettable_odds_min, "odds_max": bettable_odds_max,
+                                 "ev_ceiling": ev_ceiling, "prop_ev_ceiling": prop_ev_ceiling,
+                                 "max_skew_seconds": max_skew_seconds,
+                                 "max_sharp_spread": max_sharp_spread}.items() if v is not None}
+    if err := bettable.profile_error({**bettable.DEFAULT_PROFILE, **profile}):
+        raise HTTPException(422, err)
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     min_ev = f.min_ev if f.min_ev is not None else 0.0
     return scan.ev_rows(get_snapshot(), weights, max_hold, min_ev=min_ev, method=method, kelly=kelly,
-                        bankroll=bankroll, round_to=round_to, max_side=max_side, props=props, filters=f, now=_now())
+                        bankroll=bankroll, round_to=round_to, max_side=max_side, props=props, filters=f, now=_now(),
+                        profile=profile)
 
 
 def _check_sizing(round_to: float, max_side: float | None) -> None:

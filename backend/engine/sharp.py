@@ -51,6 +51,7 @@ def consensus_probs(lines: dict[str, list[float]], weights: dict[str, float], me
         "probs": [sum(u["weight"] * u["probs"][i] for u in used) / total for i in range(n)],
         "hold_pct": sum(u["weight"] * u["hold_pct"] for u in used) / total,
         "sharps": [{"book": u["book"], "weight": u["weight"], "hold_pct": u["hold_pct"]} for u in used],
+        "sharp_probs": {u["book"]: u["probs"] for u in used},  # each sharp's own fair probs, per outcome
     }
 
 
