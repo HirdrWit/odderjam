@@ -33,7 +33,9 @@ def client(monkeypatch):
         event("g1", "Fresh One", NOW + 3600, 5),
         event("g2", "Fresh Two", NOW + 7200, 5),
         event("g3", "Live Guy", NOW - 600, 5),            # in play
-        event("g4", "Stale Guy", NOW + 3600, max_age + 500),  # pre-game, old prices
+        event("g4", "Stale Guy", NOW - 600, max_age + 500),   # in play, old prices
+        # pre-game, old prices: not stale. Stale is a live-only rule, as in scan.freshness().
+        event("g5", "Old Pregame", NOW + 3600, max_age + 500),
     ]
     monkeypatch.setattr(main, "get_snapshot", lambda: events)
     monkeypatch.setattr(main, "_now", lambda: NOW)
@@ -43,7 +45,7 @@ def client(monkeypatch):
 
 
 LINES = [{"player": n, "market": "points", "point": 20.5, "side": "Over"}
-         for n in ("Fresh One", "Fresh Two", "Live Guy", "Stale Guy")]
+         for n in ("Fresh One", "Fresh Two", "Live Guy", "Stale Guy", "Old Pregame")]
 
 
 def slip_players(body):
@@ -54,13 +56,14 @@ def test_legs_carry_flags(client):
     legs = {x["player"]: x for x in client.post("/api/pickem", json={"lines": LINES}).json()["legs"]}
     assert legs["Fresh One"]["flags"] == []
     assert legs["Live Guy"]["flags"] == ["in_play"]
-    assert "stale" in legs["Stale Guy"]["flags"]
+    assert legs["Stale Guy"]["flags"] == ["in_play", "stale"]
+    assert legs["Old Pregame"]["flags"] == []
     assert legs["Live Guy"]["matched"]
 
 
 def test_bettable_only_leaves_flagged_legs_out_of_slips(client):
     body = client.post("/api/pickem", json={"lines": LINES, "bettable_only": True, "top": 20}).json()
-    assert slip_players(body) <= {"Fresh One", "Fresh Two"}
+    assert slip_players(body) <= {"Fresh One", "Fresh Two", "Old Pregame"}
     # flagged legs are still listed, marked
     assert {x["player"] for x in body["legs"]} == {l["player"] for l in LINES}
     assert next(x for x in body["legs"] if x["player"] == "Live Guy")["flags"] == ["in_play"]
