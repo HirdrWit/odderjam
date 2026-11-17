@@ -276,3 +276,4 @@ table.grid tbody.suspect td.bestcell { background: none; color: inherit; font-we
 @media (prefers-reduced-motion: reduce) { .skeleton, .tablewrap.loading::before { animation: none; } }
 .sharp-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2); }
 .filter-bar label { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.help a, .help a:visited { color: var(--accent); }

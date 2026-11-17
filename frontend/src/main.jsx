@@ -32,7 +32,7 @@ import {ruleFormError} from './alerts.js';
 import {windowText} from './middles.js';
 import {PROMO_COLUMNS, PROMO_DEFAULT_SORT, PROMO_NUM, PROMO_SORT, promoLegs} from './promos.js';
 import {
-  alertsEmptyText, arbMinWarning, ARB_TOTAL_NOTE, arbsEmptyText, evEmptyText, LOW_HOLD_DEFAULT_MAX,
+  alertsEmptyText, alertsRulesEmptyText, arbMinWarning, ARB_TOTAL_NOTE, arbsEmptyText, evEmptyText, LOW_HOLD_DEFAULT_MAX,
   lowHoldEmptyText, middlesEmptyText, sharpEmptyText,
 } from './empty.js';
 import {legKey, useSlip} from './hooks.js';
@@ -1416,7 +1416,7 @@ function Alerts() {
   if (feed) {
     discordNote = feed.discord ?
         <> <Term id="discord-webhook">Discord webhook</Term> is on.</> :
-        <> Discord is optional: set DISCORD_WEBHOOK_URL to also post alerts there (see <Term id="discord-webhook">Discord webhook</Term>).</>;
+        <> Discord is optional and set up by whoever runs the server (see <Term id="discord-webhook">Discord webhook</Term>).</>;
   }
   return (
     <>
@@ -1445,6 +1445,7 @@ function Alerts() {
         <button className="primary">Add alert</button>
         {formError && <span className="bad" role="alert">{formError}</span>}
       </form>
+      <TableShell data={rules} emptyText={alertsRulesEmptyText(rules)} columns={7}>
       <table>
         <thead>
           <tr>
@@ -1467,6 +1468,7 @@ function Alerts() {
           ))}
         </tbody>
       </table>
+      </TableShell>
       <h3>Recent alerts</h3>
       <TableShell data={feed && feed.items} emptyText={alertsEmptyText(feed)} columns={3}>
       <table>

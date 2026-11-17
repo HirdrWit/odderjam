@@ -102,8 +102,8 @@ export const GLOSSARY = [
   },
   {
     id: 'discord-webhook', label: 'Discord webhook',
-    definition: 'A private Discord link that lets odderjam post alerts to a channel. Create one in Discord under Channel Settings, Integrations, Webhooks, then set it as DISCORD_WEBHOOK_URL and restart.',
-    example: 'DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... in your .env file.',
+    definition: 'A private Discord link that lets odderjam post alerts to a channel. Optional: whoever runs the server creates one in Discord under Channel Settings, Integrations, Webhooks and adds it to the server setup.',
+    example: 'https://discord.com/api/webhooks/...',
   },
 ];
 

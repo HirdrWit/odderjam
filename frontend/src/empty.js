@@ -103,7 +103,7 @@ export function middlesEmptyText(data, minWindow, maxCost, minEv = '') {
  */
 export function trackerEmptyText(data) {
   if (!isEmptyList(data)) return null;
-  return 'No bets yet. Add one below, or click Track on any +EV or Arbitrage row.';
+  return 'No bets yet. Click Add bet, or Track on any +EV or Arbitrage row.';
 }
 
 /**
@@ -113,4 +113,13 @@ export function trackerEmptyText(data) {
 export function alertsEmptyText(feed) {
   if (!feed || !Array.isArray(feed.items) || feed.items.length > 0) return null;
   return 'No alerts yet. Add a rule above.';
+}
+
+/**
+ * @param {*} rules The /api/alerts/rules response.
+ * @return {?string}
+ */
+export function alertsRulesEmptyText(rules) {
+  if (!Array.isArray(rules) || rules.length > 0) return null;
+  return 'No rules yet. Add one above.';
 }
