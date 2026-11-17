@@ -6,6 +6,7 @@ import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {trackerEmptyText} from './empty.js';
 import {errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
+import {failedText} from './tablestate.js';
 import {TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {formatOdds} from './odds.js';
@@ -301,9 +302,11 @@ export function Tracker() {
   const [filters, setFilters] = useStored('trackerFilters', NO_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const query = filterQuery(filters);
+  // No error state: `all` only feeds the filter dropdowns; the filtered list below has its own Couldn't load + Retry.
   const all = useApi('/api/bets', 600000);
   const {data: bets, refreshing: betsRefreshing, error: betsError, retry: betsRetry} = useApiStatus(`/api/bets?${query}`, 600000);
-  const stats = useApi(`/api/bets/stats?${query}`, 600000);
+  const {data: stats, error: statsError, retry: statsRetry} = useApiStatus(`/api/bets/stats?${query}`, 600000);
+  const statsFailed = failedText({data: stats, error: statsError, what: 'bet stats'});
   const [sort, onSort, sorted] = useSort('Tracker', {key: 'date', dir: 'desc'});
   const [form, setForm] = useState(BLANK_BET);
   const [format] = useStored('oddsFormat', 'american');
@@ -451,6 +454,12 @@ export function Tracker() {
           </div>
         </details>
       </div>
+      {statsFailed && (
+        <div role="alert">
+          <div className="bad">{statsFailed}</div>
+          <button type="button" onClick={statsRetry}>Retry</button>
+        </div>
+      )}
       <div className="tiles">
         {(tiles || []).map(([label, value, cls]) => (
           <div className="card tile" key={label}>

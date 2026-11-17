@@ -25,3 +25,11 @@ export function tableView({data, rows, emptyText, refreshing, error, what = 'thi
   if (list.length === 0) return {...base, kind: 'empty', showHead: false};
   return {...base, kind: 'table', showHead: true};
 }
+
+/**
+ * @param {{data: *, error: (?string|undefined), what: string}} args
+ * @return {?string} "Couldn't load <what>. <error>" when the load failed with nothing to show, else null.
+ */
+export function failedText({data, error, what}) {
+  return error && data == null ? `Couldn't load ${what}. ${error}` : null;
+}

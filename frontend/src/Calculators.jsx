@@ -142,6 +142,7 @@ function ExpectedValue() {
 }
 
 function Kelly() {
+  // No error state: it only pre-fills the bankroll box (default $1,000), which stays editable.
   const shared = useApi('/api/bankroll', 30000);
   const [typedBank, setBank] = useState(null);
   const bank = typedBank ?? (shared ? Math.round(shared.current) : 1000);

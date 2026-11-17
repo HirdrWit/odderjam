@@ -3,6 +3,7 @@ import {Fragment, useState} from 'react';
 import {eventTime, percent} from './fmt.js';
 import {americanToProb} from './calc.js';
 import {useApi, useApiStatus, useSlip, useStored} from './hooks.js';
+import {failedText} from './tablestate.js';
 import {toast} from './hooks.jsx';
 import {booksHelp, holdClass, introVisible, slipToast, suspectNote} from './oddsrow.js';
 import {TabIntro} from './TabIntro.jsx';
@@ -162,8 +163,17 @@ function MoveChart({rows, outcome, label, books, format}) {
 }
 
 function LineMovement({event, books, format}) {
-  const rows = useApi(`/api/history/${encodeURIComponent(event.id)}?market=moneyline`, 300000);
-  if (!event.markets.moneyline || !rows) return null;
+  const {data: rows, error, retry} = useApiStatus(`/api/history/${encodeURIComponent(event.id)}?market=moneyline`, 300000);
+  if (!event.markets.moneyline) return null;
+  const failed = failedText({data: rows, error, what: 'price history'});
+  if (failed) {
+    return (
+      <div role="alert">
+        <span className="bad">{failed}</span> <button type="button" onClick={retry}>Retry</button>
+      </div>
+    );
+  }
+  if (!rows) return null;
   if (!rows.length) return <div className="mut">No price history yet.</div>;
   return (
     <div className="moves">

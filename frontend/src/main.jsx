@@ -43,6 +43,7 @@ import {
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
+import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {FORMATS, ageText, isProp} from './odds.js';
@@ -452,7 +453,8 @@ function PositiveEv() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [book, setBook] = useState(() => loadEvBook());
   const [sort, onSort, sorted] = useSort('+EV', {key: 'ev', dir: 'desc'});
-  const bank = useApi('/api/bankroll', 30000);
+  const {data: bank, error: bankError, retry: bankRetry} = useApiStatus('/api/bankroll', 30000);
+  const bankFailed = failedText({data: bank, error: bankError, what: 'bankroll'});
   const sizing = useSizing();
   // Bumped when a start bankroll is rejected, so the input remounts showing the stored value.
   const [startRejected, setStartRejected] = useState(0);
@@ -609,6 +611,7 @@ function PositiveEv() {
       )}
       {panel === 'staking' && (
         <div className="panel bar wrap">
+          {bankFailed && <span role="alert"><span className="bad">{bankFailed}</span> <button type="button" onClick={bankRetry}>Retry</button></span>}
           {bank && <Bankroll key={`${bank.starting}-${startRejected}`} bank={bank} onSetStart={(v) => {
             setStart(v);
           }} />}
@@ -734,6 +737,7 @@ function Arbs() {
   const [sort, onSort, sorted] = useSort('Arbitrage', {key: 'profit', dir: 'desc'});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const sizing = useSizing();
+  // No error state: it only sets the placeholder of the total-stake box, which the user can still type into.
   const bank = useApi('/api/bankroll', 30000);
   const {data, refreshing, error, retry} = useApiStatus(`/api/arbs?min_profit=${min}${sizingQuery(sizing, true)}${propsParam(props)}`);
   const filters = {min, props, total: sizing.total > 0 ? sizing.total : ''};
@@ -1185,6 +1189,7 @@ function LowHold() {
       `/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${marketParam}`);
   // Nearest miss: only fetched once the filtered list comes back empty.
   const empty = Array.isArray(data) && data.length === 0;
+  // No error state: it only adds a "lowest hold is X%" hint to the empty message; the main table has its own error.
   const all = useApi(empty ? '/api/lowhold?max_hold=100&stake=100' : null);
   const lowest = Array.isArray(all) && all.length ? all[0].hold_pct : null;
   return (
@@ -1575,6 +1580,7 @@ function SharpMoney() {
   const [minVolume, setMinVolume] = useStored('smMinVolume', 500);
   const {data, refreshing, error, retry} = useApiStatus(`/api/sharp-money?window_minutes=${windowMin}&baseline_minutes=${baselineMin}` +
       `&k=${k}&min_volume=${minVolume}`);
+  // No error state: it only decides whether to show the optional "set up exchange" hint.
   const status = useApi('/api/sharp-money/status');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filters = {windowMin, baselineMin, k, minVolume};
