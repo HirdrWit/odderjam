@@ -217,6 +217,12 @@ function GameRows({event, market, books, format, slip, historyOpen, onHistory}) 
                 {event.live && <><span className="badge live">LIVE</span>{' '}</>}
                 <b>{event.away} @ {event.home}</b>
                 <div className="mut small">{event.sport} · {eventTime(event.start)} · prices {ageText(event.price_age_seconds)} old</div>
+                {rows.map((hr) => (
+                  <div key={hr.key} className="mut small hold">
+                    <Term id="hold">Hold</Term> at best <span className={holdClass(hr.holdPct, hr.suspect)}>{holdText(hr.holdPct)}</span>
+                    {hr.suspect && <> · {suspectNote()}</>}
+                  </div>
+                ))}
                 {row.extraLines > 0 && <div className="mut small">Main line of {row.extraLines + 1}</div>}
                 {market === 'moneyline' && event.markets.moneyline && (
                   <button className="chip" aria-expanded={historyOpen} onClick={onHistory}>Price history</button>
@@ -239,16 +245,6 @@ function GameRows({event, market, books, format, slip, historyOpen, onHistory}) 
           </tr>
         );
       }))}
-      <tr className="foot">
-        <td colSpan={span} className="mut small">
-          {rows.map((row) => (
-            <span key={row.key}>
-              <Term id="hold">Hold</Term> at best <span className={holdClass(row.holdPct, row.suspect)}>{holdText(row.holdPct)}</span>
-              {row.suspect && <> · {suspectNote()}</>}{' '}
-            </span>
-          ))}
-        </td>
-      </tr>
       {historyOpen && (
         <tr><td colSpan={span}><LineMovement event={event} books={books} format={format} /></td></tr>
       )}

@@ -76,6 +76,30 @@ def test_header_and_game_column_are_sticky():
     assert re.search(r"table\.grid[^{]*\.gamecol[^{]*\{[^}]*position:\s*sticky[^}]*left:\s*0", css)
 
 
-def test_grid_scrolls_sideways_on_narrow_screens():
+
+def test_hold_lives_in_the_game_cell_not_its_own_row():
+    src = _odds()
+    assert 'className="foot"' not in src
+    game_cell = src.split('className="gamecol"', 1)[1].split("</th>", 1)[0]
+    assert 'id="hold"' in game_cell
+    assert "at best" in game_cell
+
+
+def test_game_renders_only_its_side_rows():
+    src = _odds()
+    body = src.split("function GameRows", 1)[1].split("function GameGrid", 1)[0]
+    assert body.count("<tr") == 2  # one per side, plus the history row
+
+
+def test_grid_has_no_inner_vertical_scroll():
     css = _css()
-    assert re.search(r"\.gridwrap[^{]*\{[^}]*overflow-x:\s*auto", css)
+    rule = re.search(r"\.gridwrap\s*\{([^}]*)\}", css).group(1)
+    assert "max-height" not in rule
+    assert "overflow-y" not in rule
+
+
+def test_inner_scroll_box_only_on_narrow_screens():
+    css = _css()
+    assert re.search(r"@media[^{]*max-width:\s*640px[^{]*\{[^@]*\.gridwrap[^{]*\{[^}]*overflow-x:\s*auto", css)
+    desktop = re.sub(r"@media[^{]*\{(?:[^{}]*\{[^}]*\})*[^{}]*\}", "", css)
+    assert not re.search(r"\.gridwrap\s*\{[^}]*overflow", desktop)

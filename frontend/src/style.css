@@ -129,6 +129,7 @@ nav button.link, .welcome button.link { text-decoration: underline; }
 .collapsible { display: contents; }
 .c-time { display: none; }
 @media (max-width: 640px) {
+  .gridwrap { overflow-x: auto; }
   .app { flex-direction: column; padding-bottom: 56px; }
   nav { display: none; }
   .bottom-bar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; flex-wrap: nowrap; height: 56px; background: var(--surface-1); border-top: 1px solid var(--border); }
@@ -230,7 +231,8 @@ table.odds.suspect td.best { color: inherit; font-weight: normal; }
 .panel { border: 1px solid var(--divider); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; }
 
 /* Odds Screen grid (odderjam-99) */
-.gridwrap { overflow-x: auto; overflow-y: auto; max-height: 75vh; margin-bottom: var(--sp-3); }
+.gridwrap { margin-bottom: var(--sp-3); }
+
 table.grid { border-collapse: separate; border-spacing: 0; }
 table.grid thead th { position: sticky; top: 0; z-index: 3; background: #18202a; background: var(--surface-1); }
 table.grid .gamecol { position: sticky; left: 0; z-index: 2; text-align: left; vertical-align: top; white-space: normal; min-width: 150px; max-width: 220px; background: #18202a; background: var(--surface-1); border-right: 1px solid var(--divider); }
