@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {COLUMNS, columnTip, rowExample, zeroStakeReason} from './columns.js';
+import {COLUMNS, columnTip, rowExample, zeroStakeReason, stakeCellText, zeroStakeNote} from './columns.js';
 import {evEmptyText, middlesEmptyText, arbsEmptyText, lowHoldEmptyText, sharpEmptyText} from './empty.js';
 import {findEntry} from './glossary.js';
 
@@ -124,4 +124,24 @@ test('rowExample gives the zero-stake reason instead of "$0.00"', () => {
   assert.match(t, /7\.4%/);
   assert.match(t, /under \$1/i);
   assert.doesNotMatch(t, /\$0\.00/);
+});
+
+// odderjam-106: say the advice once, not on every row.
+test('rowExample does not repeat the raise-bankroll advice', () => {
+  assert.doesNotMatch(rowExample('+EV', ZERO, fmt), /raise (your )?bankroll|lower Round to/i);
+});
+
+test('stakeCellText is <$1 for a zero stake on a positive edge, else empty', () => {
+  assert.equal(stakeCellText(ZERO), '<$1');
+  assert.equal(stakeCellText({...ZERO, stake: 5}), '');
+  assert.equal(stakeCellText({...ZERO, ev_pct: 0}), '');
+});
+
+test('zeroStakeNote appears once when any row is affected, never otherwise', () => {
+  const rows = [ZERO, {...ZERO, pick: 'B'}, {...ZERO, stake: 5}];
+  const n = zeroStakeNote(rows);
+  assert.match(n, /Some stakes round below \$1\. Raise your bankroll or lower Round to in Bankroll & staking/);
+  assert.equal(zeroStakeNote([{...ZERO, stake: 5}]), '');
+  assert.equal(zeroStakeNote([]), '');
+  assert.equal(zeroStakeNote(null), '');
 });
