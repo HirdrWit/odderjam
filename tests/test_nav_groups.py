@@ -34,4 +34,4 @@ def test_nav_styles_and_phone_layout():
     css = (SRC / "style.css").read_text()
     assert ".nav-group" in css and "nav button .sub" in css
     phone = css[css.index("@media (max-width: 640px)"):]
-    assert ".nav-group" in phone
+    assert ".bottom-bar" in phone and "nav { display: none; }" in phone

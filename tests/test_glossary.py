@@ -50,7 +50,7 @@ def test_term_is_used_in_banners_headers_and_sharp_weights():
 
 def test_glossary_page_and_nav():
     main = (SRC / "main.jsx").read_text()
-    assert re.search(r"'Glossary':\s*Glossary", main)
+    assert "<Glossary" in (SRC / "Help.jsx").read_text()
     page = (SRC / "Glossary.jsx").read_text()
     assert "sortedEntries" in page
 

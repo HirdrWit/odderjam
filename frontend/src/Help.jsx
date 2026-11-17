@@ -1,3 +1,4 @@
+import {Glossary} from './Glossary.jsx';
 import {useState} from 'react';
 
 import {HELP_SECTIONS, convertOdds} from './help.js';
@@ -39,7 +40,14 @@ export function Help() {
     <div className="help">
       <h2>Help</h2>
       <nav className="help-toc" aria-label="Help sections">
-        {HELP_SECTIONS.map((s) => <a key={s.id} href={`#help-${s.id}`}>{s.title}</a>)}
+        {HELP_SECTIONS.map((s) => <a key={s.id} href={`#/help`} onClick={(e) => {
+          e.preventDefault();
+          document.getElementById(`help-${s.id}`)?.scrollIntoView();
+        }}>{s.title}</a>)}
+        <a href="#/help" onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('help-glossary')?.scrollIntoView();
+        }}>Glossary</a>
       </nav>
       {HELP_SECTIONS.map((s) => (
         <section key={s.id} id={`help-${s.id}`}>
@@ -53,6 +61,9 @@ export function Help() {
           ))}</dl>}
         </section>
       ))}
+      <section id="help-glossary">
+        <Glossary />
+      </section>
     </div>
   );
 }

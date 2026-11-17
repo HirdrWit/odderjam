@@ -10,7 +10,7 @@ export const NAV_GROUPS = [
     title: 'Find bets',
     tabs: ['+EV', 'Arbitrage', 'Middles', 'Low Hold', 'Sharp Money', 'Parlay', 'Promos', 'Pick\'em'],
   },
-  {title: 'Size and track', tabs: ['Calculator', 'Tracker', 'Alerts', 'Glossary', 'Help']},
+  {title: 'Size and track', tabs: ['Calculator', 'Tracker', 'Alerts', 'Help']},
 ];
 
 /** @const {!Object<string, string>} */
@@ -27,8 +27,7 @@ export const NAV_SUBTITLES = {
   'Calculator': 'Work out the right stake',
   'Tracker': 'Log bets and see results',
   'Alerts': 'Get notified of new edges',
-  'Glossary': 'Plain-English betting terms',
-  'Help': 'How it works, odds and FAQ',
+  'Help': 'How it works, odds, glossary and FAQ',
 };
 
 /** @return {!Array<string>} Every tab name, in nav order. */
@@ -43,4 +42,12 @@ export function navTabs() {
  */
 export function navLabel(tab, slipCount) {
   return tab === 'Parlay' && slipCount > 0 ? `Parlay (${slipCount})` : tab;
+}
+
+/** @const {!Array<string>} Tabs on the mobile bottom bar; the rest sit under More. */
+export const MOBILE_TABS = ['Odds Screen', '+EV', 'Arbitrage', 'Tracker'];
+
+/** @return {!Array<string>} Tabs listed under More on mobile. */
+export function moreTabs() {
+  return navTabs().filter((t) => !MOBILE_TABS.includes(t));
 }

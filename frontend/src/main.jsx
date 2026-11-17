@@ -8,7 +8,6 @@ import {SortBar, SortTh, useSort} from './SortTable.jsx';
 import {oddsKey} from './sorttable.js';
 import {zeroStakeReason} from './columns.js';
 import {parseStakeInput, rowActionAria, slipButtonLabel, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
-import {Glossary} from './Glossary.jsx';
 import {Help} from './Help.jsx';
 import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {OddsScreen} from './OddsScreen.jsx';
@@ -19,7 +18,8 @@ import {stakingSummary} from './staking.js';
 import {TabIntro, WelcomeContext} from './TabIntro.jsx';
 import {afterNavigate, initialWelcome} from './onboarding.js';
 import {Term} from './Term.jsx';
-import {NAV_GROUPS, NAV_SUBTITLES, navLabel} from './navgroups.js';
+import {NAV_GROUPS, NAV_SUBTITLES, MOBILE_TABS, moreTabs, navLabel} from './navgroups.js';
+import {buildHash, evFiltersToParams, evParamsToFilters, parseHash} from './routes.js';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
 import {windowText} from './middles.js';
@@ -355,7 +355,7 @@ const EV_SORT = {
 };
 
 function PositiveEv() {
-  const [minEv, setMinEv] = useStored('evMin', 1);
+  const [minEv, setMinEv, setMinEvLocal] = useStored('evMin', 1);
   const [method, setMethod] = useStored('evMethod', 'multiplicative');
   const [kelly, setKelly] = useStored('evKelly', 0.25);
   const [props, setProps] = useStored('evProps', 'include');
@@ -384,6 +384,20 @@ function PositiveEv() {
     }
   };
   const setters = {book: pickBook, minEv: setMinEv, sport: setSport, props: setProps};
+  // Filters in the URL win over stored ones on load; later changes are written back to it.
+  useEffect(() => {
+    const url = parseHash(window.location.hash);
+    if (url.tab === '+EV') {
+      const f = evParamsToFilters(url.params, {book, minEv});
+      // Shared-link values apply to this view only; they are not saved over the visitor's own settings.
+      if (f.book !== book && EV_BOOKS.includes(f.book)) setBook(f.book);
+      if (f.minEv !== minEv) setMinEvLocal(f.minEv);
+    }
+  }, []);
+  useEffect(() => {
+    const next = buildHash('+EV', evFiltersToParams({book, minEv}));
+    if (window.location.hash !== next) window.history.replaceState(null, '', next);
+  }, [book, minEv]);
   const chips = activeChips({book, minEv, sport, props});
   const resetAll = (d) => {
     Object.keys(d).forEach((key) => setters[key](d[key]));
@@ -1400,7 +1414,6 @@ const TABS = {
   'Pick\'em': Pickem,
   'Calculator': Calculators,
   'Tracker': Tracker,
-  'Glossary': Glossary,
   'Alerts': Alerts,
   'Help': Help,
 };
@@ -1408,6 +1421,8 @@ const TABS = {
 const DEFAULT_TAB = 'Odds Screen';
 
 function loadTab() {
+  const fromUrl = parseHash(window.location.hash).tab;
+  if (fromUrl) return fromUrl;
   try {
     const tab = localStorage.getItem('tab');
     return isOption(TABS, tab) ? tab : DEFAULT_TAB;
@@ -1449,8 +1464,9 @@ function Welcome({onJump, onClose}) {
 function App() {
   const [tab, setTab] = useState(() => loadTab());
   const [welcomeTab, setWelcomeTab] = useState(() => initialWelcome(tab));
-  const go = (next) => {
+  const go = (next, push = true) => {
     setTab(next);
+    if (push && parseHash(window.location.hash).tab !== next) window.history.pushState(null, '', buildHash(next, {}));
     setWelcomeTab((w) => {
       const kept = afterNavigate(w, next);
       if (w != null && kept == null) dismissWelcome();
@@ -1462,6 +1478,18 @@ function App() {
       // Storage can be unavailable; the choice just is not remembered.
     }
   };
+  useEffect(() => {
+    if (!parseHash(window.location.hash).tab) window.history.replaceState(null, '', buildHash(tab, {}));
+    const onHash = () => {
+      const next = parseHash(window.location.hash).tab;
+      if (next) {
+        setMoreOpen(false);
+        go(next, false);
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   useEffect(() => {
     const onGoto = (e) => {
       if (isOption(TABS, e.detail)) go(e.detail);
@@ -1475,6 +1503,7 @@ function App() {
     dismissWelcome();
   };
   const navSlip = useSlip();
+  const [moreOpen, setMoreOpen] = useState(false);
   const Page = TABS[tab];
   return (
     <div className="app">
@@ -1501,6 +1530,33 @@ function App() {
       <div className="content">
         {showsStrip(tab) && <FreshnessStrip />}
         <main>{welcome && <Welcome onJump={go} onClose={closeWelcome} />}<WelcomeContext.Provider value={welcomeTab}><Page welcome={welcome} /></WelcomeContext.Provider></main>
+      </div>
+      <div className="bottom-bar" role="navigation" aria-label="Main">
+        {MOBILE_TABS.map((t) => (
+          <button key={t} className={t === tab ? 'on' : ''} aria-current={t === tab ? 'page' : undefined}
+            onClick={() => {
+              setMoreOpen(false);
+              go(t);
+            }}>{t}</button>
+        ))}
+        <button className={moreOpen || moreTabs().includes(tab) ? 'on' : ''} aria-expanded={moreOpen}
+          onClick={() => {
+            setMoreOpen((o) => !o);
+          }}>More</button>
+        {moreOpen && (
+          <div className="more-menu" role="menu">
+            <button role="menuitem" onClick={() => {
+              setMoreOpen(false);
+              setWelcomeTab(tab);
+            }}>Show welcome</button>
+            {moreTabs().map((t) => (
+              <button key={t} role="menuitem" className={t === tab ? 'on' : ''} onClick={() => {
+                setMoreOpen(false);
+                go(t);
+              }}>{navLabel(t, navSlip.slip.length)}</button>
+            ))}
+          </div>
+        )}
       </div>
       <Toaster />
     </div>

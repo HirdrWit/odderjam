@@ -28,7 +28,7 @@ export function useStored(key, initial) {
       // Storage full or disabled; keep the in-memory value only.
     }
   };
-  return [value, update];
+  return [value, update, setValue];
 }
 
 /**
