@@ -462,16 +462,19 @@ function PositiveEv() {
               <td title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>
                 {zeroStakeReason(r) ? <span className="mut small">{zeroStakeReason(r)}</span> : formatMoney(r.stake)}
               </td>
-              <td>
-                <BetLink href={r.link} title={ROW_ACTION_TIPS.bet} /> <button className={tracked.has(trackKey(r)) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.track} onClick={() => {
-                  track(r);
-                }}>{trackButtonLabel(tracked.has(trackKey(r)))}</button>{' '}
-                {!r.player && (
-                  <button className={has(r) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.slip}
-                    onClick={() => {
-                      toggle(r);
-                    }}>{has(r) ? '✓ Slip' : '+ Slip'}</button>
-                )}
+              <td className="row-actions">
+                <div className="row-actions-inner">
+                  <BetLink href={r.link} title={ROW_ACTION_TIPS.bet} />
+                  <button className={tracked.has(trackKey(r)) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.track} onClick={() => {
+                    track(r);
+                  }}>{trackButtonLabel(tracked.has(trackKey(r)))}</button>
+                  {!r.player && (
+                    <button className={has(r) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.slip}
+                      onClick={() => {
+                        toggle(r);
+                      }}>{has(r) ? '✓ Slip' : '+ Slip'}</button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
@@ -1004,9 +1007,13 @@ function Middles() {
               </td>
               <td className={r.worst_case >= 0 ? 'best' : 'bad'}>{formatMoney(r.worst_case)}</td>
               <td className="best">{formatMoney(r.win_both)}</td>
-              <td><button className="track" onClick={() => {
-                track(r);
-              }}>Track</button></td>
+              <td className="row-actions">
+                <div className="row-actions-inner">
+                  <button className="track" onClick={() => {
+                    track(r);
+                  }}>Track</button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>

@@ -141,3 +141,6 @@ input.bankroll-start { width: 90px; }
 .card:focus-visible { outline: 2px solid #2a6df4; }
 .card .chevron { color: #8aa0b8; display: inline-block; width: 1em; }
 .toast button.link { background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
+td.row-actions { white-space: nowrap; }
+td.row-actions .row-actions-inner { display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch; }
+td.row-actions .row-actions-inner > * { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: 4px 10px; font-size: 0.9em; line-height: 1.2; white-space: nowrap; }
