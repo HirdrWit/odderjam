@@ -210,3 +210,15 @@ def test_api_sharp_money_rows(api):
 ])
 def test_api_sharp_money_validation(api, bad):
     assert api.get("/api/sharp-money", params=bad).status_code == 422
+
+
+# odderjam-78 — is an exchange configured?
+
+
+def test_api_sharp_money_status_unconfigured(api):
+    assert api.get("/api/sharp-money/status").json() == {"configured": False, "exchanges": []}
+
+
+def test_api_sharp_money_status_configured(api, monkeypatch):
+    monkeypatch.setenv("EXCHANGES", "Kalshi, Polymarket")  # Polymarket has no trade feed
+    assert api.get("/api/sharp-money/status").json() == {"configured": True, "exchanges": ["Kalshi"]}

@@ -8,7 +8,7 @@ import {zeroStakeReason} from './columns.js';
 import {parseStakeInput, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
 import {Glossary} from './Glossary.jsx';
 import {Help} from './Help.jsx';
-import {GOTO_EVENT} from './help.js';
+import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
@@ -1211,26 +1211,31 @@ function SharpMoney() {
   const [minVolume, setMinVolume] = useStored('smMinVolume', 500);
   const data = useApi(`/api/sharp-money?window_minutes=${windowMin}&baseline_minutes=${baselineMin}` +
       `&k=${k}&min_volume=${minVolume}`);
+  const status = useApi('/api/sharp-money/status');
   return (
     <>
       <TabIntro tab="Sharp Money" />
       <div className="bar">
-        Last <input type="number" step="1" min="1" value={windowMin} onChange={(e) => {
+        Show spikes in the last <input type="number" step="1" min="1" value={windowMin} onChange={(e) => {
           setWindowMin(positiveInput(e.target.value, windowMin));
         }} /> min
-        vs prior <input type="number" step="10" min="1" value={baselineMin} onChange={(e) => {
+        compared with the prior <input type="number" step="10" min="1" value={baselineMin} onChange={(e) => {
           setBaselineMin(positiveInput(e.target.value, baselineMin));
         }} /> min
-        Spike × <input type="number" step="0.5" min="0.5" value={k} onChange={(e) => {
+        where volume is at least <input type="number" step="0.5" min="0.5" value={k} onChange={(e) => {
           setK(positiveInput(e.target.value, k));
-        }} />
-        Min contracts <input type="number" step="100" min="0" value={minVolume} onChange={(e) => {
+        }} /> times the usual rate, with at least <input type="number" step="100" min="0" value={minVolume} onChange={(e) => {
           setMinVolume(parseNumberInput(e.target.value, minVolume));
-        }} />
+        }} /> contracts traded. A contract is one share of a yes/no market; it pays $1 if the bet wins.
       </div>
       <div className="mut small">
         Exchange trades are public. A burst of matched volume well above the usual rate points at
-        informed money; EV is against the burst&apos;s volume-weighted price. Needs EXCHANGES=Kalshi.
+        informed money; EV is against the burst&apos;s volume-weighted price.
+        {status && status.configured === false && (
+          <> <button type="button" onClick={() => {
+            window.dispatchEvent(new CustomEvent(GOTO_EVENT, {detail: HELP_TAB}));
+          }}>Set up an exchange in Help</button></>
+        )}
       </div>
       <table>
         <thead>
@@ -1261,7 +1266,7 @@ function SharpMoney() {
           ))}
         </tbody>
       </table>
-      <EmptyState text={sharpEmptyText(data, k, windowMin)} />
+      <EmptyState text={sharpEmptyText(data, k, windowMin, status)} />
       <RowExample tab="Sharp Money" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );

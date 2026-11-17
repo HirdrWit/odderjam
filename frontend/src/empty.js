@@ -56,12 +56,20 @@ export function lowHoldEmptyText(data, maxHold, lowest) {
  * @param {*} data The /api/sharp-money response.
  * @param {number} k Spike multiple.
  * @param {number} windowMin Window in minutes.
+ * @param {?{configured: boolean, exchanges: !Array<string>}=} status The
+ *     /api/sharp-money/status response, null while loading.
  * @return {?string}
  */
-export function sharpEmptyText(data, k, windowMin) {
+export function sharpEmptyText(data, k, windowMin, status = null) {
   if (!isEmptyList(data)) return null;
-  return `No exchange volume spike above ${k}× the usual rate in the last ${windowMin} min. ` +
-      'Lower Spike × or Min contracts, or check back later.';
+  if (status && status.configured === false) {
+    return 'Sharp Money is not set up. Connect an exchange in your .env file, then restart Odderjam. ' +
+        'See Help for the steps.';
+  }
+  const watching = status && status.exchanges && status.exchanges.length ?
+      `Watching ${status.exchanges.join(', ')}. No spikes right now. ` : '';
+  return `${watching}No exchange volume spike above ${k}× the usual rate in the last ${windowMin} min. ` +
+      'Lower the spike multiple or the minimum contracts, or check back later.';
 }
 
 /**

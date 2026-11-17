@@ -48,3 +48,22 @@ def test_arbs_warns_on_negative_min_and_labels_total():
     body = _component("Arbs")
     assert "arbMinWarning(" in body
     assert "ARB_TOTAL_NOTE" in body
+
+
+# odderjam-78: Sharp Money setup state and filter wording
+
+
+def test_sharp_money_tab_has_no_env_var_and_defines_contracts():
+    body = _component("SharpMoney")
+    assert "EXCHANGES" not in body
+    assert "Min contracts" not in body
+    assert re.search(r"contract is", body, re.I)
+    assert "sharp-money/status" in body
+    assert re.search(r"sharpEmptyText\(data, k, windowMin, status", body)
+    assert "HELP_TAB" in body
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_exchange_setup_js():
+    result = subprocess.run(["node", "--test", "src/exchange_setup.test.js"], cwd=FRONTEND, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -19,7 +19,7 @@ from .engine import (devig, live as _live_mod, lowhold, markets as mk, middles a
 from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets, filters as flt
 from .routes.filters import FilterSet
-from .providers import cache_info, get_snapshot, live_status, set_live
+from .providers import exchanges, cache_info, get_snapshot, live_status, set_live
 
 
 @asynccontextmanager
@@ -518,6 +518,13 @@ class LiveSettings(BaseModel):
 def _live_payload() -> dict:
     now = _now()
     return {**live_status(), "live_events": sum(_live_mod.is_live(e, now) for e in get_snapshot())}
+
+
+@app.get("/api/sharp-money/status")
+def sharp_money_status():
+    """Whether an exchange with a public trade feed is set up (EXCHANGES), and which."""
+    watched = [n for n in exchanges.enabled() if n in exchanges.TRADE_PLATFORMS]
+    return {"configured": bool(watched), "exchanges": watched}
 
 
 @app.get("/api/sharp-money")

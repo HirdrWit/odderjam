@@ -78,3 +78,27 @@ test('Low Hold opens at a value that shows rows, and Arb total says it follows t
   assert.equal(LOW_HOLD_DEFAULT_MAX, 3);
   assert.match(ARB_TOTAL_NOTE, /bankroll/i);
 });
+
+// odderjam-78: tell "not set up" from "nothing found".
+const OFF = {configured: false, exchanges: []};
+const ON = {configured: true, exchanges: ['Kalshi']};
+
+test('sharpEmptyText says to set up an exchange, without naming the env var', () => {
+  const text = sharpEmptyText([], 3, 10, OFF) ?? '';
+  assert.match(text, /connect an exchange/i);
+  assert.match(text, /\.env/);
+  assert.match(text, /restart/i);
+  assert.match(text, /help/i);
+  assert.doesNotMatch(text, /EXCHANGES/);
+});
+
+test('sharpEmptyText says which exchange is watched when set up', () => {
+  const text = sharpEmptyText([], 3, 10, ON) ?? '';
+  assert.match(text, /Watching Kalshi\. No spikes right now/);
+  assert.doesNotMatch(text, /EXCHANGES|connect an exchange/i);
+});
+
+test('sharpEmptyText stays null for non-empty data whatever the status', () => {
+  assert.equal(sharpEmptyText([{a: 1}], 3, 10, OFF), null);
+  assert.equal(sharpEmptyText(null, 3, 10, OFF), null);
+});

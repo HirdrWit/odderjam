@@ -86,6 +86,19 @@ export const HELP_SECTIONS = [
     risk: 'Risk: promo terms differ, so read them. A book may limit you or void the bonus if you break a rule. An odds error can void a bet, and you can lose the hedge side.',
   },
   {
+    id: 'exchange-setup',
+    title: 'Connect an exchange (Sharp Money)',
+    paragraphs: [
+      'Sharp Money watches trades on a betting exchange. An exchange is a market where people bet against each other. It needs one setting before it can work.',
+    ],
+    steps: [
+      'Open the .env file in the Odderjam folder.',
+      'Add the line EXCHANGES=Kalshi. Kalshi is the exchange with a public trade feed.',
+      'Save the file and restart Odderjam.',
+      'Open the Sharp Money tab. It now says which exchange it is watching.',
+    ],
+  },
+  {
     id: 'faq',
     title: 'FAQ',
     paragraphs: [],
