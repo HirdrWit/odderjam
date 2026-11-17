@@ -44,7 +44,7 @@ import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evb
 import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useBettable, useStored} from './hooks.jsx';
 import {BETTABLE_DEFAULTS, BETTABLE_FIELDS, bettableQuery, bettableReset, validateBettable} from './thresholds.js';
-import {badgesFor, bettableChip, filterBettable, hiddenSummary, showAnyway} from './bettable.js';
+import {badgesFor, bettableChip, filterBettable, hiddenSummary, legWarning, parlayFlagState, showAnyway} from './bettable.js';
 import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
@@ -1095,13 +1095,13 @@ function Promos() {
   );
 }
 
-function ParlayBookRow({book, onTrack}) {
+function ParlayBookRow({book, onTrack, showStake = true}) {
   return (
     <tr className={book.blocked ? 'blocked' : ''}>
       <td>{book.book}</td>
       <td className="num">{formatOdds(book.odds)}</td>
       <td className={`num ${signClass(book.ev_pct)}`}>{percent(book.ev_pct, {signed: true})}</td>
-      <td className="num">{book.stake == null ? '—' : formatMoney(book.stake)}{tinyStakeNote(book.stake) && <div className="mut small">{tinyStakeNote(book.stake)}</div>}</td>
+      <td className="num">{!showStake ? '—' : book.stake == null ? '—' : formatMoney(book.stake)}{showStake && tinyStakeNote(book.stake) && <div className="mut small">{tinyStakeNote(book.stake)}</div>}</td>
       <td className="mut">{book.leg_odds.map((o) => formatOdds(o)).join(' × ')}</td>
       <td>
         {book.blocked ?
@@ -1118,6 +1118,8 @@ function Parlay() {
   const [method] = useStored('evMethod', 'multiplicative');
   const [kelly] = useStored('evKelly', 0.25);
   const sizing = useSizing();
+  const [bettable] = useBettable();
+  const flagState = parlayFlagState(slip, bettable);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const legs = slip.map(({event_id, market, name, point}) => ({event_id, market, name, point}));
@@ -1159,7 +1161,11 @@ function Parlay() {
   const priceable = result ? result.legs.length : slip.length;
   const track = async (book) => {
     const picks = result.legs.map((l) => l.pick);
-    const stake = legStake({stake: book.stake});
+    const stake = flagState.showStake ? legStake({stake: book.stake}) : null;
+    if (!flagState.showStake) {
+      toast(`${flagState.summary}: no stake is suggested, so nothing was logged. Remove the flagged legs or turn off Bettable only.`, 'err');
+      return;
+    }
     if (stake == null) {
       toast(`No stake worked out for the parlay at ${book.book}, so nothing was logged. Set a bankroll in +EV first.`, 'err');
       return;
@@ -1221,6 +1227,7 @@ function Parlay() {
             <span className={l.odds == null || !l.book ? 'bad' : ''}>{slipLegPriceText(l)}</span>{' '}
             <span className="mut">{marketName(l.market)} · {l.event}</span>
             {missing && <span className="bad">{MISSING_LEG_TEXT}</span>}
+            {legWarning(l, bettable) && <span className="bad">{legWarning(l, bettable)}</span>}
             {fair != null && <span className="mut">fair {(fair * 100).toFixed(1)}%</span>}
             {result && !missing && fair == null && (
               <span className="mut">no sharp price for this line — EV unknown</span>
@@ -1245,6 +1252,11 @@ function Parlay() {
               </span>
             )}
           </div>
+          {flagState.flagged > 0 && (
+            <div className="bad" role="status">
+              {flagState.summary}. No stake is suggested while a leg is flagged.
+            </div>
+          )}
           {result.same_game && (
             <div className="bad">
               Same-game legs: correlation is not modelled, and books without same-game parlays are
@@ -1259,7 +1271,7 @@ function Parlay() {
             </thead>
             <tbody>
               {result.books.map((b) => (
-                <ParlayBookRow key={b.book} book={b} onTrack={() => {
+                <ParlayBookRow key={b.book} book={b} showStake={flagState.showStake} onTrack={() => {
                   track(b);
                 }} />
               ))}

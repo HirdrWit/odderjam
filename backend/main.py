@@ -20,7 +20,7 @@ from .engine import (bettable, devig, live as _live_mod, lowhold, markets as mk,
 from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets, filters as flt
 from .routes.filters import FilterSet
-from .providers import exchanges, cache_info, get_snapshot, live_status, set_live
+from .providers import exchanges, cache_info, get_snapshot, live_config, live_status, set_live
 
 
 @asynccontextmanager
@@ -324,6 +324,7 @@ class PickemIn(BaseModel):
     payouts: dict[int, dict[int, float]] | None = None
     method: str = "multiplicative"
     top: int = Field(3, ge=1, le=20)
+    bettable_only: bool = False  # leave in-play and stale legs out of the suggested slips
 
 
 class PickemText(BaseModel):
@@ -359,10 +360,21 @@ def _prop_index(events: list[dict]) -> dict[tuple[str, float], list[tuple[dict, 
     return index
 
 
-def _pickem_leg(line: PickemLine, index: dict, method: str) -> dict:
+def _pickem_flags(e: dict, g: dict, now: float) -> list[str]:
+    """Risk flags for a pick'em prop: in_play when the game is live, stale when its prices are older than max_price_age."""
+    flags = ["in_play"] if _live_mod.is_live(e, now) else []
+    books = {b for o in g["outcomes"] for b in o["prices"]}
+    age = _live_mod.price_age(e.get("updated", {}), books, now)
+    if age is not None and _live_mod.is_stale(age, live_config()["max_price_age"]):
+        flags.append("stale")
+    return flags
+
+
+def _pickem_leg(line: PickemLine, index: dict, method: str, now: float) -> dict:
     """Match one pick'em line to the sportsbook prop at the same player, market and point."""
     out = {"player": line.player, "market": line.market, "point": line.point, "matched": False, "side": line.side,
-           "prob": None, "probs": None, "source": None, "event_id": None, "event": None, "sport": None}
+           "prob": None, "probs": None, "source": None, "event_id": None, "event": None, "sport": None,
+           "flags": []}
     for e, key, g in index.get((line.player.strip().casefold(), line.point), []):
         if not _market_matches(key, line.market):
             continue
@@ -378,7 +390,7 @@ def _pickem_leg(line: PickemLine, index: dict, method: str) -> dict:
             side = max(probs, key=probs.get)
         return {**out, "player": g["player"], "market": key, "matched": True, "side": side, "prob": probs[side],
                 "probs": probs, "source": r[1], "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}',
-                "sport": e["sport"]}
+                "sport": e["sport"], "flags": _pickem_flags(e, g, now)}
     return out
 
 
@@ -410,9 +422,10 @@ def pickem_optimize(p: PickemIn):
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     index = _prop_index(get_snapshot())
-    legs = [_pickem_leg(line, index, p.method) for line in p.lines]
+    now = _now()
+    legs = [_pickem_leg(line, index, p.method, now) for line in p.lines]
     legs.sort(key=lambda x: (not x["matched"], -(x["prob"] or 0)))
-    matched = [x for x in legs if x["matched"]]
+    matched = [x for x in legs if x["matched"] and not (p.bettable_only and x["flags"])]
     slips = {str(n): pickem.best_slips(matched, n, table[n], p.top) for n in sorted(set(p.sizes)) if n in table}
     return {
         "payout": p.payout,

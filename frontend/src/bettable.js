@@ -128,17 +128,36 @@ export function showAnyway() {
   return false;
 }
 
-/** @return {string} STUB. */
+/**
+ * @param {{flags: (!Array<string>|undefined)}} leg A parlay slip leg.
+ * @param {boolean} on
+ * @return {string} Warning naming each flag on the leg; '' when the mode is off or the leg is clean.
+ */
 export function legWarning(leg, on) {
-  return '';
+  if (!on) return '';
+  const labels = badgesFor(leg).map((b) => b.label.toLowerCase());
+  return labels.length ? `Flagged: ${labels.join(', ')}. This leg's price is less reliable.` : '';
 }
 
-/** @return {{flagged: number, summary: string, showStake: boolean}} STUB. */
+/**
+ * @param {!Array<{flags: (!Array<string>|undefined)}>} slip
+ * @param {boolean} on
+ * @return {{flagged: number, summary: string, showStake: boolean}} The parlay result's flag state;
+ *     the suggested stake is hidden while any leg is flagged.
+ */
 export function parlayFlagState(slip, on) {
-  return {flagged: 0, summary: '', showStake: true};
+  const flagged = on ? slip.filter((l) => l.flags?.length).length : 0;
+  if (!flagged) return {flagged: 0, summary: '', showStake: true};
+  return {flagged, summary: `${flagged} ${flagged === 1 ? 'leg' : 'legs'} flagged`, showStake: false};
 }
 
-/** @return {string} STUB. */
+/**
+ * @param {{flags: (!Array<string>|undefined)}} leg A Pick'em leg.
+ * @param {boolean} on
+ * @return {string} e.g. "In-play, Stale: left out of suggested slips"; '' when off or unflagged.
+ */
 export function pickemLegMark(leg, on) {
-  return '';
+  if (!on) return '';
+  const labels = badgesFor(leg).map((b) => b.label);
+  return labels.length ? `${labels.join(', ')}: left out of suggested slips` : '';
 }

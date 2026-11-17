@@ -1,7 +1,8 @@
 import {useState} from 'react';
 
 import {TabIntro} from './TabIntro.jsx';
-import {postJson, toast, useApiStatus, useStored} from './hooks.jsx';
+import {postJson, toast, useApiStatus, useBettable, useStored} from './hooks.jsx';
+import {pickemLegMark} from './bettable.js';
 import {EXAMPLE_LINE, noMatchReason, noSlipsReason, payoutRows, payoutsView, rowsToTable} from './pickem.js';
 
 const BLANK = {player: '', market: '', point: '', side: ''};
@@ -26,6 +27,7 @@ function legLabel(leg) {
 export function Pickem() {
   const [lines, setLines] = useStored('pickem.lines', []);
   const [payout, setPayout] = useStored('pickem.payout', 'power');
+  const [bettable] = useBettable();
   const [sizes, setSizes] = useStored('pickem.sizes', [2, 3]);
   const [importText, setImportText] = useState('');
   const [parseErrors, setParseErrors] = useState([]);
@@ -68,6 +70,7 @@ export function Pickem() {
     try {
       const body = {lines, payout, sizes, method: 'multiplicative', top: 3};
       if (override) body.payouts = override;
+      if (bettable) body.bettable_only = true;
       const r = await postJson('/api/pickem', body);
       if (!r.ok) {
         const detail = await r.json().then((d) => d.detail, () => null);
@@ -188,7 +191,7 @@ export function Pickem() {
             <tbody>
               {ranked.map((l, i) => (
                 <tr key={i} style={l.matched ? undefined : {opacity: 0.5}}>
-                  <td>{l.player}</td><td>{l.market}</td><td>{l.point}</td>
+                  <td>{l.player}{pickemLegMark(l, bettable) && <div className="bad small">{pickemLegMark(l, bettable)}</div>}</td><td>{l.market}</td><td>{l.point}</td>
                   <td>{l.matched ? l.side : '—'}</td>
                   <td title={noMatchReason(l)}>{l.matched ? pct(l.prob) : 'no match'}</td>
                   <td className="mut">{l.matched ? l.source : noMatchReason(l)}</td>
