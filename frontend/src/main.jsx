@@ -7,7 +7,7 @@ import {RowExample, Th} from './ColumnHelp.jsx';
 import {SortBar, SortTh, useSort} from './SortTable.jsx';
 import {oddsKey} from './sorttable.js';
 import {zeroStakeReason} from './columns.js';
-import {parseStakeInput, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
+import {parseStakeInput, rowActionAria, slipButtonLabel, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
 import {Glossary} from './Glossary.jsx';
 import {Help} from './Help.jsx';
 import {GOTO_EVENT, HELP_TAB} from './help.js';
@@ -225,9 +225,9 @@ function FreshnessStrip() {
  * "Bet" button: opens the sportsbook (deep link to the bet when the feed has
  * one) in a new tab.
  */
-function BetLink({href, title}) {
+function BetLink({href, title, label}) {
   if (!href) return null;
-  return <a className="bet" href={href} title={title} target="_blank" rel="noopener noreferrer">Bet</a>;
+  return <a className="bet" href={href} title={title} aria-label={label} target="_blank" rel="noopener noreferrer">Bet</a>;
 }
 
 const MARKETS = {moneyline: 'Moneyline', spreads: 'Spread', totals: 'Total'};
@@ -534,18 +534,20 @@ function PositiveEv() {
               </td>
               <td className="row-actions">
                 <div className="row-actions-inner">
-                  <BetLink href={r.link} title={ROW_ACTION_TIPS.bet} />
-                  <button className={tracked.has(trackKey(r)) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.track} onClick={() => {
+                  <BetLink href={r.link} title={ROW_ACTION_TIPS.bet} label={rowActionAria('bet', false, r)} />
+                  <button className={tracked.has(trackKey(r)) ? 'secondary on' : 'secondary'} title={ROW_ACTION_TIPS.track}
+                    aria-label={rowActionAria('track', tracked.has(trackKey(r)), r)} onClick={() => {
                     track(r);
                   }}>{trackButtonLabel(tracked.has(trackKey(r)))}</button>
                   {!r.player && (
-                    <button className={has(r) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.slip}
+                    <button className={has(r) ? 'secondary on' : 'secondary'} title={ROW_ACTION_TIPS.slip}
+                      aria-label={rowActionAria('slip', has(r), r)}
                       onClick={() => {
                         const added = !has(r);
                         toggle(r);
                         const t = slipToast(added, slip.length + (added ? 1 : -1));
                         toast(t.text, t.kind, t.action);
-                      }}>{has(r) ? '✓ Slip' : '+ Slip'}</button>
+                      }}>{slipButtonLabel(has(r))}</button>
                   )}
                 </div>
               </td>
@@ -574,7 +576,7 @@ function ArbCard({arb, onTrack}) {
     <div className="card">
       <b className="best">{percent(arb.profit_pct, {digits: 2, signed: true})}</b> {arb.event} <LiveTag row={arb} />{' '}
       <span className="mut">{arb.sport} · {marketName(arb.market)}</span>
-      <button className="track right" onClick={onTrack}>Track legs</button>
+      <button className="secondary right" title="Log all legs of this arbitrage in the Tracker" onClick={onTrack}>Track legs</button>
       {arb.legs.map((leg, j) => (
         <div key={j}>
           {leg.pick} {formatOdds(leg.odds)} @ {leg.book} — stake <b>{formatMoney(leg.stake)}</b>{' '}
@@ -677,7 +679,7 @@ function PromoCard({promo, onTrack}) {
       <b className={promo.profit >= 0 ? 'best' : 'bad'}>{promo.conversion_pct.toFixed(1)}%</b>{' '}
       {formatMoney(promo.profit)} locked · {promo.event}
       <span className="mut">{promo.sport} · {marketName(promo.market)}</span>
-      <button className="track" style={{float: 'right'}} onClick={onTrack}>Track</button>
+      <button className="secondary" style={{float: 'right'}} title="Log this promo conversion in the Tracker" onClick={onTrack}>Track</button>
       {promo.legs.map((leg, j) => (
         <div key={j}>
           {legName(leg)}: {leg.pick} {formatOdds(leg.odds)}
@@ -795,7 +797,7 @@ function ParlayBookRow({book, onTrack}) {
       <td>
         {book.blocked ?
           <span className="mut">No SGP</span> :
-          <button className="track" onClick={onTrack}>Track</button>}
+          <button className="secondary" title="Log this parlay in the Tracker" onClick={onTrack}>Track</button>}
       </td>
     </tr>
   );
@@ -1116,7 +1118,7 @@ function Middles() {
               <td className={`num ${signClass(r.win_both)}`}>{money(r.win_both, {signed: true})}</td>
               <td className="row-actions">
                 <div className="row-actions-inner">
-                  <button className="track" onClick={() => {
+                  <button className="secondary" title="Log this middle in the Tracker" onClick={() => {
                     track(r);
                   }}>Track</button>
                 </div>

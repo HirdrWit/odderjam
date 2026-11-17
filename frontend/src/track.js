@@ -51,3 +51,24 @@ export function trackButtonLabel(tracked) {
 export function trackKey(row) {
   return [row.event_id, row.market, row.pick, row.point ?? '', row.book].join('|');
 }
+
+/**
+ * @param {boolean} inSlip
+ * @return {string} Label for the row's slip button.
+ */
+export function slipButtonLabel(inSlip) {
+  return inSlip ? '✓ In slip' : '+ Slip';
+}
+
+/**
+ * @param {string} kind 'bet', 'track' or 'slip'.
+ * @param {boolean} on True when the row is tracked or in the slip.
+ * @param {{pick: string, book: string}} row
+ * @return {string} Accessible name that states the action and the on state in words.
+ */
+export function rowActionAria(kind, on, row) {
+  const what = `${row.pick} at ${row.book}`;
+  if (kind === 'bet') return `Bet ${what}, opens the sportsbook`;
+  if (kind === 'track') return on ? `Already tracked: ${what}` : `Track ${what} in the Tracker`;
+  return on ? `In slip, remove from slip: ${what}` : `Add ${what} to slip`;
+}
