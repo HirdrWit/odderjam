@@ -5,6 +5,7 @@
  */
 
 import {findEntry} from './glossary.js';
+import {windowText} from './middles.js';
 
 /** @const {!Object<string, !Array<{label: string, glossary: (string|undefined), text: (string|undefined)}>>} */
 export const COLUMNS = {
@@ -28,13 +29,13 @@ export const COLUMNS = {
   ],
   'Middles': [
     {label: 'EV%', glossary: 'edge'},
+    {label: 'Hit %', text: 'The estimated chance that the result lands inside the window.'},
     {label: 'Event', text: 'The game, and its sport.'},
     {label: 'Market', text: 'Spread or total.'},
-    {label: 'Window', text: 'The range of results where both bets win.'},
+    {label: 'Window', text: 'The range of results where both bets win, in points, with the two lines.'},
     {label: 'Legs', text: 'The two bets to place, each at its book, with the stake for $100 total.'},
     {label: 'Worst case', text: 'Your result if the game misses the window on either side. Usually a small loss.'},
     {label: 'Win both', text: 'Your profit if the result lands inside the window and both bets win.'},
-    {label: 'Hit %', text: 'The estimated chance that the result lands inside the window.'},
   ],
   'Sharp Money': [
     {label: 'Event', text: 'The game, and its sport.'},
@@ -101,7 +102,7 @@ export function rowExample(tab, row, fmt) {
           `Bet ${row.legs.map(legText).join(' and ')} to ${row.expected_loss <= 0 ? 'expect a profit' :
             `expect to lose ${fmt.money(row.expected_loss)}`}.`;
     case 'Middles':
-      return `${LEAD}if the result lands in ${row.window}, both bets win and you make ${fmt.money(row.win_both)}. ` +
+      return `${LEAD}if the result lands in ${row.low === undefined ? row.window : windowText(row)}, both bets win and you make ${fmt.money(row.win_both)}. ` +
           `That happens about ${(row.hit_prob * 100).toFixed(1)}% of the time; otherwise your result is ` +
           `${fmt.money(row.worst_case)}.`;
     case 'Sharp Money':

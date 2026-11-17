@@ -78,13 +78,15 @@ export function evEmptyText(data, minEv) {
  * @param {*} data The /api/middles response.
  * @param {number} minWindow Min window.
  * @param {(number|string)} maxCost Max cost %, '' for any.
+ * @param {(number|string)=} minEv Min EV %, '' or undefined for any.
  * @return {?string}
  */
-export function middlesEmptyText(data, minWindow, maxCost) {
+export function middlesEmptyText(data, minWindow, maxCost, minEv = '') {
   if (!isEmptyList(data)) return null;
   const cost = maxCost === '' ? '' : ` and cost at most ${maxCost}%`;
-  return `No middles (two bets that can both win) with a window of at least ${minWindow}${cost} right now. ` +
-      'Lower Min window, raise Max cost %, or refresh odds.';
+  const ev = minEv === '' ? '' : ` and an EV of ${minEv}% or more`;
+  return `No middles (two bets that can both win) with a window of at least ${minWindow}${cost}${ev} right now. ` +
+      'Lower Min window or Min EV %, raise Max cost %, or refresh odds.';
 }
 
 /**

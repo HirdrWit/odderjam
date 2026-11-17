@@ -460,8 +460,10 @@ def middles(
     max_cost: float | None = None,
     market: str | None = None,
     stake: float = Query(100.0, gt=0, allow_inf_nan=False),
+    min_ev: float | None = Query(None, allow_inf_nan=False),
 ) -> list[dict]:
-    """Middles across books. `max_cost` caps the worst-case loss as a percent of total stake."""
+    """Middles across books. `max_cost` caps the worst-case loss as a percent of total stake;
+    `min_ev` drops middles whose expected value (percent of total stake) is below it."""
     now = _now()
     rows = []
     for e in get_snapshot():
@@ -491,13 +493,16 @@ def middles(
                     fresh = scan.freshness(e, [ba, bb], now)
                     if fresh is None:
                         continue
+                    ev = mid.middle_ev(m, la, pa, lb, pb, pmf)
+                    if min_ev is not None and ev["ev_pct"] < min_ev:
+                        continue
                     rows.append({
                         "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                         "market": key, "window": m["window"], "low": la, "high": lb,
                         "legs": [{"pick": mk.label(o), "point": o["point"], "book": b, "odds": p, "stake": s}
                                  for o, b, p, s in ((oa, ba, pa, m["stake_a"]), (ob, bb, pb, m["stake_b"]))],
                         "win_both": m["win_both"], "worst_case": m["worst_case"], "cost_pct": cost_pct,
-                        **mid.middle_ev(m, la, pa, lb, pb, pmf), **fresh,
+                        **ev, **fresh,
                     })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 

@@ -17,6 +17,7 @@ import {Term} from './Term.jsx';
 import {NAV_GROUPS, NAV_SUBTITLES} from './navgroups.js';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
+import {windowText} from './middles.js';
 import {
   alertsEmptyText, arbMinWarning, ARB_TOTAL_NOTE, arbsEmptyText, evEmptyText, LOW_HOLD_DEFAULT_MAX,
   lowHoldEmptyText, middlesEmptyText, sharpEmptyText,
@@ -922,8 +923,10 @@ function LowHold() {
 function Middles() {
   const [minWindow, setMinWindow] = useStored('midWindow', 0.5);
   const [maxCost, setMaxCost] = useStored('midCost', 5);
+  const [minEv, setMinEv] = useStored('midMinEv', 0);
   const [market, setMarket] = useStored('midMarket', '');
   const params = new URLSearchParams({min_window: minWindow});
+  if (minEv !== '') params.set('min_ev', minEv);
   if (maxCost !== '') params.set('max_cost', maxCost);
   if (market) params.set('market', market);
   const data = useApi(`/api/middles?${params}`);
@@ -955,6 +958,10 @@ function Middles() {
     const value = e.target.value === '' ? '' : Number(e.target.value);
     if (value === '' || !Number.isNaN(value)) setMaxCost(value);
   };
+  const onMinEv = (e) => {
+    const value = e.target.value === '' ? '' : Number(e.target.value);
+    if (value === '' || !Number.isNaN(value)) setMinEv(value);
+  };
   return (
     <>
       <TabIntro tab="Middles" />
@@ -968,6 +975,7 @@ function Middles() {
         Min window <input type="number" step="0.5" min="0" value={minWindow} onChange={onMinWindow} />
         Max cost % <input type="number" step="0.5" min="0" placeholder="any" value={maxCost}
           onChange={onMaxCost} />
+        Min EV % <input type="number" step="0.5" placeholder="any" value={minEv} onChange={onMinEv} />
       </div>
       <div className="mut small">
         A <Term id="middle">middle</Term> wins both bets when the result lands in the window. Per $100 total stake, split so both misses cost the same. EV uses a normal model of the
@@ -976,18 +984,19 @@ function Middles() {
       <table>
         <thead>
           <tr>
-            <Th tab="Middles" label="EV%" /><Th tab="Middles" label="Event" /><Th tab="Middles" label="Market" />
-            <Th tab="Middles" label="Window" /><Th tab="Middles" label="Legs" /><Th tab="Middles" label="Worst case" />
-            <Th tab="Middles" label="Win both" /><Th tab="Middles" label="Hit %" /><th aria-label="Actions"></th>
+            <Th tab="Middles" label="EV%" /><Th tab="Middles" label="Hit %" /><Th tab="Middles" label="Event" />
+            <Th tab="Middles" label="Market" /><Th tab="Middles" label="Window" /><Th tab="Middles" label="Legs" />
+            <Th tab="Middles" label="Worst case" /><Th tab="Middles" label="Win both" /><th aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
           {(Array.isArray(data) ? data : []).map((r, i) => (
             <tr key={i}>
               <td className={r.ev_pct >= 0 ? 'best' : 'bad'}>{r.ev_pct.toFixed(1)}%</td>
+              <td>{(r.hit_prob * 100).toFixed(1)}%</td>
               <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
               <td>{marketName(r.market)}</td>
-              <td>{r.window}</td>
+              <td>{windowText(r)}</td>
               <td>
                 {r.legs.map((l, j) => (
                   <div key={j}>{l.pick} {formatOdds(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>
@@ -995,7 +1004,6 @@ function Middles() {
               </td>
               <td className={r.worst_case >= 0 ? 'best' : 'bad'}>{formatMoney(r.worst_case)}</td>
               <td className="best">{formatMoney(r.win_both)}</td>
-              <td>{(r.hit_prob * 100).toFixed(1)}%</td>
               <td><button className="track" onClick={() => {
                 track(r);
               }}>Track</button></td>
@@ -1003,7 +1011,7 @@ function Middles() {
           ))}
         </tbody>
       </table>
-      <EmptyState text={middlesEmptyText(data, minWindow, maxCost)} />
+      <EmptyState text={middlesEmptyText(data, minWindow, maxCost, minEv)} />
       <RowExample tab="Middles" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
