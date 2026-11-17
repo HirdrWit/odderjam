@@ -4,7 +4,7 @@ import {createRoot} from 'react-dom/client';
 import './style.css';
 import {Calculators} from './Calculators.jsx';
 import {RowExample, Th} from './ColumnHelp.jsx';
-import {SortBar, SortTh, useSort} from './SortTable.jsx';
+import {SortTh, useSort} from './SortTable.jsx';
 import {oddsKey} from './sorttable.js';
 import {zeroStakeReason} from './columns.js';
 import {parseStakeInput, rowActionAria, slipButtonLabel, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
@@ -14,6 +14,10 @@ import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {filterCount, filtersLabel} from './cards.js';
+import {
+  ARB_COLUMNS, ARB_DEFAULTS, ARB_SORT, arbChips, arbReset, arbStakingNote, arbTotalPlaceholder,
+} from './arbfilters.js';
+import {SHARP_DEFAULTS, SHARP_FIELDS, sharpChips, sharpHint, sharpReset} from './sharpfilters.js';
 import {DEFAULT_FILTERS, activeChips, clearFilter, resetFilters, sportsParam} from './evfilters.js';
 import {stakingSummary} from './staking.js';
 import {TabIntro, WelcomeContext} from './TabIntro.jsx';
@@ -593,46 +597,55 @@ function PropsFilter({value, onChange}) {
   );
 }
 
-function ArbCard({arb, onTrack}) {
+function ArbRow({arb, onTrack}) {
   return (
-    <div className="card">
-      <b className="best">{percent(arb.profit_pct, {digits: 2, signed: true})}</b> {arb.event} <LiveTag row={arb} />{' '}
-      <span className="mut">{arb.sport} · {marketName(arb.market)}</span>
-      <button className="secondary right" title="Log all legs of this arbitrage in the Tracker" onClick={onTrack}>Track legs</button>
-      {arb.legs.map((leg, j) => (
-        <div key={j}>
-          {leg.pick} {formatOdds(leg.odds)} @ {leg.book} — stake <b>{formatMoney(leg.stake)}</b>{' '}
-          <BetLink href={leg.link} />{' '}
-          <span className="mut">
-            · profit if wins{' '}
-            <span className={signClass(leg.profit_if_wins)}>
-              {money(leg.profit_if_wins, {signed: true})}
+    <tr>
+      <td className="num c-ev"><b className="best">{percent(arb.profit_pct, {digits: 2, signed: true})}</b></td>
+      <td className="c-event">
+        {arb.event} <LiveTag row={arb} />{' '}
+        <span className="mut">{arb.sport} · {marketName(arb.market)}</span>
+        {arb.warning && <div className="bad">⚠ {arb.warning}</div>}
+      </td>
+      <td className="c-pick">
+        {arb.legs.map((leg, j) => (
+          <div key={j}>
+            {leg.pick} {formatOdds(leg.odds)} @ {leg.book} — stake <b>{formatMoney(leg.stake)}</b>{' '}
+            <BetLink href={leg.link} />{' '}
+            <span className="mut">
+              · profit if wins{' '}
+              <span className={signClass(leg.profit_if_wins)}>
+                {money(leg.profit_if_wins, {signed: true})}
+              </span>
             </span>
-          </span>
+          </div>
+        ))}
+      </td>
+      <td className="num c-stake">
+        {formatMoney(arb.total_stake)}
+        <div className="mut small">
+          profit {formatMoney(arb.min_profit)} to {formatMoney(arb.max_profit)}{arb.capped ? ' · scaled down to max per side' : ''}
         </div>
-      ))}
-      <div className="mut">
-        Total {formatMoney(arb.total_stake)} · profit {formatMoney(arb.min_profit)} to{' '}
-        {formatMoney(arb.max_profit)}{arb.capped ? ' · scaled down to max per side' : ''}
-      </div>
-      {arb.warning && <div className="bad">⚠ {arb.warning}</div>}
-    </div>
+      </td>
+      <td className="row-actions">
+        <div className="row-actions-inner c-actions">
+          <button className="secondary" title="Log all legs of this arbitrage in the Tracker" onClick={onTrack}>Track legs</button>
+        </div>
+      </td>
+    </tr>
   );
 }
-
-const ARB_SORT_OPTIONS = [
-  {id: 'profit', label: 'Profit %', defaultDir: 'desc'}, {id: 'event', label: 'Event'},
-  {id: 'stake', label: 'Total stake', defaultDir: 'desc'},
-];
-const ARB_SORT = {profit: (r) => r.profit_pct, event: (r) => r.event, stake: (r) => r.total_stake};
 
 function Arbs() {
   const [min, setMin] = useStored('arbMin', 0);
   const [props, setProps] = useStored('arbProps', 'include');
   const [sort, onSort, sorted] = useSort('Arbitrage', {key: 'profit', dir: 'desc'});
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const sizing = useSizing();
   const bank = useApi('/api/bankroll', 30000);
-  const data = useApi(`/api/arbs?min_profit=${min}${sizingQuery(sizing, true)}${propsParam(props)}`);
+  const {data, refreshing} = useApiStatus(`/api/arbs?min_profit=${min}${sizingQuery(sizing, true)}${propsParam(props)}`);
+  const filters = {min, props, total: sizing.total};
+  const setters = {min: setMin, props: setProps, total: sizing.setTotal};
+  const chips = arbChips(filters);
   const track = async (row) => {
     const responses = await Promise.all(row.legs.map((leg) => postJson('/api/bets', {
       event: row.event,
@@ -657,24 +670,65 @@ function Arbs() {
   return (
     <>
       <TabIntro tab="Arbitrage" />
-      <div className="bar">
-        Min profit % (<Term id="arb">arb</Term>) <input type="number" step="0.5" value={min} onChange={(e) => {
-          setMin(Number(e.target.value));
-        }} />
-        <SizingBar s={sizing} showTotal totalHint={bank ? bank.current.toFixed(0) : 'bankroll'} />
-        <PropsFilter value={props} onChange={setProps} />
-        <div className="mut">{ARB_TOTAL_NOTE}</div>
+      <div className="bar filter-bar">
+        <button type="button" className="filters-toggle" aria-expanded={filtersOpen} onClick={() => {
+          setFiltersOpen((open) => !open);
+        }}>{filtersLabel(filterCount(filters, ARB_DEFAULTS))}</button>
+        <span className={`collapsible${filtersOpen ? ' open' : ''}`}>
+          <label>Min <Term id="arb">arb</Term> profit % <input type="number" step="0.5" value={min} onChange={(e) => {
+            setMin(Number(e.target.value));
+          }} /></label>
+          <label>Market <PropsFilter value={props} onChange={setProps} /></label>
+          <label>Total $ (override) <input className="mini" type="number" min="0"
+            placeholder={arbTotalPlaceholder(bank)} value={sizing.total} onChange={(e) => {
+              sizing.setTotal(e.target.value === '' ? '' : Number(e.target.value));
+            }} /></label>
+          <button type="button" className="link" onClick={() => {
+            const d = arbReset();
+            Object.keys(d).forEach((key) => setters[key](d[key]));
+          }}>Reset</button>
+        </span>
+        <span className="mut small">{arbStakingNote({round: sizing.round, max: sizing.max})} (set in Bankroll &amp; staking on +EV)</span>
+        {sizing.bad && <span className="bad">max is below the rounding step — ignored</span>}
       </div>
+      {chips.length > 0 && (
+        <div className="chips">
+          {chips.map((c) => (
+            <button key={c.key} type="button" className="chip" aria-label={`Remove filter ${c.label}`} onClick={() => {
+              setters[c.key](ARB_DEFAULTS[c.key]);
+            }}>{c.label} ✕</button>
+          ))}
+        </div>
+      )}
+      <div className="mut small">{ARB_TOTAL_NOTE}</div>
       {arbMinWarning(min) && <div className="bad">⚠ {arbMinWarning(min)}</div>}
       <ApiError data={data} />
-      <EmptyState text={arbsEmptyText(data, min)} />
       <RowExample tab="Arbitrage" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
-      <SortBar options={ARB_SORT_OPTIONS} sort={sort} onSort={onSort} />
-      {sorted(Array.isArray(data) ? data : [], ARB_SORT).map((r, i) => (
-        <ArbCard key={i} arb={r} onTrack={() => {
-          track(r);
-        }} />
-      ))}
+      <TableShell data={data} refreshing={refreshing} emptyText={arbsEmptyText(data, min)} columns={6}>
+        <table className="cards">
+          <thead>
+            <tr>
+              {ARB_COLUMNS.slice(0, 2).map(([id, label, defaultDir]) => (
+                <SortTh key={id} tab="Arbitrage" id={id} label={label} sort={sort} onSort={onSort} defaultDir={defaultDir}
+                  num={id === 'profit'} />
+              ))}
+              <th>Legs</th>
+              {ARB_COLUMNS.slice(2).map(([id, label, defaultDir]) => (
+                <SortTh key={id} tab="Arbitrage" id={id} label={label} sort={sort} onSort={onSort} defaultDir={defaultDir}
+                  num />
+              ))}
+              <th aria-label="Actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted(Array.isArray(data) ? data : [], ARB_SORT).map((r, i) => (
+              <ArbRow key={i} arb={r} onTrack={() => {
+                track(r);
+              }} />
+            ))}
+          </tbody>
+        </table>
+      </TableShell>
     </>
   );
 }
@@ -1359,23 +1413,43 @@ function SharpMoney() {
   const {data, refreshing} = useApiStatus(`/api/sharp-money?window_minutes=${windowMin}&baseline_minutes=${baselineMin}` +
       `&k=${k}&min_volume=${minVolume}`);
   const status = useApi('/api/sharp-money/status');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filters = {windowMin, baselineMin, k, minVolume};
+  const setters = {windowMin: setWindowMin, baselineMin: setBaselineMin, k: setK, minVolume: setMinVolume};
+  const chips = sharpChips(filters);
   return (
     <>
       <TabIntro tab="Sharp Money" />
-      <div className="bar">
-        Show spikes in the last <input type="number" step="1" min="1" value={windowMin} onChange={(e) => {
-          setWindowMin(positiveInput(e.target.value, windowMin));
-        }} /> min
-        compared with the prior <input type="number" step="10" min="1" value={baselineMin} onChange={(e) => {
-          setBaselineMin(positiveInput(e.target.value, baselineMin));
-        }} /> min
-        where volume is at least <input type="number" step="0.5" min="0.5" value={k} onChange={(e) => {
-          setK(positiveInput(e.target.value, k));
-        }} /> times the usual rate, with at least <input type="number" step="100" min="0" value={minVolume} onChange={(e) => {
-          setMinVolume(parseNumberInput(e.target.value, minVolume));
-        }} /> contracts traded. A contract is one share of a yes/no market; it pays $1 if the bet wins.
+      <div className="bar filter-bar">
+        <button type="button" className="filters-toggle" aria-expanded={filtersOpen} onClick={() => {
+          setFiltersOpen((open) => !open);
+        }}>{filtersLabel(filterCount(filters, SHARP_DEFAULTS))}</button>
+        <span className={`collapsible${filtersOpen ? ' open' : ''}`}>
+          {SHARP_FIELDS.map((f) => (
+            <label key={f.key}>{f.label} <input type="number" step={f.step} min={f.min} value={filters[f.key]}
+              onChange={(e) => {
+                setters[f.key](f.key === 'minVolume' ?
+                    parseNumberInput(e.target.value, filters[f.key]) : positiveInput(e.target.value, filters[f.key]));
+              }} /></label>
+          ))}
+          <button type="button" className="link" onClick={() => {
+            const d = sharpReset();
+            Object.keys(d).forEach((key) => setters[key](d[key]));
+          }}>Reset</button>
+        </span>
       </div>
+      {chips.length > 0 && (
+        <div className="chips">
+          {chips.map((c) => (
+            <button key={c.key} type="button" className="chip" aria-label={`Remove filter ${c.label}`} onClick={() => {
+              setters[c.key](SHARP_DEFAULTS[c.key]);
+            }}>{c.label} ✕</button>
+          ))}
+        </div>
+      )}
+      <div className="mut small sharp-hint" title={sharpHint(filters)}>{sharpHint(filters)}</div>
       <div className="mut small">
+        A contract is one share of a yes/no market; it pays $1 if the bet wins.
         Exchange trades are public. A burst of matched volume well above the usual rate points at
         informed money; EV is against the burst&apos;s volume-weighted price.
         {status && status.configured === false && (
