@@ -2,12 +2,12 @@ import {columnTip, rowExample} from './columns.js';
 
 /**
  * A table header cell with a plain-English tooltip and a small "i" marker.
- * @param {{tab: string, label: string}} props label is the column's header text.
+ * @param {{tab: string, label: string, num: (boolean|undefined)}} props label is the header text; num right-aligns it.
  */
-export function Th({tab, label}) {
+export function Th({tab, label, num = false}) {
   const tip = columnTip(tab, label);
   return (
-    <th title={tip || undefined}>
+    <th className={num ? 'num' : undefined} title={tip || undefined}>
       {label}{tip && <span className="info" aria-hidden="true"> ⓘ</span>}
     </th>
   );

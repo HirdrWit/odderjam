@@ -51,4 +51,4 @@ def test_middles_component_wires_ev_filter_and_window_text():
     assert "min_ev" in body and "windowText(" in body
     assert re.search(r"middlesEmptyText\(data, minWindow, maxCost, minEv\)", body)
     # Hit % header directly after EV%
-    assert re.search(r'label="EV%" />\s*<Th tab="Middles" label="Hit %"', body)
+    assert re.search(r'label="EV%"( num)? />\s*<Th tab="Middles" label="Hit %"', body)

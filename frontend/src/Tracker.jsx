@@ -4,6 +4,7 @@ import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {trackerEmptyText} from './empty.js';
 import {errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
+import {eventTime, money, percent, signClass} from './fmt.js';
 import {formatOdds} from './odds.js';
 import {
   PROFIT, betFormError, calendarWeeks, chartNote, chartReady, clvTileText, filterQuery, latestMonth, plColor,
@@ -14,22 +15,15 @@ import {
 // backend's JSON API, so they keep the backend's snake_case.
 
 function formatMoney(amount) {
-  return `${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`;
+  return money(amount);
 }
 
 function formatSigned(amount) {
-  return `${amount > 0 ? '+' : ''}${formatMoney(amount)}`;
+  return money(amount, {signed: true});
 }
 
 function formatPct(value) {
-  return value == null ? '—' : `${value.toFixed(1)}%`;
-}
-
-/** Returns the CSS class for a positive, negative or zero value. */
-function signClass(value) {
-  if (value > 0) return 'best';
-  if (value < 0) return 'bad';
-  return '';
+  return percent(value);
 }
 
 /** Returns 's' when `count` is more than one. */
@@ -185,16 +179,16 @@ function GroupTable({title, rows, label = (name) => name}) {
   return (
     <table className="group">
       <thead>
-        <tr><th>{title}</th><th>Bets</th><th>Staked</th><th>Profit</th><th>ROI</th></tr>
+        <tr><th>{title}</th><th className="num">Bets</th><th className="num">Staked</th><th className="num">Profit</th><th className="num">ROI</th></tr>
       </thead>
       <tbody>
         {rows.map((g) => (
           <tr key={g.name}>
             <td>{label(g.name)}</td>
-            <td>{g.bets}</td>
-            <td>{formatMoney(g.staked)}</td>
-            <td className={g.profit >= 0 ? 'best' : 'bad'}>{formatMoney(g.profit)}</td>
-            <td>{formatPct(g.roi_pct)}</td>
+            <td className="num">{g.bets}</td>
+            <td className="num">{formatMoney(g.staked)}</td>
+            <td className={`num ${signClass(g.profit)}`}>{money(g.profit, {signed: true})}</td>
+            <td className={`num ${signClass(g.roi_pct)}`}>{percent(g.roi_pct, {signed: true})}</td>
           </tr>
         ))}
       </tbody>
@@ -231,28 +225,28 @@ function BetRow({bet, onPatch, onDelete}) {
       '';
   return (
     <tr>
-      <td>{new Date(bet.placed_at).toLocaleDateString()}</td>
+      <td>{eventTime(bet.placed_at)}</td>
       <td>{bet.pick}{bet.is_bonus && <span className="mut" title="Bonus bet"> · bonus</span>}</td>
       <td>{bet.event}</td>
       <td>{bet.book}</td>
       <td className="mut">
         {MARKETS[bet.market] || bet.market}{bet.strategy ? ` · ${STRATEGIES[bet.strategy]}` : ''}
       </td>
-      <td>
+      <td className="num">
         <input className="mini" type="number" defaultValue={bet.odds}
           onBlur={patchNumber('odds', bet.odds)} />
       </td>
-      <td>
+      <td className="num">
         <input className="mini" type="number" step="0.01" defaultValue={bet.stake}
           onBlur={patchNumber('stake', bet.stake)} />
       </td>
-      <td>
+      <td className="num">
         <input className="mini" type="number" defaultValue={bet.closing_odds ?? ''} placeholder="—"
           onBlur={patchClosing} />
       </td>
-      <td className={signClass(bet.clv_pct)}>{formatPct(bet.clv_pct)}</td>
-      <td className={signClass(bet.clv_sharp_pct)} title={sharpTitle}>
-        {formatPct(bet.clv_sharp_pct)}
+      <td className={`num ${signClass(bet.clv_pct)}`}>{percent(bet.clv_pct, {signed: true})}</td>
+      <td className={`num ${signClass(bet.clv_sharp_pct)}`} title={sharpTitle}>
+        {percent(bet.clv_sharp_pct, {signed: true})}
       </td>
       <td>
         <span className={statusClass(bet.status)}>{bet.status}</span>
@@ -262,7 +256,7 @@ function BetRow({bet, onPatch, onDelete}) {
           {STATUSES.map((s) => <option key={s}>{s}</option>)}
         </select>
       </td>
-      <td className={signClass(bet.profit)}>{formatMoney(bet.profit)}</td>
+      <td className={`num ${signClass(bet.profit)}`}>{money(bet.profit, {signed: true})}</td>
       <td><button className="x" onClick={onDelete}>✕</button></td>
     </tr>
   );
@@ -450,10 +444,10 @@ export function Tracker() {
       <table>
         <thead>
           <tr>
-            <th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Type</th><th>Odds</th>
-            <th>Stake</th><th><Term id="closing-odds">Close</Term></th><th><Term id="clv">CLV</Term></th>
-            <th><Term id="sharp-clv">Sharp CLV</Term></th>
-            <th>Status</th><th>P/L</th><th></th>
+            <th>Date</th><th>Pick</th><th>Event</th><th>Book</th><th>Type</th><th className="num">Odds</th>
+            <th className="num">Stake</th><th className="num"><Term id="closing-odds">Close</Term></th><th className="num"><Term id="clv">CLV</Term></th>
+            <th className="num"><Term id="sharp-clv">Sharp CLV</Term></th>
+            <th>Status</th><th className="num">P/L</th><th></th>
           </tr>
         </thead>
         <tbody>

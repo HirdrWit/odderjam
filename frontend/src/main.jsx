@@ -27,6 +27,7 @@ import {INDEPENDENT_NOTE, devigLabel, restoredNote, slipLegPriceText, tinyStakeN
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
+import {eventTime, money, percent, signClass} from './fmt.js';
 import {ageText, isProp} from './odds.js';
 import {dismissWelcome, shouldShowWelcome} from './welcome.js';
 
@@ -227,18 +228,10 @@ function propsParam(filter) {
 }
 
 function formatMoney(amount) {
-  return `${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`;
+  return money(amount);
 }
-
 function formatPct(value) {
-  return value == null ? '—' : `${value.toFixed(1)}%`;
-}
-
-/** Returns the CSS class for a positive, negative or zero value. */
-function signClass(value) {
-  if (value > 0) return 'best';
-  if (value < 0) return 'bad';
-  return '';
+  return percent(value);
 }
 
 const BOOKS = [
@@ -441,26 +434,26 @@ function PositiveEv() {
       <table>
         <thead>
           <tr>
-            <Th tab="+EV" label="EV%" /><Th tab="+EV" label="Pick" /><Th tab="+EV" label="Market" />
-            <Th tab="+EV" label="Event" /><Th tab="+EV" label="Book" /><Th tab="+EV" label="Odds" />
-            <Th tab="+EV" label="Fair" /><Th tab="+EV" label="Sharps (hold)" /><Th tab="+EV" label="Stake" />
+            <Th tab="+EV" label="EV%" num /><Th tab="+EV" label="Pick" /><Th tab="+EV" label="Market" />
+            <Th tab="+EV" label="Event" /><Th tab="+EV" label="Book" /><Th tab="+EV" label="Odds" num />
+            <Th tab="+EV" label="Fair" num /><Th tab="+EV" label="Sharps (hold)" /><Th tab="+EV" label="Stake" num />
             <th aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
           {(Array.isArray(data) ? data : []).map((r, i) => (
             <tr key={i}>
-              <td className="best">{r.ev_pct.toFixed(1)}%</td>
+              <td className={`num ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
               <td>{r.pick}</td>
               <td>{marketName(r.market)}</td>
               <td>{r.event} <LiveTag row={r} /></td>
               <td>{r.book}</td>
-              <td>{formatOdds(r.odds)}</td>
-              <td>{formatOdds(r.fair_odds)}</td>
+              <td className="num">{formatOdds(r.odds)}</td>
+              <td className="num">{formatOdds(r.fair_odds)}</td>
               <td className="mut small">
                 {r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(' · ')}
               </td>
-              <td title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>
+              <td className="num" title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>
                 {zeroStakeReason(r) ? <span className="mut small">{zeroStakeReason(r)}</span> : formatMoney(r.stake)}
               </td>
               <td className="row-actions">
@@ -503,7 +496,7 @@ function PropsFilter({value, onChange}) {
 function ArbCard({arb, onTrack}) {
   return (
     <div className="card">
-      <b className="best">{arb.profit_pct.toFixed(2)}%</b> {arb.event} <LiveTag row={arb} />{' '}
+      <b className="best">{percent(arb.profit_pct, {digits: 2, signed: true})}</b> {arb.event} <LiveTag row={arb} />{' '}
       <span className="mut">{arb.sport} · {marketName(arb.market)}</span>
       <button className="track right" onClick={onTrack}>Track legs</button>
       {arb.legs.map((leg, j) => (
@@ -512,8 +505,8 @@ function ArbCard({arb, onTrack}) {
           <BetLink href={leg.link} />{' '}
           <span className="mut">
             · profit if wins{' '}
-            <span className={leg.profit_if_wins >= 0 ? 'best' : 'bad'}>
-              {formatMoney(leg.profit_if_wins)}
+            <span className={signClass(leg.profit_if_wins)}>
+              {money(leg.profit_if_wins, {signed: true})}
             </span>
           </span>
         </div>
@@ -711,9 +704,9 @@ function ParlayBookRow({book, onTrack}) {
   return (
     <tr className={book.blocked ? 'blocked' : ''}>
       <td>{book.book}</td>
-      <td>{formatOdds(book.odds)}</td>
-      <td className={signClass(book.ev_pct)}>{formatPct(book.ev_pct)}</td>
-      <td>{book.stake == null ? '—' : formatMoney(book.stake)}{tinyStakeNote(book.stake) && <div className="mut small">{tinyStakeNote(book.stake)}</div>}</td>
+      <td className="num">{formatOdds(book.odds)}</td>
+      <td className={`num ${signClass(book.ev_pct)}`}>{percent(book.ev_pct, {signed: true})}</td>
+      <td className="num">{book.stake == null ? '—' : formatMoney(book.stake)}{tinyStakeNote(book.stake) && <div className="mut small">{tinyStakeNote(book.stake)}</div>}</td>
       <td className="mut">{book.leg_odds.map((o) => formatOdds(o)).join(' × ')}</td>
       <td>
         {book.blocked ?
@@ -839,7 +832,7 @@ function Parlay() {
           )}
           <table>
             <thead>
-              <tr><th>Book</th><th>Odds</th><th>EV%</th><th>Stake</th><th>Legs</th><th></th></tr>
+              <tr><th>Book</th><th className="num">Odds</th><th className="num">EV%</th><th className="num">Stake</th><th>Legs</th><th></th></tr>
             </thead>
             <tbody>
               {result.books.map((b) => (
@@ -901,14 +894,14 @@ function LowHold() {
       <table>
         <thead>
           <tr>
-            <Th tab="Low Hold" label="Hold" /><Th tab="Low Hold" label="Event" /><Th tab="Low Hold" label="Market" />
-            <Th tab="Low Hold" label="Legs" /><Th tab="Low Hold" label="Exp. loss" />
+            <Th tab="Low Hold" label="Hold" num /><Th tab="Low Hold" label="Event" /><Th tab="Low Hold" label="Market" />
+            <Th tab="Low Hold" label="Legs" /><Th tab="Low Hold" label="Exp. loss" num />
           </tr>
         </thead>
         <tbody>
           {(Array.isArray(data) ? data : []).map((r, i) => (
             <tr key={i}>
-              <td className={r.hold_pct <= 0 ? 'best' : ''}>{r.hold_pct.toFixed(2)}%</td>
+              <td className={`num ${signClass(-r.hold_pct)}`}>{percent(r.hold_pct, {digits: 2, signed: true})}</td>
               <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
               <td>{marketName(r.market)}</td>
               <td>
@@ -916,7 +909,7 @@ function LowHold() {
                   <div key={j}>{l.pick} {formatOdds(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>
                 ))}
               </td>
-              <td className={r.expected_loss <= 0 ? 'best' : 'bad'}>{formatMoney(r.expected_loss)}</td>
+              <td className={`num ${signClass(-r.expected_loss)}`}>{money(r.expected_loss, {signed: true})}</td>
             </tr>
           ))}
         </tbody>
@@ -991,16 +984,16 @@ function Middles() {
       <table>
         <thead>
           <tr>
-            <Th tab="Middles" label="EV%" /><Th tab="Middles" label="Hit %" /><Th tab="Middles" label="Event" />
+            <Th tab="Middles" label="EV%" num /><Th tab="Middles" label="Hit %" num /><Th tab="Middles" label="Event" />
             <Th tab="Middles" label="Market" /><Th tab="Middles" label="Window" /><Th tab="Middles" label="Legs" />
-            <Th tab="Middles" label="Worst case" /><Th tab="Middles" label="Win both" /><th aria-label="Actions"></th>
+            <Th tab="Middles" label="Worst case" num /><Th tab="Middles" label="Win both" num /><th aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
           {(Array.isArray(data) ? data : []).map((r, i) => (
             <tr key={i}>
-              <td className={r.ev_pct >= 0 ? 'best' : 'bad'}>{r.ev_pct.toFixed(1)}%</td>
-              <td>{(r.hit_prob * 100).toFixed(1)}%</td>
+              <td className={`num ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
+              <td className="num">{percent(r.hit_prob * 100)}</td>
               <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
               <td>{marketName(r.market)}</td>
               <td>{windowText(r)}</td>
@@ -1009,8 +1002,8 @@ function Middles() {
                   <div key={j}>{l.pick} {formatOdds(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>
                 ))}
               </td>
-              <td className={r.worst_case >= 0 ? 'best' : 'bad'}>{formatMoney(r.worst_case)}</td>
-              <td className="best">{formatMoney(r.win_both)}</td>
+              <td className={`num ${signClass(r.worst_case)}`}>{money(r.worst_case, {signed: true})}</td>
+              <td className={`num ${signClass(r.win_both)}`}>{money(r.win_both, {signed: true})}</td>
               <td className="row-actions">
                 <div className="row-actions-inner">
                   <button className="track" onClick={() => {
@@ -1194,7 +1187,7 @@ function Alerts() {
         <tbody>
           {(feed?.items || []).map((o) => (
             <tr key={o.id}>
-              <td>{new Date(o.created_at).toLocaleString()}</td>
+              <td>{eventTime(o.created_at)}</td>
               <td>{o.title}</td>
               <td className="mut">{o.rule_name}</td>
             </tr>
@@ -1252,8 +1245,8 @@ function SharpMoney() {
         <thead>
           <tr>
             <Th tab="Sharp Money" label="Event" /><Th tab="Sharp Money" label="Side" />
-            <Th tab="Sharp Money" label="Exchange" /><Th tab="Sharp Money" label="Volume" />
-            <Th tab="Sharp Money" label="× usual" /><Th tab="Sharp Money" label="Spike price" />
+            <Th tab="Sharp Money" label="Exchange" /><Th tab="Sharp Money" label="Volume" num />
+            <Th tab="Sharp Money" label="× usual" num /><Th tab="Sharp Money" label="Spike price" num />
             <Th tab="Sharp Money" label="Books paying more" />
           </tr>
         </thead>
@@ -1263,9 +1256,9 @@ function SharpMoney() {
               <td>{r.event} <span className="mut">{r.sport}</span></td>
               <td>{r.outcome}</td>
               <td>{r.exchange}</td>
-              <td>{Math.round(r.volume)} <span className="mut">({r.trades} trades)</span></td>
-              <td>{r.ratio === null ? 'new' : `${r.ratio.toFixed(1)}×`}</td>
-              <td>{formatOdds(r.price)} <span className="mut">{r.vwap_cents.toFixed(1)}¢</span></td>
+              <td className="num">{Math.round(r.volume)} <span className="mut">({r.trades} trades)</span></td>
+              <td className="num">{r.ratio === null ? 'new' : `${r.ratio.toFixed(1)}×`}</td>
+              <td className="num">{formatOdds(r.price)} <span className="mut">{r.vwap_cents.toFixed(1)}¢</span></td>
               <td>
                 {r.books.length ? r.books.map((b) => (
                   <div key={b.book}>

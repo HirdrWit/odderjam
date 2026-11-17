@@ -187,7 +187,7 @@ export function Pickem() {
                     <tr key={i}>
                       <td>{s.legs.map(legLabel).join(' + ')}</td>
                       <td>{pct(s.win_prob)}</td>
-                      <td>{s.expected_return.toFixed(2)}x</td>
+                      <td className="num">{s.expected_return.toFixed(2)}x</td>
                       <td className={signClass(s.ev_pct)}>{s.ev_pct.toFixed(1)}%</td>
                     </tr>
                   ))}

@@ -1,5 +1,6 @@
 import {Fragment, useState} from 'react';
 
+import {eventTime, percent} from './fmt.js';
 import {americanToProb} from './calc.js';
 import {useApi, useSlip, useStored} from './hooks.js';
 import {toast} from './hooks.jsx';
@@ -43,7 +44,7 @@ function marketLabel(market) {
 }
 
 function holdText(holdPct) {
-  return holdPct == null ? '—' : `${holdPct.toFixed(2)}%`;
+  return percent(holdPct, {digits: 2, signed: true});
 }
 
 function holdClass(holdPct) {
@@ -72,13 +73,13 @@ function LineTable({group, books, format, legOf, slip}) {
   return (
     <table className="odds">
       <thead>
-        <tr><th>Line</th><th>Best</th><th><Term id="fair-odds">Fair</Term></th>{books.map((b) => <th key={b}>{b}</th>)}</tr>
+        <tr><th>Line</th><th className="num">Best</th><th className="num"><Term id="fair-odds">Fair</Term></th>{books.map((b) => <th key={b} className="num">{b}</th>)}</tr>
       </thead>
       <tbody>
         {group.outcomes.map((o, i) => (
           <tr key={`${o.name}${o.point}`}>
             <td>{outcomeLabel(o)}</td>
-            <td className="best">
+            <td className="best num">
               {stats.best[i] ?
                 <>
                   {formatOdds(stats.best[i].price, format)}{' '}
@@ -86,9 +87,9 @@ function LineTable({group, books, format, legOf, slip}) {
                 </> :
                 '—'}
             </td>
-            <td className="mut">{formatOdds(stats.fair[i], format) || '—'}</td>
+            <td className="mut num">{formatOdds(stats.fair[i], format) || '—'}</td>
             {books.map((b) => (
-              <td key={b} className={priceClass(o, i, b)} onClick={() => {
+              <td key={b} className={`num ${priceClass(o, i, b)}`} onClick={() => {
                 togglePrice(o, b);
               }}>
                 {formatOdds(o.prices[b], format)}
@@ -98,7 +99,7 @@ function LineTable({group, books, format, legOf, slip}) {
         ))}
         <tr className="foot">
           <td><Term id="hold">Hold</Term> at best</td>
-          <td className={holdClass(stats.holdPct)}>{holdText(stats.holdPct)}</td>
+          <td className={`num ${holdClass(stats.holdPct)}`}>{holdText(stats.holdPct)}</td>
           <td colSpan={books.length + 1} className="mut small">
             {bookCount ? `Fair = no-vig average of ${bookCount} book${bookCount > 1 ? 's' : ''}` : ''}
           </td>
@@ -126,8 +127,7 @@ function bookColor(book, books) {
 }
 
 function shortTime(time) {
-  return new Date(time).toLocaleString(
-      [], {month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit'});
+  return eventTime(time);
 }
 
 // Chart geometry in SVG units: width, height and left/right/top/bottom margins.
@@ -218,7 +218,7 @@ function MoveChart({rows, outcome, label, books, format}) {
       </div>
       {atHover && (
         <div className="tip">
-          {new Date(hover).toLocaleString()} ·{' '}
+          {eventTime(hover)} ·{' '}
           {atHover.map((r) => `${r.book} ${formatOdds(r.price, format)}`).join(' · ')}
         </div>
       )}
@@ -281,7 +281,7 @@ function EventCard({event, market, books, format, slip, isOpen, onToggle, eventM
       <span className="chevron" aria-hidden="true">{chevron(isOpen)}</span>{' '}
       {event.live && <><span className="badge live">LIVE</span>{' '}</>}
       <b>{event.away} @ {event.home}</b>{' '}
-      <span className="mut">{event.sport} · {new Date(event.start).toLocaleString()}</span>
+      <span className="mut">{event.sport} · {eventTime(event.start)}</span>
       <div className="mut">
         {!main ? `No ${marketLabel(m).toLowerCase()} odds` : (
           <>
