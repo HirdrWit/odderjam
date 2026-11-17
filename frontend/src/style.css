@@ -31,7 +31,7 @@ main { flex: 1; min-width: 0; padding: 20px; }
 .bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
 input, select { background: var(--surface-2); color: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 5px var(--sp-2); width: 90px; }
 select { width: auto; }
-.card { background: var(--surface-1); border-radius: 8px; padding: var(--sp-3) 14px; margin-bottom: 10px; cursor: pointer; }
+.card { background: var(--surface-1); border-radius: 8px; padding: var(--sp-3) 14px; margin-bottom: 10px; cursor: pointer; overflow-wrap: anywhere; }
 table { border-collapse: collapse; width: 100%; margin-top: var(--sp-2); }
 th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--divider); }
 th.num, td.num { text-align: right; }
@@ -124,6 +124,10 @@ h3.section { font-size: var(--fs-2); text-transform: uppercase; letter-spacing: 
 .welcome-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-2); }
 nav button.link, .welcome button.link { text-decoration: underline; }
 .bottom-bar { display: none; }
+/* Phone card layout, desktop defaults (odderjam-103); the phone rules are in the 640px block below. */
+.filters-toggle { display: none; }
+.collapsible { display: contents; }
+.c-time { display: none; }
 @media (max-width: 640px) {
   .app { flex-direction: column; padding-bottom: 56px; }
   nav { display: none; }
@@ -132,7 +136,34 @@ nav button.link, .welcome button.link { text-decoration: underline; }
   .bottom-bar > button.on { background: var(--surface-3); }
   .more-menu { position: absolute; bottom: 56px; right: 0; display: flex; flex-direction: column; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px 6px 0 0; }
   .more-menu button { background: none; border: 0; color: inherit; text-align: left; padding: var(--sp-3) var(--sp-4); cursor: pointer; }
-  .more-menu button.on { background: var(--surface-3); }
+  .more-menu button.on {
+    background: var(--surface-3);
+}
+  .bar { flex-wrap: wrap; }
+  .bar.filter-bar { flex-wrap: wrap; white-space: normal; }
+  .collapsible.open { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .filters-toggle { display: block; margin-bottom: var(--sp-2); }
+  .collapsible:not(.open) { display: none; }
+  table.cards thead { display: none; }
+  table.cards, table.cards tbody { display: block; }
+  table.cards tr { display: grid; grid-template-columns: 1fr auto auto; grid-auto-flow: row; gap: var(--sp-1) var(--sp-3); background: var(--surface-1); border-radius: 8px; padding: var(--sp-3); margin-bottom: 10px; }
+  table.cards td { order: 5; grid-column: 1 / -1; min-width: 0; padding: 0; border: 0; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+  table.cards td[data-label]::before { content: attr(data-label) ": "; color: var(--text-muted); }
+  table.cards td.c-market, table.cards td.c-sharps { display: none; }
+  table.cards td.c-pick { grid-column: 1 / 3; font-weight: 600; font-size: var(--fs-3); order: 1; }
+  table.cards td.c-book { grid-column: 3; text-align: right; order: 2; color: var(--text-muted); }
+  table.cards td.c-odds { grid-column: 1; order: 3; }
+  table.cards td.c-fair { grid-column: 2; order: 3; text-align: left; }
+  table.cards td.c-fair::before { content: "\2192 "; color: var(--text-muted); }
+  table.cards td.c-ev { grid-column: 3; order: 3; text-align: right; font-size: var(--fs-4); font-weight: 700; }
+  table.cards td.c-event { order: 4; color: var(--text-muted); }
+  table.cards td.c-time { display: inline; }
+  table.cards td.c-status, table.cards td.c-pl { order: 5; grid-column: auto; }
+  table.cards td.c-pl { grid-column: 3; text-align: right; font-weight: 700; font-size: var(--fs-3); }
+  table.cards td.c-stake { order: 6; }
+  table.cards td.c-actions, table.cards td.row-actions { order: 7; white-space: normal; }
+  table.cards td .c-actions > * { padding: var(--sp-2) var(--sp-3); }
+  table.grid .gamecol { min-width: 110px; max-width: 130px; }
 }
 
 .term { position: relative; border-bottom: 1px dotted var(--text-muted); cursor: help; }
@@ -208,7 +239,6 @@ table.grid tr.first td, table.grid tr.first th { border-top: 1px solid var(--div
 table.grid td.bestcell { background: rgba(60, 180, 110, 0.22); color: var(--positive); font-weight: 700; }
 table.grid td.num { cursor: pointer; }
 table.grid tbody.suspect td.bestcell { background: none; color: inherit; font-weight: normal; }
-@media (max-width: 640px) { table.grid .gamecol { min-width: 110px; max-width: 130px; } }
 
 /* Tracker add-bet panel and filter menu (odderjam-101). */
 .filters { flex-wrap: wrap; }

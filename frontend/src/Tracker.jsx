@@ -1,5 +1,6 @@
 import {useState} from 'react';
 
+import {filterCount, filtersLabel} from './cards.js';
 import {SortTh, useSort} from './SortTable.jsx';
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
@@ -228,30 +229,30 @@ function BetRow({bet, onPatch, onDelete}) {
       '';
   return (
     <tr>
-      <td>{eventTime(bet.placed_at)}</td>
-      <td>{bet.pick}{bet.is_bonus && <span className="mut" title="Bonus bet"> · bonus</span>}</td>
-      <td>{bet.event}</td>
-      <td>{bet.book}</td>
-      <td className="mut">
+      <td data-label="Placed">{eventTime(bet.placed_at)}</td>
+      <td className="c-pick">{bet.pick}{bet.is_bonus && <span className="mut" title="Bonus bet"> · bonus</span>}</td>
+      <td className="c-event">{bet.event}</td>
+      <td className="c-book">{bet.book}</td>
+      <td className="mut" data-label="Market">
         {MARKETS[bet.market] || bet.market}{bet.strategy ? ` · ${STRATEGIES[bet.strategy]}` : ''}
       </td>
-      <td className="num">
+      <td className="num c-odds" data-label="Odds">
         <input className="mini" type="number" defaultValue={bet.odds}
           onBlur={patchNumber('odds', bet.odds)} />
       </td>
-      <td className="num">
+      <td className="num" data-label="Stake">
         <input className="mini" type="number" step="0.01" defaultValue={bet.stake}
           onBlur={patchNumber('stake', bet.stake)} />
       </td>
-      <td className="num">
+      <td className="num" data-label="Close">
         <input className="mini" type="number" defaultValue={bet.closing_odds ?? ''} placeholder="—"
           onBlur={patchClosing} />
       </td>
-      <td className={`num ${signClass(bet.clv_pct)}`}>{percent(bet.clv_pct, {signed: true})}</td>
-      <td className={`num ${signClass(bet.clv_sharp_pct)}`} title={sharpTitle}>
+      <td className={`num ${signClass(bet.clv_pct)}`} data-label="CLV">{percent(bet.clv_pct, {signed: true})}</td>
+      <td className={`num ${signClass(bet.clv_sharp_pct)}`} data-label="Sharp CLV" title={sharpTitle}>
         {percent(bet.clv_sharp_pct, {signed: true})}
       </td>
-      <td>
+      <td className="c-status">
         <span className={statusClass(bet.status)}>{bet.status}</span>
         <select value={bet.status} aria-label="Change status" onChange={(e) => {
           onPatch({status: e.target.value});
@@ -259,8 +260,8 @@ function BetRow({bet, onPatch, onDelete}) {
           {STATUSES.map((s) => <option key={s}>{s}</option>)}
         </select>
       </td>
-      <td className={`num ${signClass(bet.profit)}`}>{money(bet.profit, {signed: true})}</td>
-      <td><button className="x" onClick={onDelete}>✕</button></td>
+      <td className={`num c-pl ${signClass(bet.profit)}`}>{money(bet.profit, {signed: true})}</td>
+      <td className="c-actions"><button className="x" aria-label="Delete bet" onClick={onDelete}>✕</button></td>
     </tr>
   );
 }
@@ -298,6 +299,7 @@ const BET_SORT = {
 /** Tracker tab: logged bets, filters, P/L charts and per-group stats. */
 export function Tracker() {
   const [filters, setFilters] = useStored('trackerFilters', NO_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const query = filterQuery(filters);
   const all = useApi('/api/bets', 600000);
   const {data: bets, refreshing: betsRefreshing} = useApiStatus(`/api/bets?${query}`, 600000);
@@ -402,25 +404,30 @@ export function Tracker() {
     <>
       <TabIntro tab="Tracker" />
       <div className="bar filters">
-        <label>From <input type="date" value={filters.date_from} onChange={filterField('date_from')} /></label>
-        <label>To <input type="date" value={filters.date_to} onChange={filterField('date_to')} /></label>
-        <select aria-label="Status" value={filters.status} onChange={filterField('status')}>
-          <option value="">All statuses</option>{STATUSES.map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <select aria-label="Sport" value={filters.sport} onChange={filterField('sport')}>
-          <option value="">All sports</option>
-          {optionsFor('sport').map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <select aria-label="Book" value={filters.book} onChange={filterField('book')}>
-          <option value="">All books</option>
-          {optionsFor('book').map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <select aria-label="Strategy" value={filters.strategy} onChange={filterField('strategy')}>
-          <option value="">All strategies</option>{strategyOptions}
-        </select>
-        {query && <button className="x" onClick={() => {
-          setFilters(NO_FILTERS);
-        }}>Clear</button>}
+        <button type="button" className="filters-toggle" aria-expanded={filtersOpen} onClick={() => {
+          setFiltersOpen((open) => !open);
+        }}>{filtersLabel(filterCount(filters, NO_FILTERS))}</button>
+        <span className={`collapsible${filtersOpen ? ' open' : ''}`}>
+          <label>From <input type="date" value={filters.date_from} onChange={filterField('date_from')} /></label>
+          <label>To <input type="date" value={filters.date_to} onChange={filterField('date_to')} /></label>
+          <select aria-label="Status" value={filters.status} onChange={filterField('status')}>
+            <option value="">All statuses</option>{STATUSES.map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <select aria-label="Sport" value={filters.sport} onChange={filterField('sport')}>
+            <option value="">All sports</option>
+            {optionsFor('sport').map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <select aria-label="Book" value={filters.book} onChange={filterField('book')}>
+            <option value="">All books</option>
+            {optionsFor('book').map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <select aria-label="Strategy" value={filters.strategy} onChange={filterField('strategy')}>
+            <option value="">All strategies</option>{strategyOptions}
+          </select>
+          {query && <button className="x" onClick={() => {
+            setFilters(NO_FILTERS);
+          }}>Clear</button>}
+        </span>
         <span className="spacer" />
         <button onClick={settle} disabled={busy}>{busy ? 'Settling…' : 'Auto-settle'}</button>
         <button className="primary" aria-expanded={showForm} onClick={() => {
@@ -496,7 +503,7 @@ export function Tracker() {
       )}
       <TableShell data={bets} refreshing={betsRefreshing} columns={11}
         emptyText={emptyText || 'No bets match these filters. Clear a filter to see more.'}>
-      <table>
+      <table className="cards">
         <thead>
           <tr>
             {BET_COLUMNS.map(([id, label, defaultDir]) => (

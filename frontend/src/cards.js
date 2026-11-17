@@ -8,7 +8,7 @@
  * @return {number} How many filters differ from their default.
  */
 export function filterCount(filters, defaults) {
-  return 0;
+  return Object.keys(defaults).filter((key) => filters[key] !== defaults[key]).length;
 }
 
 /**
@@ -16,5 +16,5 @@ export function filterCount(filters, defaults) {
  * @return {string} Label for the Filters button.
  */
 export function filtersLabel(count) {
-  return '';
+  return count > 0 ? `Filters (${count})` : 'Filters';
 }

@@ -13,7 +13,8 @@ import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
-import {activeChips, clearFilter, resetFilters, sportsParam} from './evfilters.js';
+import {filterCount, filtersLabel} from './cards.js';
+import {DEFAULT_FILTERS, activeChips, clearFilter, resetFilters, sportsParam} from './evfilters.js';
 import {stakingSummary} from './staking.js';
 import {TabIntro, WelcomeContext} from './TabIntro.jsx';
 import {afterNavigate, initialWelcome} from './onboarding.js';
@@ -359,6 +360,7 @@ function PositiveEv() {
   const [props, setProps] = useStored('evProps', 'include');
   const [sport, setSport] = useStored('evSport', '');
   const [panel, setPanel] = useState(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [book, setBook] = useState(() => loadEvBook());
   const [sort, onSort, sorted] = useSort('+EV', {key: 'ev', dir: 'desc'});
   const bank = useApi('/api/bankroll', 30000);
@@ -454,23 +456,28 @@ function PositiveEv() {
     <>
       <TabIntro tab="+EV" />
       <div className="bar filter-bar">
-        Book <select value={book} onChange={(e) => {
-          pickBook(e.target.value);
-        }}>
-          {EV_BOOKS.map((b) => <option key={b} value={b}>{b || 'All books'}</option>)}
-        </select>
-        Min <Term id="ev">EV</Term> % <input type="number" step="0.5" value={minEv} onChange={(e) => {
-          setMinEv(Number(e.target.value));
-        }} />
-        Sport <select value={sport} onChange={(e) => {
-          setSport(e.target.value);
-        }}>
-          {SPORTS.map((x) => <option key={x} value={x}>{x || 'Any sport'}</option>)}
-        </select>
-        Market <PropsFilter value={props} onChange={setProps} />
-        <button type="button" className="link" onClick={() => {
-          resetAll(resetFilters());
-        }}>Reset</button>
+        <button type="button" className="filters-toggle" aria-expanded={filtersOpen} onClick={() => {
+          setFiltersOpen((open) => !open);
+        }}>{filtersLabel(filterCount({book, minEv, sport, props}, DEFAULT_FILTERS))}</button>
+        <span className={`collapsible${filtersOpen ? ' open' : ''}`}>
+          Book <select value={book} onChange={(e) => {
+            pickBook(e.target.value);
+          }}>
+            {EV_BOOKS.map((b) => <option key={b} value={b}>{b || 'All books'}</option>)}
+          </select>
+          Min <Term id="ev">EV</Term> % <input type="number" step="0.5" value={minEv} onChange={(e) => {
+            setMinEv(Number(e.target.value));
+          }} />
+          Sport <select value={sport} onChange={(e) => {
+            setSport(e.target.value);
+          }}>
+            {SPORTS.map((x) => <option key={x} value={x}>{x || 'Any sport'}</option>)}
+          </select>
+          Market <PropsFilter value={props} onChange={setProps} />
+          <button type="button" className="link" onClick={() => {
+            resetAll(resetFilters());
+          }}>Reset</button>
+        </span>
         <button type="button" aria-expanded={panel === 'model'} onClick={() => {
           setPanel(panel === 'model' ? null : 'model');
         }}>Model settings</button>
@@ -519,7 +526,7 @@ function PositiveEv() {
       )}
       <ApiError data={data} />
       <TableShell data={data} refreshing={refreshing} emptyText={evEmptyText(data, minEv)} columns={9}>
-      <table>
+      <table className="cards">
         <thead>
           <tr>
             {EV_COLUMNS.map(([id, label, defaultDir]) => (
@@ -532,21 +539,21 @@ function PositiveEv() {
         <tbody>
           {sorted(Array.isArray(data) ? data : [], EV_SORT).map((r, i) => (
             <tr key={i}>
-              <td className={`num ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
-              <td>{r.pick}</td>
-              <td>{marketName(r.market)}</td>
-              <td>{r.event} <LiveTag row={r} /></td>
-              <td>{r.book}</td>
-              <td className="num">{formatOdds(r.odds)}</td>
-              <td className="num">{formatOdds(r.fair_odds)}</td>
-              <td className="mut small">
+              <td className={`num c-ev ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
+              <td className="c-pick">{r.pick}</td>
+              <td className="c-market">{marketName(r.market)}</td>
+              <td className="c-event">{r.event} <LiveTag row={r} />{r.start && <span className="c-time mut small"> · {eventTime(r.start)}</span>}</td>
+              <td className="c-book">{r.book}</td>
+              <td className="num c-odds">{formatOdds(r.odds)}</td>
+              <td className="num c-fair">{formatOdds(r.fair_odds)}</td>
+              <td className="mut small c-sharps">
                 {r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(' · ')}
               </td>
-              <td className="num" title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>
+              <td className="num c-stake" title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>
                 {zeroStakeReason(r) ? <span className="mut small">{zeroStakeReason(r)}</span> : formatMoney(r.stake)}
               </td>
               <td className="row-actions">
-                <div className="row-actions-inner">
+                <div className="row-actions-inner c-actions">
                   <BetLink href={r.link} title={ROW_ACTION_TIPS.bet} label={rowActionAria('bet', false, r)} />
                   <button className={tracked.has(trackKey(r)) ? 'secondary on' : 'secondary'} title={ROW_ACTION_TIPS.track}
                     aria-label={rowActionAria('track', tracked.has(trackKey(r)), r)} onClick={() => {
@@ -1002,7 +1009,7 @@ function LowHold() {
       </div>
       <ApiError data={data} />
       <TableShell data={data} refreshing={refreshing} emptyText={lowHoldEmptyText(data, maxHold, lowest)} columns={8}>
-      <table>
+      <table className="cards">
         <thead>
           <tr>
             {LOW_HOLD_COLUMNS.map(([id, label]) => (
@@ -1014,15 +1021,15 @@ function LowHold() {
         <tbody>
           {sorted(Array.isArray(data) ? data : [], LOW_HOLD_SORT).map((r, i) => (
             <tr key={i}>
-              <td className={`num ${signClass(-r.hold_pct)}`}>{percent(r.hold_pct, {digits: 2, signed: true})}</td>
-              <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
-              <td>{marketName(r.market)}</td>
-              <td>
+              <td className={`num c-ev ${signClass(-r.hold_pct)}`}>{percent(r.hold_pct, {digits: 2, signed: true})}</td>
+              <td className="c-event">{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
+              <td data-label="Market">{marketName(r.market)}</td>
+              <td data-label="Legs">
                 {r.legs.map((l, j) => (
                   <div key={j}>{l.pick} {formatOdds(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>
                 ))}
               </td>
-              <td className={`num ${signClass(-r.expected_loss)}`}>{money(r.expected_loss, {signed: true})}</td>
+              <td className={`num ${signClass(-r.expected_loss)}`} data-label="Expected loss">{money(r.expected_loss, {signed: true})}</td>
             </tr>
           ))}
         </tbody>
@@ -1106,7 +1113,7 @@ function Middles() {
         result (NFL margins weighted to key numbers).
       </div>
       <TableShell data={data} refreshing={refreshing} emptyText={middlesEmptyText(data, minWindow, maxCost, minEv)} columns={8}>
-      <table>
+      <table className="cards">
         <thead>
           <tr>
             {MIDDLES_COLUMNS.map(([id, label, defaultDir]) => (
@@ -1119,20 +1126,20 @@ function Middles() {
         <tbody>
           {sorted(Array.isArray(data) ? data : [], MIDDLES_SORT).map((r, i) => (
             <tr key={i}>
-              <td className={`num ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
-              <td className="num">{percent(r.hit_prob * 100)}</td>
-              <td>{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
-              <td>{marketName(r.market)}</td>
-              <td>{windowText(r)}</td>
-              <td>
+              <td className={`num c-ev ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
+              <td className="num" data-label="Hit chance">{percent(r.hit_prob * 100)}</td>
+              <td className="c-event">{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
+              <td data-label="Market">{marketName(r.market)}</td>
+              <td data-label="Window">{windowText(r)}</td>
+              <td data-label="Legs">
                 {r.legs.map((l, j) => (
                   <div key={j}>{l.pick} {formatOdds(l.odds)} @ {l.book} — ${l.stake.toFixed(2)}</div>
                 ))}
               </td>
-              <td className={`num ${signClass(r.worst_case)}`}>{money(r.worst_case, {signed: true})}</td>
-              <td className={`num ${signClass(r.win_both)}`}>{money(r.win_both, {signed: true})}</td>
+              <td className={`num ${signClass(r.worst_case)}`} data-label="Worst case">{money(r.worst_case, {signed: true})}</td>
+              <td className={`num ${signClass(r.win_both)}`} data-label="Win both">{money(r.win_both, {signed: true})}</td>
               <td className="row-actions">
-                <div className="row-actions-inner">
+                <div className="row-actions-inner c-actions">
                   <button className="secondary" title="Log this middle in the Tracker" onClick={() => {
                     track(r);
                   }}>Track</button>
