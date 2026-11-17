@@ -28,6 +28,7 @@ import {buildHash, evFiltersToParams, evParamsToFilters, parseHash} from './rout
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
 import {windowText} from './middles.js';
+import {PROMO_COLUMNS, PROMO_DEFAULT_SORT, PROMO_NUM, PROMO_SORT, promoLegs} from './promos.js';
 import {
   alertsEmptyText, arbMinWarning, ARB_TOTAL_NOTE, arbsEmptyText, evEmptyText, LOW_HOLD_DEFAULT_MAX,
   lowHoldEmptyText, middlesEmptyText, sharpEmptyText,
@@ -750,26 +751,14 @@ const PROMOS = {
   ],
 };
 
-function PromoCard({promo, onTrack}) {
-  const legName = (leg) => {
-    if (!leg.promo) return 'Hedge';
-    return leg.is_bonus ? 'Bonus' : 'Promo';
-  };
+function PromoLeg({leg, boostedOdds}) {
+  if (!leg) return null;
   return (
-    <div className="card calc">
-      <b className={promo.profit >= 0 ? 'best' : 'bad'}>{promo.conversion_pct.toFixed(1)}%</b>{' '}
-      {formatMoney(promo.profit)} locked · {promo.event}
-      <span className="mut">{promo.sport} · {marketName(promo.market)}</span>
-      <button className="secondary" style={{float: 'right'}} title="Log this promo conversion in the Tracker" onClick={onTrack}>Track</button>
-      {promo.legs.map((leg, j) => (
-        <div key={j}>
-          {legName(leg)}: {leg.pick} {formatOdds(leg.odds)}
-          {leg.promo && promo.boosted_odds != null && (
-            <span className="mut">→ {formatOdds(promo.boosted_odds)}</span>
-          )} @ {leg.book} — stake {formatMoney(leg.stake)}
-        </div>
-      ))}
-    </div>
+    <>
+      <div>{leg.pick} {formatOdds(leg.odds)}
+        {leg.promo && boostedOdds != null && <span className="mut"> → {formatOdds(boostedOdds)}</span>} @ {leg.book}</div>
+      <div className="mut small">stake {formatMoney(leg.stake)}</div>
+    </>
   );
 }
 
@@ -788,6 +777,7 @@ function Promos() {
   }
   if (kind === 'second-chance') params.set('refund_value', rate / 100);
   if (market) params.set('market', market);
+  const [sort, onSort, sorted] = useSort('Promos', PROMO_DEFAULT_SORT);
   const data = useApi(amount > 0 ? `/api/promo/${kind}?${params}` : null);
   const [promoName] = PROMOS[kind];
   const track = async (row) => {
@@ -855,11 +845,40 @@ function Promos() {
           {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </div>
-      {(Array.isArray(data) ? data : []).map((r, i) => (
-        <PromoCard key={i} promo={r} onTrack={() => {
-          track(r);
-        }} />
-      ))}
+      {Array.isArray(data) && data.length > 0 && (
+        <table className="cards">
+          <thead>
+            <tr>
+              {PROMO_COLUMNS.map(([id, label, defaultDir]) => (
+                <SortTh key={id} tab="Promos" id={id} label={label} sort={sort} onSort={onSort}
+                  defaultDir={defaultDir} num={PROMO_NUM.has(id)} />
+              ))}
+              <th aria-label="Track"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted(data, PROMO_SORT).map((r, i) => {
+              const {bonus, hedge} = promoLegs(r);
+              return (
+                <tr key={i}>
+                  <td className={`num c-ev ${r.profit >= 0 ? 'best' : 'bad'}`}>{r.conversion_pct.toFixed(1)}%</td>
+                  <td className="num" data-label="Locked">{formatMoney(r.profit)}</td>
+                  <td className="c-event">{r.event} <span className="mut">{r.sport} · {marketName(r.market)}</span></td>
+                  <td data-label="Bonus leg"><PromoLeg leg={bonus} boostedOdds={r.boosted_odds} /></td>
+                  <td data-label="Hedge leg"><PromoLeg leg={hedge} boostedOdds={r.boosted_odds} /></td>
+                  <td className="row-actions">
+                    <div className="row-actions-inner c-actions">
+                      <button className="secondary" title="Log this promo conversion in the Tracker" onClick={() => {
+                        track(r);
+                      }}>Track</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
       {Array.isArray(data) && data.length === 0 && (
         <p className="mut">No two-sided markets with a <Term id="hedge">hedge</Term> at another book.</p>
       )}
