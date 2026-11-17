@@ -2,9 +2,8 @@ import {useState} from 'react';
 
 import {TabIntro} from './TabIntro.jsx';
 import {postJson, toast, useApi, useStored} from './hooks.jsx';
-import {EXAMPLE_LINE, formatTable, noMatchReason, noSlipsReason, parseTableText} from './pickem.js';
+import {EXAMPLE_LINE, noMatchReason, noSlipsReason, payoutRows, rowsToTable} from './pickem.js';
 
-const SIZES = [2, 3, 4, 5, 6];
 const BLANK = {player: '', market: '', point: '', side: ''};
 
 /** Formats a 0-1 probability as a percentage. */
@@ -36,15 +35,10 @@ export function Pickem() {
   const [busy, setBusy] = useState(false);
   const defaults = useApi('/api/pickem/payouts', 3600000);
 
-  const defaultText = defaults && defaults[payout] ? formatTable(defaults[payout]) : '';
-  const tableText = edited == null ? defaultText : edited;
-  let tableError = '';
-  let override = null;
-  try {
-    override = edited == null ? null : parseTableText(edited);
-  } catch (e) {
-    tableError = e.message;
-  }
+  const defaultRows = defaults && defaults[payout] ? payoutRows(defaults[payout]) : [];
+  const rows = edited == null ? defaultRows : edited;
+  const {table: override, error: tableError} = edited == null ? {table: null, error: ''} : rowsToTable(edited);
+  const setMult = (i, mult) => setEdited(rows.map((r, j) => (j === i ? {...r, mult} : r)));
 
   const importLines = async () => {
     const r = await postJson('/api/pickem/parse', {text: importText});
@@ -91,39 +85,43 @@ export function Pickem() {
     <>
       <TabIntro tab="Pick'em" />
       <h3>Lines</h3>
-      <textarea rows={4} cols={60} value={importText} onChange={(e) => setImportText(e.target.value)}
-        placeholder="player, market, line[, over|under] (one per row)" />
+      <label htmlFor="pk-import">Paste lines (player, market, line[, over|under], one per row)</label>
+      <textarea id="pk-import" rows={4} cols={60} value={importText} onChange={(e) => setImportText(e.target.value)} />
       <div className="bar">
         <button onClick={importLines} disabled={!importText.trim()}>Import lines</button>
       </div>
       {parseErrors.map((e) => <p key={e.row} className="bad">Row {e.row}: {e.error} ({e.text})</p>)}
       <div className="bar">
-        <input placeholder="Player" value={form.player} onChange={setField('player')} />
-        <input placeholder="Market" value={form.market} onChange={setField('market')} />
-        <input placeholder="Line" size={5} value={form.point} onChange={setField('point')} />
-        <select value={form.side} onChange={setField('side')}>
-          <option value="">Best side</option>
-          <option>Over</option>
-          <option>Under</option>
-        </select>
+        <div className="field"><label htmlFor="pk-player">Player</label>
+          <input id="pk-player" value={form.player} onChange={setField('player')} /></div>
+        <div className="field"><label htmlFor="pk-market">Market</label>
+          <input id="pk-market" value={form.market} onChange={setField('market')} /></div>
+        <div className="field"><label htmlFor="pk-line">Line</label>
+          <input id="pk-line" size={5} value={form.point} onChange={setField('point')} /></div>
+        <div className="field"><label htmlFor="pk-side">Side</label>
+          <select id="pk-side" value={form.side} onChange={setField('side')}>
+            <option value="">Best side</option>
+            <option>Over</option>
+            <option>Under</option>
+          </select></div>
         <button onClick={addLine}>Add</button>
       </div>
       {lines.length === 0 && (
-        <table className="odds">
+        <table className="odds pk-lines">
           <tbody>
             <tr className="mut">
-              <td>{EXAMPLE_LINE.player}</td><td>{EXAMPLE_LINE.market}</td><td>{EXAMPLE_LINE.point}</td>
+              <td>{EXAMPLE_LINE.player}</td><td>{EXAMPLE_LINE.market}</td><td className="num">{EXAMPLE_LINE.point}</td>
               <td>either</td><td><i>Example only: add your own lines above.</i></td>
             </tr>
           </tbody>
         </table>
       )}
       {lines.length > 0 && (
-        <table className="odds">
+        <table className="odds pk-lines">
           <tbody>
             {lines.map((l, i) => (
               <tr key={i}>
-                <td>{l.player}</td><td>{l.market}</td><td>{l.point}</td><td>{l.side || 'either'}</td>
+                <td>{l.player}</td><td>{l.market}</td><td className="num">{l.point}</td><td>{l.side || 'either'}</td>
                 <td><button className="x" onClick={() => setLines(lines.filter((_, j) => j !== i))}>✕</button></td>
               </tr>
             ))}
@@ -133,20 +131,35 @@ export function Pickem() {
 
       <h3>Payouts</h3>
       <div className="bar">
-        <select value={payout} onChange={(e) => {
-          setPayout(e.target.value);
-          setEdited(null);
-        }}>
-          <option value="power">Power</option>
-          <option value="flex">Flex</option>
-        </select>
-        {SIZES.map((n) => (
-          <label key={n}>
-            <input type="checkbox" checked={sizes.includes(n)} onChange={() => toggleSize(n)} /> {n}-pick
-          </label>
-        ))}
+        <div className="field"><label htmlFor="pk-payout">Payout type</label>
+          <select id="pk-payout" value={payout} onChange={(e) => {
+            setPayout(e.target.value);
+            setEdited(null);
+          }}>
+            <option value="power">Power</option>
+            <option value="flex">Flex</option>
+          </select></div>
       </div>
-      <textarea rows={6} cols={40} value={tableText} onChange={(e) => setEdited(e.target.value)} />
+      <table className="payouts">
+        <thead><tr><th>Slip size</th><th>Hits</th><th className="num">Payout multiplier</th><th>Include</th></tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={`${r.size}-${r.hits}`}>
+              <td>{r.first ? `${r.size}-pick` : ''}</td>
+              <td>{r.hits} of {r.size}</td>
+              <td className="num">
+                <input className="mini" inputMode="decimal" value={r.mult}
+                  aria-label={`${r.size}-pick, ${r.hits} hits multiplier`}
+                  onChange={(e) => setMult(i, e.target.value)} />x
+              </td>
+              <td>{r.first && (
+                <input type="checkbox" aria-label={`Include ${r.size}-pick slips`}
+                  checked={sizes.includes(r.size)} onChange={() => toggleSize(r.size)} />
+              )}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <div className="bar">
         <button onClick={() => setEdited(null)} disabled={edited == null}>Reset to default</button>
         {tableError && <span className="bad">{tableError}</span>}

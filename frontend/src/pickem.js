@@ -58,6 +58,39 @@ export function parseTableText(text) {
   return table;
 }
 
+/**
+ * Flattens a payout table into editable rows, one per slip size and hit count.
+ * @param {!Object<string, !Object<string, number>>} table
+ * @return {!Array<{size: number, hits: number, mult: string, first: boolean}>}
+ */
+export function payoutRows(table) {
+  const rows = [];
+  Object.keys(table).sort((a, b) => Number(a) - Number(b)).forEach((size) => {
+    Object.keys(table[size]).sort((a, b) => Number(b) - Number(a)).forEach((hits, i) => {
+      rows.push({size: Number(size), hits: Number(hits), mult: String(table[size][hits]), first: i === 0});
+    });
+  });
+  return rows;
+}
+
+/**
+ * Inverse of payoutRows.
+ * @param {!Array<{size: number, hits: number, mult: string}>} rows
+ * @return {{table: !Object<string, !Object<string, number>>, error: string}}
+ */
+export function rowsToTable(rows) {
+  const table = {};
+  for (const r of rows) {
+    const text = String(r.mult).trim();
+    const mult = Number(text);
+    if (text === '' || !Number.isFinite(mult) || mult < 0) {
+      return {table: {}, error: `${r.size}-pick, ${r.hits} hits: enter a multiplier of 0 or more`};
+    }
+    (table[String(r.size)] = table[String(r.size)] || {})[String(r.hits)] = mult;
+  }
+  return {table, error: ''};
+}
+
 /** Sample line shown (not sent to the backend) until the user adds real lines. */
 export const EXAMPLE_LINE = {player: 'LeBron James', market: 'Points', point: 24.5, side: null, example: true};
 

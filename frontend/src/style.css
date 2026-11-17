@@ -29,7 +29,7 @@ nav button .sub { display: none; font-size: var(--fs-1); color: var(--text-muted
 nav button.on .sub { display: block; }
 main { flex: 1; min-width: 0; padding: 20px; }
 .bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
-input, select { background: var(--surface-2); color: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 5px var(--sp-2); width: 90px; }
+input, select, textarea { background: var(--surface-2); color: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 5px var(--sp-2); width: 90px; }
 select { width: auto; }
 .card { background: var(--surface-1); border-radius: 8px; padding: var(--sp-3) 14px; margin-bottom: 10px; cursor: pointer; overflow-wrap: anywhere; }
 table { border-collapse: collapse; width: 100%; margin-top: var(--sp-2); }
@@ -277,3 +277,12 @@ table.grid tbody.suspect td.bestcell { background: none; color: inherit; font-we
 .sharp-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: var(--sp-2); }
 .filter-bar label { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .help a, .help a:visited { color: var(--accent); }
+
+/* Pick'em (odderjam-110) */
+.field { display: flex; flex-direction: column; gap: 2px; }
+.field label, label[for="pk-import"] { font-size: var(--fs-1); color: var(--text-muted); }
+label[for="pk-import"] { display: block; margin-bottom: 2px; }
+textarea { width: 100%; max-width: 520px; font: inherit; }
+table.pk-lines { width: auto; }
+table.payouts { width: auto; margin-bottom: 10px; }
+table.payouts td, table.payouts th { padding: 4px var(--sp-2); }
