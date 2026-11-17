@@ -29,7 +29,7 @@ import {Term} from './Term.jsx';
 import {NAV_GROUPS, NAV_SUBTITLES, MOBILE_TABS, moreTabs, navLabel} from './navgroups.js';
 import {buildHash, evFiltersToParams, evParamsToFilters, parseHash} from './routes.js';
 import {Tracker} from './Tracker.jsx';
-import {ruleFormError} from './alerts.js';
+import {alertFlagBadges, BETTABLE_HELP, BLANK_RULE_FIELDS, ruleFormError} from './alerts.js';
 import {windowText} from './middles.js';
 import {PROMO_COLUMNS, PROMO_DEFAULT_SORT, PROMO_NUM, PROMO_SORT, promoLegs} from './promos.js';
 import {
@@ -1515,7 +1515,7 @@ function AlertWatcher({role = 'poller'}) {
   );
 }
 
-const BLANK_RULE = {name: '', kind: 'ev', min_value: 2, book: '', market: '', sport: ''};
+const BLANK_RULE = {name: '', kind: 'ev', min_value: 2, book: '', market: '', sport: '', ...BLANK_RULE_FIELDS};
 const ANY_BOOKS = ['', ...BOOKS];
 
 function Alerts() {
@@ -1583,14 +1583,20 @@ function Alerts() {
           {SPORTS.map((s) => <option key={s} value={s}>{s || 'Any sport'}</option>)}
         </select>
         <input placeholder="Name (optional)" value={form.name} onChange={field('name')} />
+        <label>
+          <input type="checkbox" checked={form.bettable} onChange={(e) => {
+            setForm({...form, bettable: e.target.checked});
+          }} /> Bettable only
+        </label>
+        <span className="mut">{BETTABLE_HELP}</span>
         <button className="primary">Add alert</button>
         {formError && <span className="bad" role="alert">{formError}</span>}
       </form>
-      <TableShell data={rules} emptyText={alertsRulesEmptyText(rules)} error={rulesError} onRetry={rulesRetry} what="alert rules" columns={7}>
+      <TableShell data={rules} emptyText={alertsRulesEmptyText(rules)} error={rulesError} onRetry={rulesRetry} what="alert rules" columns={8}>
       <table>
         <thead>
           <tr>
-            <th>Rule</th><th>Type</th><th>Min</th><th>Book</th><th>Market</th><th>Sport</th><th></th>
+            <th>Rule</th><th>Type</th><th>Min</th><th>Book</th><th>Market</th><th>Sport</th><th>Bettable only</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -1602,6 +1608,7 @@ function Alerts() {
               <td>{r.book || 'Any'}</td>
               <td>{MARKETS[r.market] || 'Any'}</td>
               <td>{r.sport || 'Any'}</td>
+              <td>{r.bettable ? 'On' : 'Off'}</td>
               <td><button className="x" onClick={() => {
                 remove(r);
               }}>✕</button></td>
@@ -1620,7 +1627,7 @@ function Alerts() {
           {(feed?.items || []).map((o) => (
             <tr key={o.id}>
               <td>{eventTime(o.created_at)}</td>
-              <td>{o.title}</td>
+              <td>{o.title}{alertFlagBadges(o).map((label) => <span key={label} className="mut"> [{label}]</span>)}</td>
               <td className="mut">{o.rule_name}</td>
             </tr>
           ))}
