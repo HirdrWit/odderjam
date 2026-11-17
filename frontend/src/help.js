@@ -58,6 +58,16 @@ export const HELP_SECTIONS = [
     risk: 'Risk: books may cut your limits if you win. A limit is the most a book lets you bet. A book can void a bet, which means it cancels the bet and refunds you. Some prices are errors, and a book may void those.',
   },
   {
+    id: 'bettable-only',
+    title: 'Bettable only',
+    paragraphs: [
+      'Bettable only hides bets that look good but carry extra risk. It sits in the bar at the top of every price tab and is on by default.',
+      'The +EV tab says how many bets are hidden and why. Press "Show anyway" to see them. Flagged bets then carry a badge. Hover a badge to read why.',
+      'In-play: the game is live, so the price may be stale. Longshot: small errors look like big edges. Heavy favourite: you risk a lot to win a little. Too good to be true: the edge is so big it is probably a bad line. Fragile edge: the bet is +EV only under one way of removing the margin. Sharps disagree: the sharp books do not agree on the true price.',
+      'When the mode is off, a "Bettable only: off" chip shows. Click it to turn the mode back on.',
+    ],
+  },
+  {
     id: 'arbitrage',
     title: 'Guide: arbitrage',
     paragraphs: [

@@ -61,6 +61,11 @@ export const GLOSSARY = [
     example: 'Team A at +110 at one book and Team B at +110 at another: bet both for a sure profit.',
   },
   {
+    id: 'bettable-only', label: 'Bettable only',
+    definition: 'A switch that hides bets with a risk flag: in-play, longshot, heavy favourite, too good to be true, fragile edge or sharps disagree.',
+    example: 'With it on, a +550 in-play bet at 20% edge is hidden and counted in the summary. Turn it off to see it with a warning badge.',
+  },
+  {
     id: 'middle', label: 'Middle',
     definition: 'Betting both sides of a line at different numbers so that both bets can win if the result lands between them.',
     example: 'Over 45.5 at one book and under 47.5 at another: a final total of 46 or 47 wins both.',

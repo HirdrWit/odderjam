@@ -286,3 +286,4 @@ textarea { width: 100%; max-width: 520px; font: inherit; }
 table.pk-lines { width: auto; }
 table.payouts { width: auto; margin-bottom: 10px; }
 table.payouts td, table.payouts th { padding: 4px var(--sp-2); }
+.risk-badge { margin-left: 6px; border: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }

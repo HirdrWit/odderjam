@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
 
+import {BETTABLE_EVENT, readBettable, writeBettable} from './bettable.js';
 import {GOTO_EVENT} from './help.js';
 
 export {useApi, useApiStatus, useStored} from './hooks.js';
@@ -73,4 +74,24 @@ export function postJson(url, body, method = 'POST') {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * The global "Bettable only" toggle, shared by every tab through localStorage
+ * and a window event. On by default.
+ * @return {!Array} `[on, setOn]`.
+ */
+export function useBettable() {
+  const [on, setOnState] = useState(() => readBettable());
+  useEffect(() => {
+    const sync = () => setOnState(readBettable());
+    window.addEventListener(BETTABLE_EVENT, sync);
+    return () => window.removeEventListener(BETTABLE_EVENT, sync);
+  }, []);
+  const setOn = (next) => {
+    writeBettable(globalThis.localStorage, next);
+    setOnState(next);
+    window.dispatchEvent(new Event(BETTABLE_EVENT));
+  };
+  return [on, setOn];
 }

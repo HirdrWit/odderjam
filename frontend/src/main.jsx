@@ -42,7 +42,8 @@ import {
 } from './slip.js';
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {slipToast} from './oddsrow.js';
-import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
+import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useBettable, useStored} from './hooks.jsx';
+import {badgesFor, bettableChip, filterBettable, hiddenSummary, showAnyway} from './bettable.js';
 import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
@@ -141,6 +142,18 @@ function LiveToggle({live}) {
         save({enabled: e.target.checked});
       }} /> Live
       {status.live_events > 0 && <span className="mut small">({status.live_events} live)</span>}
+    </label>
+  );
+}
+
+/** Global "Bettable only" checkbox, shown in the freshness strip. */
+function BettableToggle() {
+  const [on, setOn] = useBettable();
+  return (
+    <label className="chk" title="Hide bets with a risk flag: in-play, longshot, too good to be true and more">
+      <input type="checkbox" checked={on} onChange={(e) => {
+        setOn(e.target.checked);
+      }} /> <Term id="bettable-only">Bettable only</Term>
     </label>
   );
 }
@@ -300,6 +313,7 @@ function FreshnessStrip({live}) {
           <button onClick={refresh} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
         )}
         <LiveToggle live={live} />
+        <BettableToggle />
       </div>
     </div>
   );
@@ -490,6 +504,10 @@ function PositiveEv() {
     if (window.location.hash !== next) window.history.replaceState(null, '', next);
   }, [book, minEv]);
   const chips = activeChips({book, minEv, sport, props});
+  const [bettable, setBettable] = useBettable();
+  const {shown: bettableRows, hidden: hiddenRows} = filterBettable(Array.isArray(data) ? data : [], bettable);
+  const hiddenText = hiddenSummary(hiddenRows);
+  const modeChip = bettableChip(bettable);
   const resetAll = (d) => {
     Object.keys(d).forEach((key) => setters[key](d[key]));
   };
@@ -581,14 +599,24 @@ function PositiveEv() {
           setPanel(panel === 'staking' ? null : 'staking');
         }}>Bankroll &amp; staking</button>
       </div>
-      {chips.length > 0 && (
+      {(chips.length > 0 || modeChip) && (
         <div className="chips">
           {chips.map((c) => (
             <button key={c.key} type="button" className="chip" aria-label={`Remove filter ${c.label}`} onClick={() => {
               setters[c.key](clearFilter({book, minEv, sport, props}, c.key)[c.key]);
             }}>{c.label} ✕</button>
           ))}
+          {modeChip && (
+            <button type="button" className="chip" aria-label="Turn Bettable only back on" onClick={() => {
+              setBettable(true);
+            }}>{modeChip.label} ✕</button>
+          )}
         </div>
+      )}
+      {hiddenText && (
+        <p className="mut small bettable-note" role="status">{hiddenText}. <button type="button" className="secondary" onClick={() => {
+          setBettable(showAnyway());
+        }}>Show anyway</button></p>
       )}
       {panel === 'model' && (
         <div className="panel">
@@ -627,7 +655,8 @@ function PositiveEv() {
           setPanel('staking');
         }}>Open Bankroll &amp; staking</button></p>
       )}
-      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="odds" emptyText={evEmptyText(data, minEv)} columns={9}>
+      <TableShell data={data} rows={Array.isArray(data) ? bettableRows : undefined} refreshing={refreshing} error={error} onRetry={retry} what="odds"
+        emptyText={hiddenRows.length ? 'Every bet is hidden by Bettable only. Use Show anyway above to see them.' : evEmptyText(data, minEv)} columns={9}>
       <table className="cards">
         <thead>
           <tr>
@@ -639,10 +668,12 @@ function PositiveEv() {
           </tr>
         </thead>
         <tbody>
-          {sorted(Array.isArray(data) ? data : [], EV_SORT).map((r, i) => (
+          {sorted(bettableRows, EV_SORT).map((r, i) => (
             <tr key={i}>
               <td className={`num c-ev ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
-              <td className="c-pick">{r.pick}</td>
+              <td className="c-pick">{r.pick}{badgesFor(r).map((b) => (
+                <span key={b.flag} className="chip risk-badge" title={b.tip} tabIndex={0}>{b.label}</span>
+              ))}</td>
               <td className="c-market">{marketName(r.market)}</td>
               <td className="c-event">{r.event} <LiveTag row={r} />{r.start && <span className="c-time mut small"> · {eventTime(r.start)}</span>}</td>
               <td className="c-book">{r.book}</td>
