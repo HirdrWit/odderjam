@@ -38,7 +38,7 @@ export const FILTER_HELP = {
 export const ROW_ACTION_TIPS = {
   bet: 'Open this bet at the sportsbook to place it',
   track: 'Log this bet in the Tracker at the suggested stake',
-  slip: 'Add this bet to your parlay slip to combine it with others',
+  slip: 'Add this bet to your parlay slip. A parlay needs two or more legs; open the Parlay tab to compare books.',
 };
 
 /**

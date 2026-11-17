@@ -14,7 +14,7 @@ import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
-import {NAV_GROUPS, NAV_SUBTITLES} from './navgroups.js';
+import {NAV_GROUPS, NAV_SUBTITLES, navLabel} from './navgroups.js';
 import {Tracker} from './Tracker.jsx';
 import {ruleFormError} from './alerts.js';
 import {windowText} from './middles.js';
@@ -25,6 +25,7 @@ import {
 import {legKey, useSlip} from './hooks.js';
 import {INDEPENDENT_NOTE, devigLabel, restoredNote, slipLegPriceText, tinyStakeNote} from './slip.js';
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
+import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {ageText, isProp} from './odds.js';
 import {dismissWelcome, shouldShowWelcome} from './welcome.js';
@@ -386,7 +387,7 @@ function PositiveEv() {
     }
     notifyDataChanged();
   };
-  const {has, toggle} = useSlip();
+  const {slip, has, toggle} = useSlip();
   const cfg = useApi('/api/sharps', 600000);
   const [weights, setWeights] = useStored('evSharpWeights', null);
   const [maxHold, setMaxHold] = useStored('evMaxHold', null);
@@ -471,7 +472,10 @@ function PositiveEv() {
                   {!r.player && (
                     <button className={has(r) ? 'track on' : 'track'} title={ROW_ACTION_TIPS.slip}
                       onClick={() => {
+                        const added = !has(r);
                         toggle(r);
+                        const t = slipToast(added, slip.length + (added ? 1 : -1));
+                        toast(t.text, t.kind, t.action);
                       }}>{has(r) ? '✓ Slip' : '+ Slip'}</button>
                   )}
                 </div>
@@ -1359,6 +1363,7 @@ function App() {
     setWelcome(false);
     dismissWelcome();
   };
+  const navSlip = useSlip();
   const Page = TABS[tab];
   return (
     <div className="app">
@@ -1372,7 +1377,7 @@ function App() {
                 aria-current={t === tab ? 'page' : undefined} onClick={() => {
                   go(t);
                 }}>
-                {t}
+                {navLabel(t, navSlip.slip.length)}
                 <span className="sub">{NAV_SUBTITLES[t]}</span>
               </button>
             ))}

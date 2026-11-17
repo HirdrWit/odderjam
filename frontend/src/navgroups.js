@@ -35,3 +35,12 @@ export const NAV_SUBTITLES = {
 export function navTabs() {
   return NAV_GROUPS.flatMap((g) => g.tabs);
 }
+
+/**
+ * @param {string} tab Tab name.
+ * @param {number} slipCount Legs on the parlay slip.
+ * @return {string} The nav label; Parlay shows its leg count.
+ */
+export function navLabel(tab, slipCount) {
+  return tab === 'Parlay' && slipCount > 0 ? `Parlay (${slipCount})` : tab;
+}

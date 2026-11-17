@@ -13,12 +13,14 @@ export function chevron(isOpen) {
 
 /**
  * @param {boolean} added True when a price was added, false when removed.
+ * @param {?number=} count Legs on the slip after the change.
  * @return {{text: string, kind: string, action: (!Object|undefined)}}
  */
-export function slipToast(added) {
-  if (!added) return {text: 'Removed from slip', kind: 'ok'};
+export function slipToast(added, count = null) {
+  const legs = count == null ? '' : ` (${count} ${count === 1 ? 'leg' : 'legs'})`;
+  if (!added) return {text: `Removed from slip${legs}`, kind: 'ok'};
   return {
-    text: 'Added to slip',
+    text: `Added to slip${legs}`,
     kind: 'ok',
     action: {label: 'Open Parlay', tab: 'Parlay'},
   };

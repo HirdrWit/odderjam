@@ -65,7 +65,7 @@ function LineTable({group, books, format, legOf, slip}) {
     if (o.prices[book] == null || !leg) return;
     const added = !slip.has(leg);
     slip.toggle(leg);
-    const t = slipToast(added);
+    const t = slipToast(added, slip.slip.length + (added ? 1 : -1));
     toast(t.text, t.kind, t.action);
   };
   const bookCount = stats.bookCount;
