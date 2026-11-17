@@ -4,7 +4,8 @@ import {SortTh, useSort} from './SortTable.jsx';
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {trackerEmptyText} from './empty.js';
-import {errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
+import {errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
+import {TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {formatOdds} from './odds.js';
 import {oddsKey} from './sorttable.js';
@@ -299,7 +300,7 @@ export function Tracker() {
   const [filters, setFilters] = useStored('trackerFilters', NO_FILTERS);
   const query = filterQuery(filters);
   const all = useApi('/api/bets', 600000);
-  const bets = useApi(`/api/bets?${query}`, 600000);
+  const {data: bets, refreshing: betsRefreshing} = useApiStatus(`/api/bets?${query}`, 600000);
   const stats = useApi(`/api/bets/stats?${query}`, 600000);
   const [sort, onSort, sorted] = useSort('Tracker', {key: 'date', dir: 'desc'});
   const [form, setForm] = useState(BLANK_BET);
@@ -493,6 +494,8 @@ export function Tracker() {
           </div>
         </form>
       )}
+      <TableShell data={bets} refreshing={betsRefreshing} columns={11}
+        emptyText={emptyText || 'No bets match these filters. Clear a filter to see more.'}>
       <table>
         <thead>
           <tr>
@@ -517,7 +520,7 @@ export function Tracker() {
           ))}
         </tbody>
       </table>
-      {emptyText && <p className="mut">{emptyText}</p>}
+      </TableShell>
       {stats && (
         <div className="groups">
           <GroupTable title="Strategy" rows={stats.by_strategy}

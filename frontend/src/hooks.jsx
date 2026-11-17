@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 
 import {GOTO_EVENT} from './help.js';
 
-export {useApi, useStored} from './hooks.js';
+export {useApi, useApiStatus, useStored} from './hooks.js';
 
 const TOAST_MS = 3500;
 

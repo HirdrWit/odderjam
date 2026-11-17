@@ -31,7 +31,8 @@ import {legKey, useSlip} from './hooks.js';
 import {INDEPENDENT_NOTE, devigLabel, restoredNote, slipLegPriceText, tinyStakeNote} from './slip.js';
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {slipToast} from './oddsrow.js';
-import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
+import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
+import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {ageText, isProp} from './odds.js';
 import {rowFreshness, showsStrip, stripState} from './freshness.js';
@@ -339,9 +340,6 @@ function ApiError({data}) {
 
 const ROW_FMT = {odds: (o) => formatOdds(o), money: (m) => formatMoney(m)};
 
-function EmptyState({text}) {
-  return text ? <div className="mut">{text}</div> : null;
-}
 
 const EV_COLUMNS = [
   ['ev', 'EV%', 'desc'], ['pick', 'Pick'], ['market', 'Market'], ['event', 'Event'], ['book', 'Book'],
@@ -451,7 +449,7 @@ function PositiveEv() {
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}` +
       `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}`;
-  const data = useApi(cfg && `/api/ev?${query}`);
+  const {data, refreshing} = useApiStatus(cfg && `/api/ev?${query}`);
   return (
     <>
       <TabIntro tab="+EV" />
@@ -520,6 +518,7 @@ function PositiveEv() {
         </div>
       )}
       <ApiError data={data} />
+      <TableShell data={data} refreshing={refreshing} emptyText={evEmptyText(data, minEv)} columns={9}>
       <table>
         <thead>
           <tr>
@@ -569,7 +568,7 @@ function PositiveEv() {
           ))}
         </tbody>
       </table>
-      <EmptyState text={evEmptyText(data, minEv)} />
+      </TableShell>
       <RowExample tab="+EV" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
@@ -929,9 +928,8 @@ function Parlay() {
               blocked.
             </div>
           )}
-          {result.books.length === 0 && (
-            <div className="mut">No book offers every leg at these lines.</div>
-          )}
+          <TableShell rows={result.books} data={result.books} columns={6}
+            emptyText={`No book offers ${result.legs ? 'all ' + result.legs.length + ' legs' : 'every leg'} at these lines. Remove a leg or try another book.`}>
           <table>
             <thead>
               <tr><th>Book</th><th className="num">Odds</th><th className="num">EV%</th><th className="num">Stake</th><th>Legs</th><th></th></tr>
@@ -944,6 +942,7 @@ function Parlay() {
               ))}
             </tbody>
           </table>
+          </TableShell>
         </>
       )}
     </>
@@ -973,7 +972,7 @@ function LowHold() {
   const [market, setMarket] = useStored('lhMarket', '');
   const [sort, onSort, sorted] = useSort('Low Hold', {key: 'hold', dir: 'asc'});
   const marketParam = market ? `&market=${market}` : '';
-  const data = useApi(
+  const {data, refreshing} = useApiStatus(
       `/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${marketParam}`);
   // Nearest miss: only fetched once the filtered list comes back empty.
   const empty = Array.isArray(data) && data.length === 0;
@@ -1002,6 +1001,7 @@ function LowHold() {
         }} />
       </div>
       <ApiError data={data} />
+      <TableShell data={data} refreshing={refreshing} emptyText={lowHoldEmptyText(data, maxHold, lowest)} columns={8}>
       <table>
         <thead>
           <tr>
@@ -1027,7 +1027,7 @@ function LowHold() {
           ))}
         </tbody>
       </table>
-      <EmptyState text={lowHoldEmptyText(data, maxHold, lowest)} />
+      </TableShell>
       <RowExample tab="Low Hold" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
@@ -1053,7 +1053,7 @@ function Middles() {
   if (minEv !== '') params.set('min_ev', minEv);
   if (maxCost !== '') params.set('max_cost', maxCost);
   if (market) params.set('market', market);
-  const data = useApi(`/api/middles?${params}`);
+  const {data, refreshing} = useApiStatus(`/api/middles?${params}`);
   const track = async (row) => {
     for (const leg of row.legs) {
       await fetch('/api/bets', {
@@ -1105,6 +1105,7 @@ function Middles() {
         A <Term id="middle">middle</Term> wins both bets when the result lands in the window. Per $100 total stake, split so both misses cost the same. EV uses a normal model of the
         result (NFL margins weighted to key numbers).
       </div>
+      <TableShell data={data} refreshing={refreshing} emptyText={middlesEmptyText(data, minWindow, maxCost, minEv)} columns={8}>
       <table>
         <thead>
           <tr>
@@ -1141,7 +1142,7 @@ function Middles() {
           ))}
         </tbody>
       </table>
-      <EmptyState text={middlesEmptyText(data, minWindow, maxCost, minEv)} />
+      </TableShell>
       <RowExample tab="Middles" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
@@ -1305,7 +1306,7 @@ function Alerts() {
         </tbody>
       </table>
       <h3>Recent alerts</h3>
-      <EmptyState text={alertsEmptyText(feed)} />
+      <TableShell data={feed && feed.items} emptyText={alertsEmptyText(feed)} columns={3}>
       <table>
         <thead>
           <tr><th>When</th><th>Alert</th><th>Rule</th></tr>
@@ -1320,6 +1321,7 @@ function Alerts() {
           ))}
         </tbody>
       </table>
+      </TableShell>
     </>
   );
 }
@@ -1339,7 +1341,7 @@ function SharpMoney() {
   const [baselineMin, setBaselineMin] = useStored('smBaseline', 120);
   const [k, setK] = useStored('smK', 3);
   const [minVolume, setMinVolume] = useStored('smMinVolume', 500);
-  const data = useApi(`/api/sharp-money?window_minutes=${windowMin}&baseline_minutes=${baselineMin}` +
+  const {data, refreshing} = useApiStatus(`/api/sharp-money?window_minutes=${windowMin}&baseline_minutes=${baselineMin}` +
       `&k=${k}&min_volume=${minVolume}`);
   const status = useApi('/api/sharp-money/status');
   return (
@@ -1367,6 +1369,7 @@ function SharpMoney() {
           }}>Set up an exchange in Help</button></>
         )}
       </div>
+      <TableShell data={data} refreshing={refreshing} emptyText={sharpEmptyText(data, k, windowMin, status)} columns={8}>
       <table>
         <thead>
           <tr>
@@ -1396,7 +1399,7 @@ function SharpMoney() {
           ))}
         </tbody>
       </table>
-      <EmptyState text={sharpEmptyText(data, k, windowMin, status)} />
+      </TableShell>
       <RowExample tab="Sharp Money" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
