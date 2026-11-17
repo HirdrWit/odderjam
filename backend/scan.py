@@ -150,7 +150,9 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
             if result["profit_pct"] < min_profit:
                 continue
             fresh = freshness(e, [book for _, book, _ in best], now)
-            if fresh is not None:
+            flags = bettable.multi_leg_flags(e, [b for _, b, _ in best], [p for _, _, p in best], now,
+                                             profit_pct=result["profit_pct"])
+            if fresh is not None and not (filters and filters.bettable and flags):
                 sized = sizing.size_arb([price for _, _, price in best], total, round_to, max_side)
                 rows.append({"event": f'{e["away"]} @ {e["home"]}', "event_id": e["id"], "sport": e["sport"],
                              "start": e["start"], "market": key, "player": g["player"], "point": g["point"],
@@ -161,5 +163,6 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
                                       in zip(best, sized["stakes"], sized["ideal_stakes"], sized["profits"])],
                              "profit_pct": result["profit_pct"],
                              **{k: sized[k] for k in ("total_stake", "min_profit", "max_profit", "min_profit_pct",
-                                                      "capped", "rounding_loss", "over_total", "warning")}, **fresh})
+                                                      "capped", "rounding_loss", "over_total", "warning")}, **fresh,
+                             "flags": flags})
     return sorted(rows, key=lambda r: -r["profit_pct"])

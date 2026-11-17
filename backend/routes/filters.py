@@ -22,7 +22,7 @@ class FilterSet(BaseModel):
     start_within_hours: float | None = None
     min_ev: float | None = None  # +EV only
     min_profit: float | None = None  # Arbs only
-    bettable: bool = False  # +EV only: drop rows carrying any bettable flag (engine.bettable)
+    bettable: bool = False  # drop rows carrying any bettable flag (+EV, arbs; engine.bettable)
     max_sharp_hold: float | None = None  # hold % of the sharp book's line; lines without a sharp price fail
 
     def sport_ok(self, sport: str) -> bool:

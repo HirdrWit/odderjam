@@ -62,7 +62,7 @@ export const GLOSSARY = [
   },
   {
     id: 'bettable-only', label: 'Bettable only',
-    definition: 'A switch that hides bets with a risk flag: in-play, longshot, heavy favourite, too good to be true, fragile edge or sharps disagree.',
+    definition: 'A switch that hides bets with a risk flag: in-play, longshot, heavy favourite, too good to be true, fragile edge, sharps disagree, legs priced apart or longshot leg.',
     example: 'With it on, a +550 in-play bet at 20% edge is hidden and counted in the summary. Turn it off to see it with a warning badge.',
   },
   {

@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import alerts, history, scan, sharp_money
+from .engine.bettable import multi_leg_flags
 from .scan import groups as _groups
 from .engine import (bettable, devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
                      promo, sharp, sizing, suspect)
@@ -424,7 +425,7 @@ def pickem_optimize(p: PickemIn):
 
 @app.get("/api/lowhold")
 def low_hold(max_hold: Annotated[float, Query(allow_inf_nan=False)] = 1.0, book: str | None = None,
-             stake: PositiveFloat = 100.0, market: str | None = None):
+             stake: PositiveFloat = 100.0, market: str | None = None, bettable: bool = False):
     """Two-sided bets that cover both outcomes for the smallest hold, for clearing rollover.
 
     With ``book`` set, one leg must be at that book. Sorted by hold, lowest first.
@@ -443,10 +444,14 @@ def low_hold(max_hold: Annotated[float, Query(allow_inf_nan=False)] = 1.0, book:
             fresh = scan.freshness(e, [leg["book"] for leg in pair["legs"]], now)
             if fresh is None:
                 continue
+            flags = multi_leg_flags(e, [leg["book"] for leg in pair["legs"]],
+                                                 [leg["odds"] for leg in pair["legs"]], now)
+            if bettable and flags:
+                continue
             for o, leg in zip(g["outcomes"], pair["legs"]):
                 leg.update(pick=mk.label(o), point=o["point"])
             rows.append({"event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
-                         "market": key, "point": g["point"], "stake": stake, **pair, **fresh})
+                         "market": key, "point": g["point"], "stake": stake, **pair, **fresh, "flags": flags})
     return sorted(rows, key=lambda r: r["hold_pct"])
 
 
@@ -500,6 +505,7 @@ def middles(
     market: str | None = None,
     stake: float = Query(100.0, gt=0, allow_inf_nan=False),
     min_ev: float | None = Query(None, allow_inf_nan=False),
+    bettable: bool = False,
 ) -> list[dict]:
     """Middles across books. `max_cost` caps the worst-case loss as a percent of total stake;
     `min_ev` drops middles whose expected value (percent of total stake) is below it."""
@@ -538,13 +544,16 @@ def middles(
                     ev = mid.middle_ev(m, la, pa, lb, pb, pmf)
                     if min_ev is not None and ev["ev_pct"] < min_ev:
                         continue
+                    flags = multi_leg_flags(e, [ba, bb], [pa, pb], now, ev_pct=ev["ev_pct"])
+                    if bettable and flags:
+                        continue
                     rows.append({
                         "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"], "start": e["start"],
                         "market": key, "window": m["window"], "low": la, "high": lb,
                         "legs": [{"pick": mk.label(o), "point": o["point"], "book": b, "odds": p, "stake": s}
                                  for o, b, p, s in ((oa, ba, pa, m["stake_a"]), (ob, bb, pb, m["stake_b"]))],
                         "win_both": m["win_both"], "worst_case": m["worst_case"], "cost_pct": cost_pct,
-                        **ev, **fresh,
+                        **ev, **fresh, "flags": flags,
                     })
     return sorted(rows, key=lambda r: -r["ev_pct"])
 

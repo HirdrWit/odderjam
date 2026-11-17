@@ -7,7 +7,7 @@ Pure functions. `ctx` describes one +EV row:
 """
 import math
 
-from . import markets as mk
+from . import live, markets as mk
 
 DEFAULT_PROFILE = {
     "odds_min": -250.0, "odds_max": 250.0,   # American; outside this is a heavy favourite / longshot
@@ -69,3 +69,29 @@ def profile_error(profile: dict) -> str | None:
         if profile[k] < 0:
             return f"{k} must not be negative"
     return None
+
+
+# Multi-leg rows (arbs, middles, low hold): a row is only as good as its stalest leg.
+
+LEG_SKEW_SECONDS = 20.0  # legs priced further apart than this were not seen at the same moment
+TOO_GOOD_ARB_PCT = 5.0  # an arb above this is almost always a bad line
+TOO_GOOD_MIDDLE_EV_PCT = 10.0  # plausibility ceiling for a middle's expected value (percent of stake)
+LONGSHOT_ODDS = 1000  # a leg above +1000
+
+
+def multi_leg_flags(event: dict, books: list[str], prices: list[float], now: float, *,
+                    profit_pct: float | None = None, ev_pct: float | None = None) -> list[str]:
+    """Flags for a row with one leg per (book, price). Order: in_play, leg_skew, too_good, longshot_leg."""
+    flags = []
+    if live.is_live(event, now):
+        flags.append("in_play")
+    updated = event.get("updated", {})
+    times = [t for t in (live.parse_time(updated.get(b)) for b in books) if t is not None]
+    if len(times) > 1 and max(times) - min(times) > LEG_SKEW_SECONDS:
+        flags.append("leg_skew")
+    if (profit_pct is not None and profit_pct > TOO_GOOD_ARB_PCT) \
+            or (ev_pct is not None and ev_pct > TOO_GOOD_MIDDLE_EV_PCT):
+        flags.append("too_good")
+    if any(p > LONGSHOT_ODDS for p in prices):
+        flags.append("longshot_leg")
+    return flags

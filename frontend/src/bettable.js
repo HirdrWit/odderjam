@@ -36,6 +36,14 @@ export const FLAGS = {
     badge: 'Fragile edge', summary: 'fragile edge',
     tip: 'Fragile edge: the bet is only +EV under one way of removing the margin.',
   },
+  leg_skew: {
+    badge: 'Legs priced apart', summary: 'legs priced apart',
+    tip: 'Legs priced apart: the books last updated these prices more than 20 seconds apart, so the profit may already be gone.',
+  },
+  longshot_leg: {
+    badge: 'Longshot leg', summary: 'longshot leg',
+    tip: 'Longshot leg: one leg pays more than +1000, where small price errors look like big edges.',
+  },
   sharps_disagree: {
     badge: 'Sharps disagree', summary: 'sharps disagree',
     tip: 'Sharps disagree: the sharp books do not agree on the true price, so the edge is unreliable.',

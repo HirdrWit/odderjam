@@ -147,6 +147,46 @@ function LiveToggle({live}) {
   );
 }
 
+/**
+ * Applies the global "Bettable only" toggle to a tab's rows.
+ * @param {*} data The tab's API result (non-arrays count as no rows).
+ * @return {{rows: !Array, hidden: !Array, on: boolean, setOn: function(boolean)}}
+ */
+function useBettableRows(data) {
+  const [on, setOn] = useBettable();
+  const {shown, hidden} = filterBettable(Array.isArray(data) ? data : [], on);
+  return {rows: shown, hidden, on, setOn};
+}
+
+/** Hidden-count summary with "Show anyway", and the "Bettable only: off" chip, for a tab. */
+function BettableNote({hidden, on, setOn}) {
+  const text = hiddenSummary(hidden);
+  const chip = bettableChip(on);
+  return (
+    <>
+      {chip && (
+        <div className="chips">
+          <button type="button" className="chip" aria-label="Turn Bettable only back on" onClick={() => {
+            setOn(true);
+          }}>{chip.label} ✕</button>
+        </div>
+      )}
+      {text && (
+        <p className="mut small bettable-note" role="status">{text}. <button type="button" className="secondary" onClick={() => {
+          setOn(showAnyway());
+        }}>Show anyway</button></p>
+      )}
+    </>
+  );
+}
+
+/** Risk badges for one row's flags. */
+function RiskBadges({row}) {
+  return badgesFor(row).map((b) => (
+    <span key={b.flag} className="chip risk-badge" title={b.tip} tabIndex={0}>{b.label}</span>
+  ));
+}
+
 /** Global "Bettable only" checkbox, shown in the freshness strip. */
 function BettableToggle() {
   const [on, setOn] = useBettable();
@@ -766,7 +806,7 @@ function ArbRow({arb, onTrack}) {
     <tr>
       <td className="num c-ev"><b className="best">{percent(arb.profit_pct, {digits: 2, signed: true})}</b></td>
       <td className="c-event">
-        {arb.event} <LiveTag row={arb} />{' '}
+        {arb.event} <LiveTag row={arb} />{' '}<RiskBadges row={arb} />{' '}
         <span className="mut">{arb.sport} · {marketName(arb.market)}</span>
         {arb.warning && <div className="bad">⚠ {arb.warning}</div>}
       </td>
@@ -808,6 +848,7 @@ function Arbs() {
   // No error state: it only sets the placeholder of the total-stake box, which the user can still type into.
   const bank = useApi('/api/bankroll', 30000);
   const {data, refreshing, error, retry} = useApiStatus(`/api/arbs?min_profit=${min}${sizingQuery(sizing, true)}${propsParam(props)}`);
+  const bt = useBettableRows(data);
   const filters = {min, props, total: sizing.total > 0 ? sizing.total : ''};
   const setters = {min: setMin, props: setProps, total: sizing.setTotal};
   const chips = arbChips(filters);
@@ -869,7 +910,8 @@ function Arbs() {
       {arbMinWarning(min) && <div className="bad">⚠ {arbMinWarning(min)}</div>}
       <ApiError data={data} />
       <RowExample tab="Arbitrage" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
-      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="arbitrage" emptyText={arbsEmptyText(data, min)} columns={5}>
+      <BettableNote hidden={bt.hidden} on={bt.on} setOn={bt.setOn} />
+      <TableShell data={data} rows={Array.isArray(data) ? bt.rows : undefined} refreshing={refreshing} error={error} onRetry={retry} what="arbitrage" emptyText={bt.hidden.length ? 'Every arb is hidden by Bettable only. Use Show anyway above to see them.' : arbsEmptyText(data, min)} columns={5}>
         <table className="cards">
           <thead>
             <tr>
@@ -886,7 +928,7 @@ function Arbs() {
             </tr>
           </thead>
           <tbody>
-            {sorted(Array.isArray(data) ? data : [], ARB_SORT).map((r, i) => (
+            {sorted(bt.rows, ARB_SORT).map((r, i) => (
               <ArbRow key={i} arb={r} onTrack={() => {
                 track(r);
               }} />
@@ -1255,6 +1297,7 @@ function LowHold() {
   const marketParam = market ? `&market=${market}` : '';
   const {data, refreshing, error, retry} = useApiStatus(
       `/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${marketParam}`);
+  const bt = useBettableRows(data);
   // Nearest miss: only fetched once the filtered list comes back empty.
   const empty = Array.isArray(data) && data.length === 0;
   // No error state: it only adds a "lowest hold is X%" hint to the empty message; the main table has its own error.
@@ -1283,7 +1326,9 @@ function LowHold() {
         }} />
       </div>
       <ApiError data={data} />
-      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="low-hold" emptyText={lowHoldEmptyText(data, maxHold, lowest)} columns={8}>
+      <>
+      <BettableNote hidden={bt.hidden} on={bt.on} setOn={bt.setOn} />
+      <TableShell data={data} rows={Array.isArray(data) ? bt.rows : undefined} refreshing={refreshing} error={error} onRetry={retry} what="low-hold" emptyText={bt.hidden.length ? 'Every row is hidden by Bettable only. Use Show anyway above to see them.' : lowHoldEmptyText(data, maxHold, lowest)} columns={8}>
       <table className="cards">
         <thead>
           <tr>
@@ -1294,10 +1339,10 @@ function LowHold() {
           </tr>
         </thead>
         <tbody>
-          {sorted(Array.isArray(data) ? data : [], LOW_HOLD_SORT).map((r, i) => (
+          {sorted(bt.rows, LOW_HOLD_SORT).map((r, i) => (
             <tr key={i}>
               <td className={`num c-ev ${signClass(-r.hold_pct)}`}>{percent(r.hold_pct, {digits: 2, signed: true})}</td>
-              <td className="c-event">{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
+              <td className="c-event">{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span>{badgesFor(r).length > 0 && ' '}<RiskBadges row={r} /></td>
               <td data-label="Market">{marketName(r.market)}</td>
               <td data-label="Legs">
                 {r.legs.map((l, j) => (
@@ -1310,6 +1355,7 @@ function LowHold() {
         </tbody>
       </table>
       </TableShell>
+      </>
       <RowExample tab="Low Hold" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
@@ -1336,6 +1382,7 @@ function Middles() {
   if (maxCost !== '') params.set('max_cost', maxCost);
   if (market) params.set('market', market);
   const {data, refreshing, error, retry} = useApiStatus(`/api/middles?${params}`);
+  const bt = useBettableRows(data);
   const track = async (row) => {
     const result = await trackLegs(row.legs, (leg) => fetch('/api/bets', {
       method: 'POST',
@@ -1391,7 +1438,9 @@ function Middles() {
         A <Term id="middle">middle</Term> wins both bets when the result lands in the window. Per $100 total stake, split so both misses cost the same. EV uses a normal model of the
         result (NFL margins weighted to key numbers).
       </div>
-      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="middles" emptyText={middlesEmptyText(data, minWindow, maxCost, minEv)} columns={8}>
+      <>
+      <BettableNote hidden={bt.hidden} on={bt.on} setOn={bt.setOn} />
+      <TableShell data={data} rows={Array.isArray(data) ? bt.rows : undefined} refreshing={refreshing} error={error} onRetry={retry} what="middles" emptyText={bt.hidden.length ? 'Every middle is hidden by Bettable only. Use Show anyway above to see them.' : middlesEmptyText(data, minWindow, maxCost, minEv)} columns={8}>
       <table className="cards">
         <thead>
           <tr>
@@ -1403,11 +1452,11 @@ function Middles() {
           </tr>
         </thead>
         <tbody>
-          {sorted(Array.isArray(data) ? data : [], MIDDLES_SORT).map((r, i) => (
+          {sorted(bt.rows, MIDDLES_SORT).map((r, i) => (
             <tr key={i}>
               <td className={`num c-ev ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
               <td className="num" data-label="Hit chance">{percent(r.hit_prob * 100)}</td>
-              <td className="c-event">{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span></td>
+              <td className="c-event">{r.event} <LiveTag row={r} /> <span className="mut">{r.sport}</span>{badgesFor(r).length > 0 && ' '}<RiskBadges row={r} /></td>
               <td data-label="Market">{marketName(r.market)}</td>
               <td data-label="Window">{windowText(r)}</td>
               <td data-label="Legs">
@@ -1429,6 +1478,7 @@ function Middles() {
         </tbody>
       </table>
       </TableShell>
+      </>
       <RowExample tab="Middles" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
     </>
   );
