@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import alerts, history, scan, sharp_money
-from .engine.bettable import multi_leg_flags
+from .engine.bettable import multi_leg_flags as _multi_leg_flags
 from .scan import groups as _groups
 from .engine import (bettable, devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
                      promo, sharp, sizing, suspect)
@@ -444,8 +444,8 @@ def low_hold(max_hold: Annotated[float, Query(allow_inf_nan=False)] = 1.0, book:
             fresh = scan.freshness(e, [leg["book"] for leg in pair["legs"]], now)
             if fresh is None:
                 continue
-            flags = multi_leg_flags(e, [leg["book"] for leg in pair["legs"]],
-                                                 [leg["odds"] for leg in pair["legs"]], now)
+            flags = _multi_leg_flags(e, [leg["book"] for leg in pair["legs"]],
+                                      [leg["odds"] for leg in pair["legs"]], now)
             if bettable and flags:
                 continue
             for o, leg in zip(g["outcomes"], pair["legs"]):
@@ -544,7 +544,7 @@ def middles(
                     ev = mid.middle_ev(m, la, pa, lb, pb, pmf)
                     if min_ev is not None and ev["ev_pct"] < min_ev:
                         continue
-                    flags = multi_leg_flags(e, [ba, bb], [pa, pb], now, ev_pct=ev["ev_pct"])
+                    flags = _multi_leg_flags(e, [ba, bb], [pa, pb], now, ev_pct=ev["ev_pct"])
                     if bettable and flags:
                         continue
                     rows.append({
