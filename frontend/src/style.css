@@ -8,7 +8,7 @@ nav button.on, nav button:hover { background: #243040; }
 .nav-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
 .nav-group h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #8a96a6; margin: 4px 10px; font-weight: 600; }
 nav button .sub { display: block; font-size: 11px; color: #8a96a6; margin-top: 2px; }
-main { flex: 1; padding: 20px; max-width: 1000px; }
+main { flex: 1; min-width: 0; padding: 20px; }
 .bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
 input, select { background: #1d2530; color: inherit; border: 1px solid #2c3a4b; border-radius: 4px; padding: 5px 8px; width: 90px; }
 select { width: auto; }
