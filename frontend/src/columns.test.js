@@ -109,8 +109,6 @@ const ZERO = {ev_pct: 7.4, pick: 'Titans', book: 'DraftKings', odds: 150, fair_o
 test('zeroStakeReason explains a zero stake on a positive edge', () => {
   const r = zeroStakeReason(ZERO);
   assert.match(r, /under \$1/i);
-  assert.match(r, /bankroll/i);
-  assert.match(r, /round to/i);
 });
 
 test('zeroStakeReason is empty when the stake is positive or there is no edge', () => {

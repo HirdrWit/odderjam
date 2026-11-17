@@ -6,7 +6,7 @@ import {Calculators} from './Calculators.jsx';
 import {RowExample, Th} from './ColumnHelp.jsx';
 import {SortTh, useSort} from './SortTable.jsx';
 import {oddsKey} from './sorttable.js';
-import {zeroStakeReason} from './columns.js';
+import {zeroStakeReason, stakeCellText, zeroStakeNote} from './columns.js';
 import {parseStakeInput, rowActionAria, slipButtonLabel, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
 import {Help} from './Help.jsx';
 import {GOTO_EVENT, HELP_TAB} from './help.js';
@@ -531,6 +531,11 @@ function PositiveEv() {
         </div>
       )}
       <ApiError data={data} />
+      {zeroStakeNote(data) && (
+        <p className="mut small stake-note">{zeroStakeNote(data)} <button type="button" className="secondary" onClick={() => {
+          setPanel('staking');
+        }}>Open Bankroll &amp; staking</button></p>
+      )}
       <TableShell data={data} refreshing={refreshing} emptyText={evEmptyText(data, minEv)} columns={9}>
       <table className="cards">
         <thead>
@@ -555,8 +560,8 @@ function PositiveEv() {
               <td className="mut small c-sharps">
                 {r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(' · ')}
               </td>
-              <td className="num c-stake" title={`Raw Kelly $${r.kelly_stake.toFixed(2)}`}>
-                {zeroStakeReason(r) ? <span className="mut small">{zeroStakeReason(r)}</span> : formatMoney(r.stake)}
+              <td className="num c-stake" title={`${zeroStakeReason(r) ? `${zeroStakeReason(r)}. ` : ''}Raw Kelly $${r.kelly_stake.toFixed(2)}`}>
+                {stakeCellText(r) || formatMoney(r.stake)}
               </td>
               <td className="row-actions">
                 <div className="row-actions-inner c-actions">

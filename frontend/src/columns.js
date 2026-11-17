@@ -69,7 +69,25 @@ const LEAD = 'How to read this row: ';
  */
 export function zeroStakeReason(row) {
   if (!(row.ev_pct > 0) || row.stake > 0) return '';
-  return 'under $1: raise bankroll or lower Round to';
+  return 'Suggested stake rounds to under $1';
+}
+
+/**
+ * @param {!Object} row A +EV row from the API.
+ * @return {string} '<$1' when the stake rounded below a dollar, else ''.
+ */
+export function stakeCellText(row) {
+  return zeroStakeReason(row) ? '<$1' : '';
+}
+
+/**
+ * The one note shown above the +EV table when any stake rounds below $1.
+ * @param {?Array<!Object>} rows
+ * @return {string} The note, or '' when no row is affected.
+ */
+export function zeroStakeNote(rows) {
+  if (!Array.isArray(rows) || !rows.some((r) => zeroStakeReason(r))) return '';
+  return 'Some stakes round below $1. Raise your bankroll or lower Round to in Bankroll & staking';
 }
 
 /**
@@ -92,7 +110,7 @@ export function rowExample(tab, row, fmt) {
       const reason = zeroStakeReason(row);
       return `${LEAD}${row.pick} at ${row.book} pays ${fmt.odds(row.odds)}, but the fair price is ` +
           `${fmt.odds(row.fair_odds)}. That is a ${row.ev_pct.toFixed(1)}% edge, ` +
-          (reason ? `but there is no suggested stake: ${reason}.` : `so the suggested stake is ${fmt.money(row.stake)}.`);
+          (reason ? `but there is no suggested stake. ${reason}.` : `so the suggested stake is ${fmt.money(row.stake)}.`);
     }
     case 'Arbitrage':
       return `${LEAD}place ${row.legs.map((l) => `${legText(l)} for ${fmt.money(l.stake)}`).join(' and ')}. ` +
