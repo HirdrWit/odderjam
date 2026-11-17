@@ -109,12 +109,12 @@ h3.section { font-size: var(--fs-2); text-transform: uppercase; letter-spacing: 
 .intro { display: flex; gap: var(--sp-3); align-items: center; justify-content: space-between; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; }
 .intro p { margin: 0; line-height: 1.4; }
 .intro button, .intro-help button { background: var(--surface-3); color: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
-.intro-help { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.intro-help { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: 6px; }
 .intro-help button { padding: 2px var(--sp-2); border-radius: 50%; }
 @media (max-width: 600px) { .intro { flex-direction: column; align-items: stretch; } }
 
 .content { flex: 1; min-width: 0; }
-.welcome { margin: var(--sp-4) var(--sp-4) 0; padding: var(--sp-3) var(--sp-4); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; overflow-wrap: anywhere; }
+.welcome { margin: 0 0 var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; overflow-wrap: anywhere; }
 .welcome p { margin: 0 0 var(--sp-2); }
 .welcome ol { margin: 0 0 var(--sp-2); padding-left: 20px; }
 .welcome-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-2); }
@@ -125,7 +125,6 @@ nav button.link, .welcome button.link { text-decoration: underline; }
   nav h1 { width: 100%; margin-bottom: var(--sp-1); }
   .nav-group { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; margin-bottom: var(--sp-1); }
   .nav-group h2 { width: 100%; margin: var(--sp-1) 0; }
-  .welcome { margin: var(--sp-2); }
 }
 
 .term { position: relative; border-bottom: 1px dotted var(--text-muted); cursor: help; }

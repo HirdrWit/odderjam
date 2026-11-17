@@ -14,7 +14,8 @@ import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {OddsScreen} from './OddsScreen.jsx';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
-import {TabIntro} from './TabIntro.jsx';
+import {TabIntro, WelcomeContext} from './TabIntro.jsx';
+import {afterNavigate, initialWelcome} from './onboarding.js';
 import {Term} from './Term.jsx';
 import {NAV_GROUPS, NAV_SUBTITLES, navLabel} from './navgroups.js';
 import {Tracker} from './Tracker.jsx';
@@ -32,7 +33,7 @@ import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {ageText, isProp} from './odds.js';
 import {rowFreshness, showsStrip, stripState} from './freshness.js';
-import {dismissWelcome, shouldShowWelcome} from './welcome.js';
+import {dismissWelcome} from './welcome.js';
 
 // Field names such as `age_seconds` and `ev_pct` come straight from the
 // backend's JSON API, so they keep the backend's snake_case.
@@ -1401,8 +1402,14 @@ function Welcome({onJump, onClose}) {
 
 function App() {
   const [tab, setTab] = useState(() => loadTab());
+  const [welcomeTab, setWelcomeTab] = useState(() => initialWelcome(tab));
   const go = (next) => {
     setTab(next);
+    setWelcomeTab((w) => {
+      const kept = afterNavigate(w, next);
+      if (w != null && kept == null) dismissWelcome();
+      return kept;
+    });
     try {
       localStorage.setItem('tab', next);
     } catch {
@@ -1416,9 +1423,9 @@ function App() {
     window.addEventListener(GOTO_EVENT, onGoto);
     return () => window.removeEventListener(GOTO_EVENT, onGoto);
   }, []);
-  const [welcome, setWelcome] = useState(() => shouldShowWelcome());
+  const welcome = welcomeTab != null;
   const closeWelcome = () => {
-    setWelcome(false);
+    setWelcomeTab(null);
     dismissWelcome();
   };
   const navSlip = useSlip();
@@ -1442,13 +1449,12 @@ function App() {
           </div>
         ))}
         <button className="link" onClick={() => {
-          setWelcome(true);
+          setWelcomeTab(tab);
         }}>Show welcome</button>
       </nav>
       <div className="content">
-        {welcome && <Welcome onJump={go} onClose={closeWelcome} />}
         {showsStrip(tab) && <FreshnessStrip />}
-        <main><Page welcome={welcome} /></main>
+        <main>{welcome && <Welcome onJump={go} onClose={closeWelcome} />}<WelcomeContext.Provider value={welcomeTab}><Page welcome={welcome} /></WelcomeContext.Provider></main>
       </div>
       <Toaster />
     </div>

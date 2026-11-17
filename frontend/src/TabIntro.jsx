@@ -1,8 +1,12 @@
-import {useState} from 'react';
+import {createContext, useContext, useState} from 'react';
 
 import {Term} from './Term.jsx';
 import {GOTO_EVENT, HELP_TAB} from './help.js';
+import {introShown, introToggle} from './onboarding.js';
 import {INTRO_COPY, introDismissed, setIntroDismissed} from './intro.js';
+
+/** The tab the welcome box is showing on, or null. */
+export const WelcomeContext = createContext(null);
 
 function store() {
   try {
@@ -44,8 +48,9 @@ function withTerms(text) {
  */
 export function TabIntro({tab}) {
   const copy = INTRO_COPY[tab];
+  const welcomeTab = useContext(WelcomeContext);
   const [hidden, setHidden] = useState(() => introDismissed(store(), tab));
-  if (!copy) return null;
+  if (!copy || !introShown(welcomeTab, false)) return null;
   const set = (value) => {
     setHidden(value);
     setIntroDismissed(store(), tab, value);
@@ -53,7 +58,8 @@ export function TabIntro({tab}) {
   if (hidden) {
     return (
       <div className="intro-help">
-        <button type="button" title="What is this tab?" aria-label="What is this tab?" onClick={() => {
+        <span className="mut small">{tab}</span>
+        <button type="button" title={introToggle(true).label} aria-label={introToggle(true).label} onClick={() => {
           set(false);
         }}>?</button>
       </div>

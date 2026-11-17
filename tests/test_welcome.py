@@ -51,7 +51,7 @@ def test_show_welcome_link_in_nav():
     app = re.search(r"\nfunction App\(\) \{(.*?)\n\}\n", _jsx(), re.S).group(1)
     nav = re.search(r"<nav>(.*?)</nav>", app, re.S).group(1)
     assert "Show welcome" in nav
-    assert "shouldShowWelcome" in app and "dismissWelcome" in app
+    assert "initialWelcome" in app and "dismissWelcome" in app
 
 
 def test_phone_layout_stacks_without_horizontal_scroll():
