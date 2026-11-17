@@ -643,7 +643,7 @@ function Arbs() {
   const sizing = useSizing();
   const bank = useApi('/api/bankroll', 30000);
   const {data, refreshing} = useApiStatus(`/api/arbs?min_profit=${min}${sizingQuery(sizing, true)}${propsParam(props)}`);
-  const filters = {min, props, total: sizing.total};
+  const filters = {min, props, total: sizing.total > 0 ? sizing.total : ''};
   const setters = {min: setMin, props: setProps, total: sizing.setTotal};
   const chips = arbChips(filters);
   const track = async (row) => {
@@ -704,7 +704,7 @@ function Arbs() {
       {arbMinWarning(min) && <div className="bad">⚠ {arbMinWarning(min)}</div>}
       <ApiError data={data} />
       <RowExample tab="Arbitrage" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
-      <TableShell data={data} refreshing={refreshing} emptyText={arbsEmptyText(data, min)} columns={6}>
+      <TableShell data={data} refreshing={refreshing} emptyText={arbsEmptyText(data, min)} columns={5}>
         <table className="cards">
           <thead>
             <tr>
