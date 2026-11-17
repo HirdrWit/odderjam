@@ -15,6 +15,7 @@ DEFAULT_PROFILE = {
     "min_ev": 0.0,                           # percent; worst-case devig EV below this is fragile
     "max_skew_seconds": 20.0,                # book vs sharp update gap allowed for a live row
     "max_sharp_spread": 0.03,                # probability (0..1) gap allowed between sharps
+    "require_conservative": True,            # flag `fragile` rows (EV gone under the worst-case devig)
 }
 
 LABELS = {
@@ -50,7 +51,7 @@ def flags(ctx: dict, profile: dict) -> list[str]:
     ceiling = profile["prop_ev_ceiling"] if mk.is_prop(ctx["market"]) else profile["ev_ceiling"]
     if ctx["ev_pct"] > ceiling:
         out.append("too_good")
-    if ctx["worst_ev_pct"] < profile["min_ev"]:
+    if profile["require_conservative"] and ctx["worst_ev_pct"] < profile["min_ev"]:
         out.append("fragile")
     probs = ctx.get("sharp_probs", [])
     if len(probs) >= 2 and max(probs) - min(probs) > profile["max_sharp_spread"]:

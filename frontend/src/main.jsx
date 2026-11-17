@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 
 import './style.css';
@@ -43,6 +43,7 @@ import {
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useBettable, useStored} from './hooks.jsx';
+import {BETTABLE_DEFAULTS, BETTABLE_FIELDS, bettableQuery, bettableReset, validateBettable} from './thresholds.js';
 import {badgesFor, bettableChip, filterBettable, hiddenSummary, showAnyway} from './bettable.js';
 import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
@@ -403,6 +404,38 @@ function Bankroll({bank, onSetStart}) {
   );
 }
 
+/** "Bettable mode" section of the Model settings panel. */
+function BettableSettings({values, onChange}) {
+  const errors = validateBettable(values);
+  return (
+    <fieldset className="bar wrap bettable-settings">
+      <legend>Bettable mode</legend>
+      {BETTABLE_FIELDS.map((f) => (
+        <div key={f.key}>
+          <label>
+            {f.label}{' '}
+            {f.key === 'requireConservative' ? (
+              <input type="checkbox" checked={values.requireConservative !== false} onChange={(e) => {
+                onChange({...values, requireConservative: e.target.checked});
+              }} />
+            ) : (
+              <input className="mini" type="number" step={f.step} value={values[f.key]} aria-invalid={Boolean(errors[f.key])}
+                onChange={(e) => {
+                  onChange({...values, [f.key]: e.target.value});
+                }} />
+            )}
+          </label>
+          {errors[f.key] && <span className="bad small" role="alert"> {errors[f.key]}</span>}
+          <div className="mut small">{f.help}</div>
+        </div>
+      ))}
+      <button type="button" onClick={() => {
+        onChange(bettableReset());
+      }}>Reset to defaults</button>
+    </fieldset>
+  );
+}
+
 function SharpWeights({cfg, weights, maxHold, canReset, onWeight, onMaxHold, onReset}) {
   return (
     <div className="bar wrap">
@@ -554,12 +587,15 @@ function PositiveEv() {
   const setWeight = (sharpBook, value) => {
     setWeights({...sharpWeights, [sharpBook]: value});
   };
+  const [thresholds, setThresholds] = useStored('evBettableThresholds', BETTABLE_DEFAULTS);
+  const lastValid = useRef(BETTABLE_DEFAULTS);
+  if (Object.keys(validateBettable(thresholds)).length === 0) lastValid.current = thresholds;
   const sharpSpec = sharpWeights ?
       Object.entries(sharpWeights).filter(([, v]) => v > 0).map(([b, v]) => `${b}:${v}`).join(',') :
       null;
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}` +
-      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}`;
+      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${bettableQuery(thresholds, lastValid.current)}`;
   const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}`);
   const error = evError || cfgError;
   const retry = () => {
@@ -635,6 +671,7 @@ function PositiveEv() {
                 setMaxHold(null);
               }} />
           )}
+          <BettableSettings values={thresholds} onChange={setThresholds} />
         </div>
       )}
       {panel === 'staking' && (

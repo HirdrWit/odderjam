@@ -106,7 +106,8 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
                 ev_ceiling: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 prop_ev_ceiling: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 max_skew_seconds: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
-                max_sharp_spread: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None):
+                max_sharp_spread: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
+                require_conservative: bool | None = None):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
     more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price.
     `f` (query params and/or a saved `preset`) filters sports, books, markets, odds, start time and min EV."""
@@ -118,7 +119,8 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
     profile = {k: v for k, v in {"odds_min": bettable_odds_min, "odds_max": bettable_odds_max,
                                  "ev_ceiling": ev_ceiling, "prop_ev_ceiling": prop_ev_ceiling,
                                  "max_skew_seconds": max_skew_seconds,
-                                 "max_sharp_spread": max_sharp_spread}.items() if v is not None}
+                                 "max_sharp_spread": max_sharp_spread,
+                                 "require_conservative": require_conservative}.items() if v is not None}
     if err := bettable.profile_error({**bettable.DEFAULT_PROFILE, **profile}):
         raise HTTPException(422, err)
     bankroll = max(bets.bankroll_info()["current"], 0.0)
