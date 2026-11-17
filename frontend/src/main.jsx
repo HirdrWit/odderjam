@@ -31,6 +31,7 @@ import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useStored} from './hooks.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {ageText, isProp} from './odds.js';
+import {rowFreshness, showsStrip, stripState} from './freshness.js';
 import {dismissWelcome, shouldShowWelcome} from './welcome.js';
 
 // Field names such as `age_seconds` and `ev_pct` come straight from the
@@ -54,24 +55,16 @@ function notifyDataChanged() {
   window.dispatchEvent(new Event('data-changed'));
 }
 
-/** Formats a number of seconds as a short "time ago" string. */
-function formatAge(seconds) {
-  if (seconds == null) return 'never';
-  if (seconds < 90) return `${Math.round(seconds)}s ago`;
-  if (seconds < 5400) return `${Math.round(seconds / 60)}m ago`;
-  return `${(seconds / 3600).toFixed(1)}h ago`;
-}
-
 /** Formats a number to `digits` decimals; "—" when missing. */
 function formatNumber(value, digits = 0) {
   return value == null ? '—' : value.toFixed(digits);
 }
 
 /**
- * Live-mode toggle and credit budget (GET/POST /api/live). While live mode is
+ * Live-mode state and credit budget (GET/POST /api/live). While live mode is
  * on, refetches the tables every refresh interval.
  */
-function LiveBox() {
+function useLive() {
   const [status, setStatus] = useState(null);
   // Bumped on a rejected save to remount the inputs with the unchanged settings.
   const [saves, setSaves] = useState(0);
@@ -107,6 +100,26 @@ function LiveBox() {
       load();
     }
   };
+  return {status, save, saves};
+}
+
+/** Live mode checkbox, shown in the freshness strip. */
+function LiveToggle({live}) {
+  const {status, save} = live;
+  if (!status) return null;
+  return (
+    <label className="chk">
+      <input type="checkbox" checked={status.enabled} onChange={(e) => {
+        save({enabled: e.target.checked});
+      }} /> Live
+      {status.live_events > 0 && <span className="mut small">({status.live_events} live)</span>}
+    </label>
+  );
+}
+
+/** Live-mode budget fields, shown in the settings area. */
+function LiveSettings({live}) {
+  const {status, save, saves} = live;
   const field = (key, label, min) => (
     <label className="fld">{label}
       <input key={`${key}-${status[key]}-${saves}`} type="number" min={min} defaultValue={status[key]}
@@ -117,43 +130,38 @@ function LiveBox() {
         }} />
     </label>
   );
-  if (!status) return null;
+  if (!status?.enabled) return null;
   return (
     <div className="livebox">
-      <label className="chk">
-        <input type="checkbox" checked={status.enabled} onChange={(e) => {
-          save({enabled: e.target.checked});
-        }} /> Live mode
-        {status.live_events > 0 && <span className="mut small">({status.live_events} live)</span>}
-      </label>
-      {status.enabled && (
-        <>
-          {field('credits_per_hour', 'Credits/hour cap', 0)}
-          {field('interval_seconds', 'Refresh every (s)', 5)}
-          {field('max_price_age', 'Max price age (s)', 1)}
-          <div className="mut small">
-            burn {formatNumber(status.planned_rate)}/h · used {formatNumber(status.used_last_hour)} last hour
-            {status.projected_hours != null && ` · ~${formatNumber(status.projected_hours, 1)}h left`}
-          </div>
-        </>
-      )}
+      {field('credits_per_hour', 'Credits/hour cap', 0)}
+      {field('interval_seconds', 'Refresh every (s)', 5)}
+      {field('max_price_age', 'Max price age (s)', 1)}
+      <div className="mut small">
+        burn {formatNumber(status.planned_rate)}/h · used {formatNumber(status.used_last_hour)} last hour
+        {status.projected_hours != null && ` · ~${formatNumber(status.projected_hours, 1)}h left`}
+      </div>
     </div>
   );
 }
 
 /** Live badge and price age shown next to the event name in the tool tables. */
 function LiveTag({row}) {
+  const fresh = rowFreshness(row);
   return (
     <>
       {row.live && <span className="badge live">LIVE</span>}{' '}
-      <span className="mut small">{ageText(row.price_age_seconds)}</span>
+      <span className={`age-chip ${fresh.className}`.trim()} aria-label={fresh.label} title={fresh.label}>
+        {ageText(row.price_age_seconds)}
+      </span>
     </>
   );
 }
 
-function RefreshBox() {
+/** Freshness strip above every price tab: data age, Refresh, Live toggle, and a settings area. */
+function FreshnessStrip() {
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
+  const live = useLive();
   useEffect(() => {
     const load = () => {
       fetch('/api/cache').then((r) => r.json()).then((d) => {
@@ -179,23 +187,33 @@ function RefreshBox() {
   };
   if (!info) return null;
   const propCount = info.prop_markets?.length ?? 0;
+  const state = stripState(info, !!live.status?.enabled);
   return (
-    <div className="refresh">
-      <div className="mut">
-        {info.live ? `Live odds · updated ${formatAge(info.age_seconds)}` : 'Mock data'}
+    <div className={`fresh-strip${state.stale ? ' stale' : ''}`} role="status">
+      <div className="fresh-main">
+        <span className="fresh-text">
+          {state.stale && <b>Stale · </b>}{state.text}
+        </span>
+        {info.live && (
+          <button onClick={refresh} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
+        )}
+        <LiveToggle live={live} />
+        <details className="settings">
+          <summary>Settings</summary>
+          <div className="settings-body">
+            {info.remaining != null && <div className="mut">API credits left: {info.remaining}</div>}
+            {info.live && <div className="mut small">Each refresh spends API credits</div>}
+            {info.live && propCount > 0 && (
+              <div className="bad small">
+                Player props on ({propCount} markets): each refresh costs about {propCount * 2} more
+                credits per game
+              </div>
+            )}
+            <LiveSettings live={live} />
+            <AlertWatcher />
+          </div>
+        </details>
       </div>
-      {info.remaining != null && <div className="mut">API credits left: {info.remaining}</div>}
-      {info.live && (
-        <button onClick={refresh} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh odds'}</button>
-      )}
-      {info.live && <div className="mut small">Each refresh spends API credits</div>}
-      {info.live && propCount > 0 && (
-        <div className="bad small">
-          Player props on ({propCount} markets): each refresh costs about {propCount * 2} more
-          credits per game
-        </div>
-      )}
-      <LiveBox />
     </div>
   );
 }
@@ -1426,11 +1444,10 @@ function App() {
         <button className="link" onClick={() => {
           setWelcome(true);
         }}>Show welcome</button>
-        <RefreshBox />
-        <AlertWatcher />
       </nav>
       <div className="content">
         {welcome && <Welcome onJump={go} onClose={closeWelcome} />}
+        {showsStrip(tab) && <FreshnessStrip />}
         <main><Page welcome={welcome} /></main>
       </div>
       <Toaster />

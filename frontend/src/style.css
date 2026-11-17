@@ -171,3 +171,15 @@ th button.sort:focus-visible, .bar button.sort:focus-visible { outline: 2px soli
 th button.sort .arrow { display: inline-block; min-width: 1em; color: var(--text-muted); }
 button.sort[aria-pressed="true"] { border-color: var(--accent); }
 th.num button.sort { text-align: right; }
+
+/* Freshness strip (odderjam-95) */
+.fresh-strip { position: sticky; top: 0; z-index: 5; background: var(--surface-1); border-bottom: 1px solid var(--divider); padding: var(--sp-2) var(--sp-3); }
+.fresh-strip.stale { background: var(--caution); color: var(--on-accent); border-bottom-color: var(--warning); }
+.fresh-main { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.fresh-text { font-weight: 600; }
+.fresh-strip button { background: var(--accent-fill); }
+.fresh-strip .settings { margin-left: auto; }
+.fresh-strip .settings-body { display: flex; flex-direction: column; gap: 6px; padding-top: var(--sp-2); }
+.age-chip { font-size: var(--fs-1); color: var(--text-muted); }
+.age-chip.stale { background: var(--caution); color: var(--on-accent); font-weight: 700; padding: 1px 6px; border-radius: 8px; }
+tr:has(.age-chip.stale) > td { opacity: .6; }
