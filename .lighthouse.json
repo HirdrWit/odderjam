@@ -1,0 +1,8 @@
+{
+  "test": ["bash", "-c", ".venv/bin/pytest -q && cd frontend && node --test src/*.test.js"],
+  "build": ["bash", "-c", "cd frontend && node_modules/.bin/vite build"],
+  "serve": ["bash", "-c", "exec .venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port {port}"],
+  "static_dir": "frontend/dist",
+  "ui_routes": ["#/odds", "#/ev", "#/parlay", "#/arbitrage", "#/lowhold", "#/middles", "#/sharp", "#/promos", "#/pickem", "#/calculator", "#/tracker", "#/alerts", "#/help"],
+  "share": ["frontend/node_modules", ".venv"]
+}
