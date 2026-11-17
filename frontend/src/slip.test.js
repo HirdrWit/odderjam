@@ -4,7 +4,7 @@ import {test} from 'node:test';
 
 import {
   INDEPENDENT_NOTE, devigLabel, restoredNote, slipLegPriceText, tinyStakeNote,
-  slipLeg, slipPriceText,
+  slipLeg, slipPriceText, legFairProbs, MISSING_LEG_TEXT,
 } from './slip.js';
 
 const EVENT = {id: 'e1', home: 'Boston Celtics', away: 'Orlando Magic', sport: 'NBA'};
@@ -77,4 +77,19 @@ test('devigLabel and INDEPENDENT_NOTE are plain language', () => {
   assert.match(devigLabel('multiplicative'), /\+EV tab/);
   assert.match(INDEPENDENT_NOTE, /independent/i);
   assert.match(INDEPENDENT_NOTE, /one leg/i);
+});
+
+test('MISSING_LEG_TEXT is plain language with no ids', () => {
+  assert.equal(MISSING_LEG_TEXT, 'No longer offered (game started or line pulled)');
+});
+
+test('legFairProbs lines priced legs up with slip rows and marks missing ones', () => {
+  const legs = [{fair_prob: 0.5}, {fair_prob: null}];
+  const out = legFairProbs(3, [{index: 1}], legs);
+  assert.deepEqual(out, [{missing: false, fair: 0.5}, {missing: true, fair: null}, {missing: false, fair: null}]);
+});
+
+test('legFairProbs with no result marks nothing missing', () => {
+  assert.deepEqual(legFairProbs(2, undefined, undefined),
+      [{missing: false, fair: undefined}, {missing: false, fair: undefined}]);
 });

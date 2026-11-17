@@ -71,7 +71,6 @@ def test_same_game_legs_blocked_at_books_without_sgp(client):
 
 def test_parlay_rejects_bad_legs(client):
     assert client.post("/api/parlay", json={"legs": [leg("g1", "moneyline", "A")]}).status_code == 422
-    assert client.post("/api/parlay", json={"legs": [leg("g1", "moneyline", "A"), leg("zz", "moneyline", "A")]}).status_code == 404
     same_market = {"legs": [leg("g1", "moneyline", "A"), leg("g1", "moneyline", "B")]}
     assert client.post("/api/parlay", json=same_market).status_code == 400
 
@@ -115,3 +114,35 @@ def test_same_market_error_names_spread_market(client):
 ])
 def test_market_label(market, label):
     assert mk.market_label(market) == label
+
+
+def test_one_missing_leg_of_three_is_listed_and_rest_priced(client):
+    r = client.post("/api/parlay", json={"legs": [
+        leg("g1", "moneyline", "A"), leg("zz", "moneyline", "A"), leg("g2", "moneyline", "C")]})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["missing"] == [{"index": 1, "event_id": "zz", "market": "moneyline", "name": "A", "point": None}]
+    assert [l["name"] for l in d["legs"]] == ["A", "C"]
+    assert [b["book"] for b in d["books"]] == ["Novig", "DraftKings"]
+    assert d["fair_prob"] == pytest.approx(0.25)
+
+
+def test_all_legs_missing_returns_empty_result(client):
+    r = client.post("/api/parlay", json={"legs": [leg("x", "moneyline", "A"), leg("y", "moneyline", "B")]})
+    assert r.status_code == 200
+    d = r.json()
+    assert [m["index"] for m in d["missing"]] == [0, 1]
+    assert d["legs"] == [] and d["books"] == []
+    assert d["fair_prob"] is None and d["fair_odds"] is None
+
+
+def test_only_one_priceable_leg_left_has_no_comparison(client):
+    d = client.post("/api/parlay", json={"legs": [leg("g1", "moneyline", "A"), leg("zz", "moneyline", "A")]}).json()
+    assert [m["index"] for m in d["missing"]] == [1]
+    assert d["books"] == [] and d["fair_prob"] is None
+    assert len(d["legs"]) == 1
+
+
+def test_no_missing_legs_gives_empty_list(client):
+    d = client.post("/api/parlay", json={"legs": [leg("g1", "moneyline", "A"), leg("g2", "moneyline", "C")]}).json()
+    assert d["missing"] == []

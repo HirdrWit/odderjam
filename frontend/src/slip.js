@@ -79,3 +79,24 @@ export function devigLabel(method) {
 /** @const {string} */
 export const INDEPENDENT_NOTE =
     'Independent means one leg winning does not change the chance of another, so the chances multiply.';
+
+/** Shown on a slip leg the odds feed can no longer price. */
+export const MISSING_LEG_TEXT = 'No longer offered (game started or line pulled)';
+
+/**
+ * Per slip row: whether the backend could not price it, and its fair probability.
+ * The backend's `legs` holds only the priced legs, in slip order; `missing` holds
+ * the slip indexes it skipped.
+ * @param {number} slipLength
+ * @param {?Array<{index: number}>=} missing
+ * @param {?Array<{fair_prob: ?number}>=} legs
+ * @return {!Array<{missing: boolean, fair: (?number|undefined)}>}
+ */
+export function legFairProbs(slipLength, missing, legs) {
+  const gone = new Set((missing || []).map((m) => m.index));
+  let next = 0;
+  return Array.from({length: slipLength}, (_, i) => {
+    if (gone.has(i)) return {missing: true, fair: null};
+    return {missing: false, fair: legs?.[next++]?.fair_prob};
+  });
+}

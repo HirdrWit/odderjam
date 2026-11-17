@@ -228,13 +228,24 @@ def price_parlay(p: ParlayIn):
         raise HTTPException(400, f"unknown devig method {p.method!r}")
     events = {e["id"]: e for e in get_snapshot()}
     legs = []
-    for leg in p.legs:
+    missing = []
+    for i, leg in enumerate(p.legs):
         e = events.get(leg.event_id)
         outcome = e and next((o for o in e["markets"].get(leg.market, [])
                               if o["name"] == leg.name and o["point"] == leg.point), None)
         if not outcome:
-            raise HTTPException(404, f"leg not found: {leg.event_id} {leg.market} {leg.name} {leg.point}")
+            missing.append({"index": i, "event_id": leg.event_id, "market": leg.market,
+                            "name": leg.name, "point": leg.point})
+            continue
         legs.append((leg, e, outcome))
+
+    if len(legs) < 2:  # nothing to compare; the caller marks the missing legs
+        return {
+            "legs": [{"event_id": leg.event_id, "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
+                      "market": leg.market, "name": leg.name, "point": leg.point, "pick": mk.label(o),
+                      "fair_prob": _fair_prob(e, leg.market, o, p.method)} for leg, e, o in legs],
+            "missing": missing, "same_game": False, "fair_prob": None, "fair_odds": None, "books": [],
+        }
 
     seen: dict[str, dict[str, dict]] = {}
     for leg, e, o in legs:
@@ -267,6 +278,7 @@ def price_parlay(p: ParlayIn):
         "legs": [{"event_id": leg.event_id, "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
                   "market": leg.market, "name": leg.name, "point": leg.point, "pick": mk.label(o), "fair_prob": f}
                  for (leg, e, o), f in zip(legs, fair)],
+        "missing": missing,
         "same_game": same_game,
         "fair_prob": fair_prob,
         "fair_odds": odds.prob_to_american(fair_prob) if fair_prob else None,

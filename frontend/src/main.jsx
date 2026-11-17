@@ -29,7 +29,9 @@ import {
   lowHoldEmptyText, middlesEmptyText, sharpEmptyText,
 } from './empty.js';
 import {legKey, useSlip} from './hooks.js';
-import {INDEPENDENT_NOTE, devigLabel, restoredNote, slipLegPriceText, tinyStakeNote} from './slip.js';
+import {
+  INDEPENDENT_NOTE, MISSING_LEG_TEXT, devigLabel, legFairProbs, restoredNote, slipLegPriceText, tinyStakeNote,
+} from './slip.js';
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
@@ -860,6 +862,8 @@ function Parlay() {
       window.removeEventListener('data-changed', load);
     };
   }, [body]);
+  const legStates = legFairProbs(slip.length, result?.missing, result?.legs);
+  const priceable = result ? result.legs.length : slip.length;
   const track = async (book) => {
     const picks = result.legs.map((l) => l.pick);
     await fetch('/api/bets', {
@@ -900,7 +904,7 @@ function Parlay() {
         </div>
       )}
       {slip.map((l, i) => {
-        const fair = result?.legs[i]?.fair_prob;
+        const {missing, fair} = legStates[i];
         return (
           <div className="card calc" key={legKey(l)}>
             <button className="x" onClick={() => {
@@ -908,18 +912,22 @@ function Parlay() {
             }}>✕</button> <b>{l.pick}</b>{' '}
             <span className={l.odds == null || !l.book ? 'bad' : ''}>{slipLegPriceText(l)}</span>{' '}
             <span className="mut">{marketName(l.market)} · {l.event}</span>
+            {missing && <span className="bad">{MISSING_LEG_TEXT}</span>}
             {fair != null && <span className="mut">fair {(fair * 100).toFixed(1)}%</span>}
-            {result && fair == null && (
+            {result && !missing && fair == null && (
               <span className="mut">no sharp price for this line — EV unknown</span>
             )}
           </div>
         );
       })}
       {slip.length === 1 && <div className="mut">Add at least one more leg.</div>}
+      {result && result.missing.length > 0 && priceable < 2 && (
+        <div className="mut">Remove the unavailable legs and add more to compare books.</div>
+      )}
       {error && (
         <div className="bad">{typeof error === 'string' ? error : 'Could not price this parlay'}</div>
       )}
-      {result && (
+      {result && priceable >= 2 && (
         <>
           <div className="bar">
             Fair <b>{result.fair_odds == null ? '—' : formatOdds(result.fair_odds)}</b>
