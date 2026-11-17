@@ -15,6 +15,7 @@ import httpx
 
 from ..engine.exchange import apply_commission, fee_for
 from ..engine.markets import is_prop
+from .. import providers
 from . import ProviderError
 from .books import REFERENCE_ONLY, us_name
 
@@ -152,6 +153,8 @@ def snapshot(live_only: bool = False, now: float | None = None) -> list[dict]:
         events.extend(sport_events)
     if failures and not events:
         raise ProviderError(f"every sport failed ({failures[0]})", status=failures[0])
+    if failures:
+        providers._partial_failure = failures[0]
     return events
 
 

@@ -27,6 +27,7 @@ class ProviderError(RuntimeError):
 
 
 _provider_error: dict | None = None
+_partial_failure: int | None = None  # a sport failed in the latest fetch that otherwise returned data
 FAIL_BACKOFF_SECONDS = 60.0
 
 
@@ -272,6 +273,8 @@ def _pregame(force: bool) -> list[dict]:
     if (_provider_error and not force and time.time() - _provider_error["at"] < FAIL_BACKOFF_SECONDS):
         # The provider failed a moment ago: don't hit it again on every poll.
         return json.loads(CACHE.read_text()) if CACHE.exists() else []
+    global _partial_failure
+    _partial_failure = None
     try:
         data = _fetch()
     except Exception as e:
@@ -280,7 +283,10 @@ def _pregame(force: bool) -> list[dict]:
             record_provider_error(getattr(e, "status", None))
         return json.loads(CACHE.read_text()) if CACHE.exists() else []  # stale data beats an error page
     if data:
-        clear_provider_error()
+        if _partial_failure is not None:
+            record_provider_error(_partial_failure)  # some sports came back, one did not: say so
+        else:
+            clear_provider_error()
         _write_atomic(CACHE, json.dumps(data))
         _store(data)
         _fetched(data)

@@ -186,3 +186,20 @@ def test_add_alert_survives_evaluation_failure(monkeypatch):
     r = client.post("/api/alerts/rules", json={"kind": "ev", "min_value": 3})
     assert r.status_code == 200, r.text
     assert len(client.get("/api/alerts/rules").json()) == 1
+
+
+def test_partial_provider_failure_is_reported(api, monkeypatch):
+    calls = []
+
+    def mixed(url, params=None, **k):
+        calls.append(url)
+        if len(calls) == 1:
+            return Resp(429)
+        return Resp(200, [{"id": "e"}])
+    monkeypatch.setattr(httpx, "get", mixed)
+    monkeypatch.setattr(theoddsapi, "parse_event", lambda e, s: {"id": e["id"], "markets": {}})
+    monkeypatch.setattr(theoddsapi, "SPORTS", {"NBA": "a", "NFL": "b"})
+    monkeypatch.setattr(theoddsapi, "props_for", lambda s: [])
+    monkeypatch.setattr(providers, "_fetch", theoddsapi.snapshot)
+    providers.get_snapshot(force=True)
+    assert providers.cache_info()["provider_error"]["status"] == 429

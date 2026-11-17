@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 
 import {loadState} from './api.js';
 
@@ -56,6 +56,7 @@ export function useApiStatus(url, every = 60000) {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const goodUrl = useRef(null);
   useEffect(() => {
     // No url (an invalid form, say): drop the previous result so old numbers never stay on screen.
     if (!url) {
@@ -69,9 +70,12 @@ export function useApiStatus(url, every = 60000) {
       return loadState(url).then((s) => {
         if (!live) return;
         if (s.error) {
-          // Keep the last good data on a failed refresh; the error shows only when there is none.
+          // Keep the last good data on a failed refresh of the same url. After a url change, drop it:
+          // old rows must not sit under new inputs (a new stake or filter) as if they matched.
+          if (goodUrl.current !== url) setData(null);
           setError(s.error);
         } else {
+          goodUrl.current = url;
           setData(s.data);
           setError(null);
         }
