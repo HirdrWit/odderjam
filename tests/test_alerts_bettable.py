@@ -48,8 +48,13 @@ def test_bettable_rule_skips_flagged_rows(flagged):
 
 
 def test_bettable_rule_still_fires_for_unflagged_rows():
+    # +105 against a -110/-110 sharp line is a ~2.5% edge: real, and under every bettable threshold.
+    # (The +150 row in event() is now flagged too_good by the scan, so it cannot stand in for "unflagged".)
     add_rule(1)
-    assert len(alerts.evaluate([event()])) == 1
+    ev = event()
+    ev["markets"]["moneyline"][0]["prices"]["DraftKings"] = 105
+    (o,) = alerts.evaluate([ev])
+    assert o["data"].get("flags", []) == []
 
 
 def test_rule_with_option_off_fires_and_records_flags(flagged):

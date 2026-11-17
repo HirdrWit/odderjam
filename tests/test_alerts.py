@@ -144,7 +144,7 @@ def test_fetch_listener_runs_only_on_live_fetch(tmp_path, monkeypatch):
 
 
 def test_api_rules_and_feed(client, snapshot):
-    r = client.post("/api/alerts/rules", json={"kind": "ev", "min_value": 1}).json()
+    r = client.post("/api/alerts/rules", json={"kind": "ev", "min_value": 1, "bettable": False}).json()
     assert r["name"].startswith("+EV")  # evaluated against data on hand after the response (background task)
     feed = client.get("/api/alerts").json()
     assert len(feed["items"]) == 1
