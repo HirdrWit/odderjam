@@ -6,9 +6,10 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import AfterValidator, BaseModel, Field, StringConstraints, ValidationError
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints, ValidationError, field_validator
 
 from .. import history, providers
 from ..db import conn
@@ -56,6 +57,16 @@ class BetIn(BaseModel):
     point: float | None = None
     # Set by the +EV "Track" button so the closing line can be captured automatically.
     event_start: str | None = None
+
+    @field_validator("event_start")
+    @classmethod
+    def _event_start_parses(cls, v):
+        if v and v.strip():
+            try:
+                history.ts(v)
+            except ValueError:
+                raise ValueError("must be a date and time like 2026-11-06T18:00:00Z") from None
+        return v
     closing_sharp_odds: AmericanOdds | None = None
     is_bonus: bool = False  # bonus bet / free bet: stake is not cash and is not returned
 
@@ -122,7 +133,7 @@ def values(b: BetIn) -> tuple:
         if d["point"] is None:
             d["point"] = parsed
     if d["event_start"]:
-        d["event_start"] = history.ts(d["event_start"])
+        d["event_start"] = history.ts(d["event_start"])  # BetIn already validated it parses
     return tuple(d[k] for k in FIELDS)
 
 
@@ -296,6 +307,10 @@ def auto_settle():
             return {"checked": 0, "settled": []}
         try:
             games = providers.get_scores(sports)
+        except providers.ProviderError as e:
+            raise HTTPException(502, f"Couldn't reach the odds provider ({providers.describe_failure(e.status)}).")
+        except httpx.HTTPError:
+            raise HTTPException(502, "Couldn't reach the odds provider (offline or timed out).")
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         settled = []

@@ -145,8 +145,9 @@ def test_fetch_listener_runs_only_on_live_fetch(tmp_path, monkeypatch):
 
 def test_api_rules_and_feed(client, snapshot):
     r = client.post("/api/alerts/rules", json={"kind": "ev", "min_value": 1}).json()
-    assert r["name"].startswith("+EV") and r["new_alerts"] == 1  # checked against data on hand
+    assert r["name"].startswith("+EV")  # evaluated against data on hand after the response (background task)
     feed = client.get("/api/alerts").json()
+    assert len(feed["items"]) == 1
     assert feed["latest_id"] == feed["items"][0]["id"] and feed["discord"] is False
     assert client.get("/api/alerts", params={"after": feed["latest_id"]}).json()["items"] == []
     assert [x["id"] for x in client.get("/api/alerts/rules").json()] == [r["id"]]

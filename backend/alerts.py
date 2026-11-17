@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from . import db, providers, scan
@@ -124,6 +124,13 @@ def evaluate(events: list[dict], rule_id: int | None = None) -> list[dict]:
     return new
 
 
+def _evaluate_rule_safely(rule_id: int) -> None:
+    try:
+        evaluate(providers.peek_snapshot(), rule_id=rule_id)
+    except Exception:
+        log.exception("alert evaluation failed for rule %s", rule_id)
+
+
 def _evaluate_safely(events: list[dict]) -> None:
     try:
         evaluate(events)
@@ -204,7 +211,7 @@ def list_rules():
 
 
 @router.post("/rules")
-def add_rule(r: RuleIn):
+def add_rule(r: RuleIn, background: BackgroundTasks):
     name = r.name.strip() or f'{"+EV" if r.kind == "ev" else "Arb"} ≥ {r.min_value:g}%' + (f" @ {r.book}" if r.book else "")
     with conn() as c:
         cur = c.execute("INSERT INTO alert_rules (name,kind,min_value,book,market,sport,created_at) "
@@ -212,8 +219,9 @@ def add_rule(r: RuleIn):
                         (name, r.kind, r.min_value, r.book, r.market, r.sport,
                          datetime.now(timezone.utc).isoformat()))
         rule = dict(c.execute("SELECT * FROM alert_rules WHERE id=?", (cur.lastrowid,)).fetchone())
-    # Check the new rule against data already on hand (never fetches).
-    rule["new_alerts"] = len(evaluate(providers.peek_snapshot(), rule_id=rule["id"]))
+    # Check the new rule against data already on hand (never fetches), after the response is sent, so a
+    # failure or a slow webhook can't turn a saved rule into an error (and a duplicate on retry).
+    background.add_task(_evaluate_rule_safely, rule["id"])
     return rule
 
 

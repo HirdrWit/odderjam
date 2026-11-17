@@ -89,11 +89,15 @@ def sharp_settings():
 
 # Numeric query params: finite, and positive unless zero has a meaning (round_to=0 rounds to cents).
 PositiveFloat = Annotated[float, Query(gt=0, allow_inf_nan=False)]
+Kelly = Annotated[float, Query(gt=0, le=1, allow_inf_nan=False)]
+Amount = Annotated[float, Query(gt=0, le=1_000_000, allow_inf_nan=False)]
+Percent = Annotated[float, Query(ge=0, le=1000, allow_inf_nan=False)]
+NonNegative = Annotated[float, Query(ge=0, allow_inf_nan=False)]
 RoundTo = Annotated[float, Query(ge=0, allow_inf_nan=False)]
 
 
 @app.get("/api/ev")
-def positive_ev(method: str = "multiplicative", kelly: PositiveFloat = 0.25, sharps: str | None = None,
+def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str | None = None,
                 max_hold: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 round_to: RoundTo = 1.0, max_side: PositiveFloat | None = None,
                 props: bool = True, f: FilterSet = Depends(flt.query_filters)):
@@ -145,9 +149,10 @@ def _convert(kind: PromoKind, amount: float, promo_odds: float, hedge_odds: floa
 
 
 @app.get("/api/promo/{kind}")
-def promo_conversions(kind: PromoKind, book: str, amount: float = 100.0, boost_pct: float = 0.0,
-                      max_boost: float | None = None, refund_value: float = 0.7, market: str | None = None,
-                      limit: int = 50):
+def promo_conversions(kind: PromoKind, book: str, amount: Amount = 100.0, boost_pct: Percent = 0.0,
+                      max_boost: Annotated[float | None, Query(ge=0, le=1_000_000, allow_inf_nan=False)] = None,
+                      refund_value: Annotated[float, Query(ge=0, le=1, allow_inf_nan=False)] = 0.7,
+                      market: str | None = None, limit: Annotated[int, Query(ge=1, le=1000)] = 50):
     """Rank two-sided bets by how well they convert a promo at `book` into locked cash.
 
     The promo goes on one side at `book`; the other side is hedged with cash at the best other US book.
@@ -457,13 +462,13 @@ def _middle_sides(key: str, outcomes: list[dict], home: str) -> tuple[dict, dict
     return over, under
 
 
-def _center(key: str, outcomes: list[dict], home: str) -> float:
+def _center(key: str, outcomes: list[dict], home: str) -> float | None:
     """Expected result: the sharp book's line if it has one, else the median line across books."""
     sign = -1 if key == "spreads" else 1  # home point -3.5 means an expected home margin of +3.5
     priced = [(sign * mk.line_key(key, o, home), o) for o in outcomes if o.get("point") is not None]
     lines = [ln for ln, _ in priced]
     sharp = [ln for ln, o in priced if SHARP in o["prices"]]
-    return median(sharp or lines)
+    return median(sharp or lines) if lines else None
 
 
 def _unsuspect_outcomes(key: str, e: dict) -> list[dict]:
@@ -475,8 +480,8 @@ def _unsuspect_outcomes(key: str, e: dict) -> list[dict]:
 
 @app.get("/api/middles")
 def middles(
-    min_window: float = 0.0,
-    max_cost: float | None = None,
+    min_window: NonNegative = 0.0,
+    max_cost: Annotated[float | None, Query(allow_inf_nan=False)] = None,
     market: str | None = None,
     stake: float = Query(100.0, gt=0, allow_inf_nan=False),
     min_ev: float | None = Query(None, allow_inf_nan=False),
@@ -490,8 +495,11 @@ def middles(
             if (market and key != market) or not e["markets"].get(key):
                 continue
             outcomes = _unsuspect_outcomes(key, e)
+            center = _center(key, outcomes, e["home"])
+            if center is None:
+                continue  # every line was stripped as suspect: skip this market, not the whole endpoint
             over, under = _middle_sides(key, outcomes, e["home"])
-            pmf = mid.model_pmf(e["sport"], key, _center(key, outcomes, e["home"]))
+            pmf = mid.model_pmf(e["sport"], key, center)
             for la, overs in over.items():
                 for lb, unders in under.items():
                     if lb - la <= 0 or lb - la < min_window or not mid.can_hit(la, lb):

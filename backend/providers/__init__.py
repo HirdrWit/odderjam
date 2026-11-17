@@ -26,12 +26,30 @@ class ProviderError(RuntimeError):
         self.status = status
 
 
+_provider_error: dict | None = None
+FAIL_BACKOFF_SECONDS = 60.0
+
+
 def record_provider_error(status: int | None) -> None:
-    raise NotImplementedError
+    """Remember the latest provider failure (HTTP status, or None for a network error) for the freshness strip."""
+    global _provider_error
+    _provider_error = {"status": status, "at": time.time()}
 
 
 def clear_provider_error() -> None:
-    raise NotImplementedError
+    global _provider_error
+    _provider_error = None
+
+
+def describe_failure(status: int | None) -> str:
+    """Plain-English reason for a provider failure."""
+    if status in (401, 403):
+        return "the API key is invalid or out of credits"
+    if status == 429:
+        return "rate limited"
+    if status is None:
+        return "offline or timed out"
+    return f"it answered with an error ({status})"
 
 
 log = logging.getLogger(__name__)
@@ -176,8 +194,12 @@ def cache_info() -> dict:
     info = {"live": _live(), "age_seconds": None, "ttl_seconds": _ttl(), "prop_markets": PROP_MARKETS}
     if CACHE.exists():
         info["age_seconds"] = time.time() - CACHE.stat().st_mtime
-    if meta.exists():
+    try:
         info.update(json.loads(meta.read_text()))
+    except (OSError, ValueError):
+        pass  # missing or truncated meta file: show no credit figures rather than failing
+    if _provider_error:
+        info["provider_error"] = dict(_provider_error)
     return info
 
 
@@ -235,19 +257,31 @@ def _refresh_live(now: float) -> None:
     LIVE_CACHE.write_text(json.dumps(data))
 
 
+def _write_atomic(path: Path, text: str) -> None:
+    """Write via a temp file and rename, so a reader never sees a truncated file."""
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
 def _pregame(force: bool) -> list[dict]:
     """Pre-game snapshot from the disk cache, refetched when older than the TTL. Caller holds _lock."""
     fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < _ttl()
     if fresh and not force:
         return json.loads(CACHE.read_text())
+    if (_provider_error and not force and time.time() - _provider_error["at"] < FAIL_BACKOFF_SECONDS):
+        # The provider failed a moment ago: don't hit it again on every poll.
+        return json.loads(CACHE.read_text()) if CACHE.exists() else []
     try:
         data = _fetch()
-    except Exception:
-        if CACHE.exists():  # keep serving stale data rather than failing
-            return json.loads(CACHE.read_text())
-        raise
+    except Exception as e:
+        log.warning("odds fetch failed: %s", e)
+        if _provider_error is None or time.time() - _provider_error["at"] >= FAIL_BACKOFF_SECONDS:
+            record_provider_error(getattr(e, "status", None))
+        return json.loads(CACHE.read_text()) if CACHE.exists() else []  # stale data beats an error page
     if data:
-        CACHE.write_text(json.dumps(data))
+        clear_provider_error()
+        _write_atomic(CACHE, json.dumps(data))
         _store(data)
         _fetched(data)
     elif CACHE.exists():

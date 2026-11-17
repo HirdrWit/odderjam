@@ -15,6 +15,7 @@ import httpx
 
 from ..engine.exchange import apply_commission, fee_for
 from ..engine.markets import is_prop
+from . import ProviderError
 from .books import REFERENCE_ONLY, us_name
 
 ALL = {"NBA": "basketball_nba", "NFL": "americanfootball_nfl", "MLB": "baseball_mlb", "NHL": "icehockey_nhl"}
@@ -103,12 +104,19 @@ def props_for(sport: str) -> list[str]:
     return [m for m in PROP_MARKETS if m in SPORT_PROPS.get(sport, set()) or m not in known]
 
 
+def _write_meta(r: httpx.Response) -> None:
+    """Save the credit headers atomically (a truncated file would break /api/cache)."""
+    if "x-requests-remaining" in r.headers:
+        tmp = META.with_name(META.name + ".tmp")
+        tmp.write_text(json.dumps({"remaining": r.headers["x-requests-remaining"],
+                                   "used": r.headers.get("x-requests-used")}))
+        tmp.replace(META)
+
+
 def _get(url: str, params: dict) -> httpx.Response:
     r = httpx.get(url, params={"apiKey": os.environ["ODDS_API_KEY"], "regions": REGIONS, "oddsFormat": "american",
                                **params}, timeout=20)
-    if "x-requests-remaining" in r.headers:
-        META.write_text(json.dumps({"remaining": r.headers["x-requests-remaining"],
-                                    "used": r.headers.get("x-requests-used")}))
+    _write_meta(r)
     return r
 
 
@@ -131,16 +139,19 @@ def snapshot(live_only: bool = False, now: float | None = None) -> list[dict]:
     if live_only:
         ts = time.time() if now is None else now
         params["commenceTimeTo"] = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    events = []
+    events, failures = [], []
     for sport, k in SPORTS.items():
         r = _get(f"{BASE}/{k}/odds", dict(params))
         if r.status_code != 200:
+            failures.append(r.status_code)
             continue
         sport_events = [parse_event(e, sport) for e in r.json()]
         if not live_only and (props := props_for(sport)):
             for e in sport_events:
                 _add_props(e, k, props)
         events.extend(sport_events)
+    if failures and not events:
+        raise ProviderError(f"every sport failed ({failures[0]})", status=failures[0])
     return events
 
 
@@ -158,10 +169,8 @@ def scores(sports: list[str], days_from: int = 3) -> list[dict]:
             continue
         r = httpx.get(f"https://api.the-odds-api.com/v4/sports/{k}/scores",
                       params={"apiKey": key, "daysFrom": days_from}, timeout=20)
-        if "x-requests-remaining" in r.headers:
-            META.write_text(json.dumps({"remaining": r.headers["x-requests-remaining"],
-                                        "used": r.headers.get("x-requests-used")}))
+        _write_meta(r)
         if r.status_code != 200:
-            continue
+            raise ProviderError(f"scores request failed ({r.status_code})", status=r.status_code)
         games.extend({**g, "sport": sport} for g in r.json())
     return games

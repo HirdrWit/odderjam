@@ -104,7 +104,7 @@ def test_promo_endpoint_uses_best_other_book(monkeypatch):
 
 def test_promo_endpoint_rejects_bad_input(client):
     assert client.get("/api/promo/bonus-bet", params={"book": "Pinnacle"}).status_code == 400
-    assert client.get("/api/promo/bonus-bet", params={"book": "DraftKings", "amount": 0}).status_code == 400
+    assert client.get("/api/promo/bonus-bet", params={"book": "DraftKings", "amount": 0}).status_code == 422
     assert client.get("/api/promo/nope", params={"book": "DraftKings"}).status_code == 422
 
 
