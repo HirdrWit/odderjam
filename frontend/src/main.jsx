@@ -7,7 +7,8 @@ import {RowExample, Th} from './ColumnHelp.jsx';
 import {SortTh, useSort} from './SortTable.jsx';
 import {oddsKey} from './sorttable.js';
 import {zeroStakeReason, stakeCellText, zeroStakeNote} from './columns.js';
-import {parseStakeInput, rowActionAria, slipButtonLabel, trackButtonLabel, trackKey, trackStake, trackToast} from './track.js';
+import {ErrorBoundary} from './ErrorBoundary.jsx';
+import {legStake, parseStakeInput, rowActionAria, slipButtonLabel, trackButtonLabel, trackKey, trackLegs, trackStake, trackToast} from './track.js';
 import {Help} from './Help.jsx';
 import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {loadStored} from './hooks.js';
@@ -45,7 +46,7 @@ import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useStored} 
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {FORMATS, ageText, isProp} from './odds.js';
-import {rowFreshness, showsStrip, stripState} from './freshness.js';
+import {providerErrorText, rowFreshness, showsStrip, stripState} from './freshness.js';
 import {dismissWelcome} from './welcome.js';
 
 // Field names such as `age_seconds` and `ev_pct` come straight from the
@@ -82,7 +83,12 @@ function useLive() {
   const [status, setStatus] = useState(null);
   // Bumped on a rejected save to remount the inputs with the unchanged settings.
   const [saves, setSaves] = useState(0);
-  const load = () => fetch('/api/live').then((r) => r.json()).then(setStatus);
+  const load = () => fetch('/api/live').then((r) => {
+    if (!r.ok) throw new Error('bad status');
+    return r.json();
+  }).then(setStatus).catch(() => {
+    // Keep the last known settings; the next poll tries again.
+  });
   useEffect(() => {
     load();
     const timer = setInterval(load, 30000);
@@ -102,14 +108,21 @@ function useLive() {
     };
   }, [every]);
   const save = async (change) => {
-    const response = await fetch('/api/live', {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify(change),
-    });
-    if (response.ok) {
+    let response = null;
+    try {
+      response = await fetch('/api/live', {
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: JSON.stringify(change),
+      });
+    } catch {
+      response = null;
+    }
+    if (response?.ok) {
       setStatus(await response.json());
     } else {
+      const detail = response ? await errorDetail(response) : null;
+      toast(`Live settings were not saved${typeof detail === 'string' ? `: ${detail}` : '. Check your connection and try again.'}`, 'err');
       setSaves((n) => n + 1);
       load();
     }
@@ -242,8 +255,13 @@ function FreshnessStrip({live}) {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const load = () => {
-      fetch('/api/cache').then((r) => r.json()).then((d) => {
+      fetch('/api/cache').then((r) => {
+        if (!r.ok) throw new Error('bad status');
+        return r.json();
+      }).then((d) => {
         setInfo(d);
+      }).catch(() => {
+        // Keep the last reading; the strip is informational.
       });
     };
     load();
@@ -257,8 +275,11 @@ function FreshnessStrip({live}) {
     setBusy(true);
     try {
       const response = await fetch('/api/refresh', {method: 'POST'});
+      if (!response.ok) throw new Error('refresh failed');
       setInfo(await response.json());
       notifyDataChanged();
+    } catch {
+      toast('Could not refresh the odds. Try again in a moment.', 'err');
     } finally {
       setBusy(false);
     }
@@ -271,6 +292,9 @@ function FreshnessStrip({live}) {
         <span className="fresh-text">
           {state.stale && <b>Stale · </b>}{state.text}
         </span>
+        {providerErrorText(info.provider_error) && (
+          <span className="bad fresh-error" role="alert">{providerErrorText(info.provider_error)}</span>
+        )}
         {info.live && (
           <button onClick={refresh} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
         )}
@@ -516,7 +540,7 @@ function PositiveEv() {
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}` +
       `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}`;
-  const {data, refreshing} = useApiStatus(cfg && `/api/ev?${query}`);
+  const {data, refreshing, error, retry} = useApiStatus(cfg && `/api/ev?${query}`);
   return (
     <>
       <TabIntro tab="+EV" />
@@ -595,7 +619,7 @@ function PositiveEv() {
           setPanel('staking');
         }}>Open Bankroll &amp; staking</button></p>
       )}
-      <TableShell data={data} refreshing={refreshing} emptyText={evEmptyText(data, minEv)} columns={9}>
+      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="odds" emptyText={evEmptyText(data, minEv)} columns={9}>
       <table className="cards">
         <thead>
           <tr>
@@ -706,7 +730,7 @@ function Arbs() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const sizing = useSizing();
   const bank = useApi('/api/bankroll', 30000);
-  const {data, refreshing} = useApiStatus(`/api/arbs?min_profit=${min}${sizingQuery(sizing, true)}${propsParam(props)}`);
+  const {data, refreshing, error, retry} = useApiStatus(`/api/arbs?min_profit=${min}${sizingQuery(sizing, true)}${propsParam(props)}`);
   const filters = {min, props, total: sizing.total > 0 ? sizing.total : ''};
   const setters = {min: setMin, props: setProps, total: sizing.setTotal};
   const chips = arbChips(filters);
@@ -768,7 +792,7 @@ function Arbs() {
       {arbMinWarning(min) && <div className="bad">⚠ {arbMinWarning(min)}</div>}
       <ApiError data={data} />
       <RowExample tab="Arbitrage" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
-      <TableShell data={data} refreshing={refreshing} emptyText={arbsEmptyText(data, min)} columns={5}>
+      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="arbitrage" emptyText={arbsEmptyText(data, min)} columns={5}>
         <table className="cards">
           <thead>
             <tr>
@@ -836,13 +860,13 @@ function Promos() {
   if (kind === 'second-chance') params.set('refund_value', rate / 100);
   if (market) params.set('market', market);
   const [sort, onSort, sorted] = useSort('Promos', PROMO_DEFAULT_SORT);
-  const data = useApi(amount > 0 ? `/api/promo/${kind}?${params}` : null);
+  const {data, error: loadError, retry} = useApiStatus(amount > 0 ? `/api/promo/${kind}?${params}` : null);
   const [promoName] = PROMOS[kind];
   const track = async (row) => {
-    for (const leg of row.legs) {
+    const result = await trackLegs(row.legs, (leg) => {
       const boosted = leg.promo && row.boosted_odds != null;
       const promoNote = boosted ? ` (posted ${formatOdds(leg.odds)}, +${boost}%)` : '';
-      await fetch('/api/bets', {
+      return fetch('/api/bets', {
         method: 'POST',
         headers: JSON_HEADERS,
         body: JSON.stringify({
@@ -858,9 +882,10 @@ function Promos() {
           notes: leg.promo ? `${promoName}${promoNote}` : `${promoName} hedge`,
         }),
       });
-    }
+    });
     notifyDataChanged();
-    alert(`Tracked both legs of ${row.event}`);
+    if (result.ok) toast(`Tracked both legs of ${row.event}`, 'ok', {label: 'Open Tracker', tab: 'Tracker'});
+    else toast(result.message, 'err');
   };
   return (
     <>
@@ -903,6 +928,13 @@ function Promos() {
           {Object.entries(MARKETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </div>
+      {loadError && data == null && amount > 0 && (
+        <div role="alert">
+          <div className="bad">Couldn't load promos. {loadError}</div>
+          <button type="button" onClick={retry}>Retry</button>
+        </div>
+      )}
+      {!(amount > 0) && <p className="mut">Enter an amount above $0 to see promo conversions.</p>}
       {Array.isArray(data) && data.length > 0 && (
         <table className="cards">
           <thead>
@@ -980,15 +1012,21 @@ function Parlay() {
     let live = true;
     const load = () => {
       fetch('/api/parlay', {method: 'POST', headers: JSON_HEADERS, body}).then(async (r) => {
-        const d = await r.json();
-        if (!live) return;
         if (r.ok) {
+          const d = await r.json();
+          if (!live) return;
           setResult(d);
           setError(null);
         } else {
+          const detail = await errorDetail(r);
+          if (!live) return;
           setResult(null);
-          setError(d.detail);
+          setError(typeof detail === 'string' && r.status < 500 ? detail : 'Could not price this parlay. Try again in a moment.');
         }
+      }).catch(() => {
+        if (!live) return;
+        setResult(null);
+        setError('Could not reach the server to price this parlay.');
       });
     };
     load();
@@ -1002,7 +1040,14 @@ function Parlay() {
   const priceable = result ? result.legs.length : slip.length;
   const track = async (book) => {
     const picks = result.legs.map((l) => l.pick);
-    await fetch('/api/bets', {
+    const stake = legStake({stake: book.stake});
+    if (stake == null) {
+      toast(`No stake worked out for the parlay at ${book.book}, so nothing was logged. Set a bankroll in +EV first.`, 'err');
+      return;
+    }
+    let response;
+    try {
+      response = await fetch('/api/bets', {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({
@@ -1012,13 +1057,21 @@ function Parlay() {
         pick: `${picks.length}-leg parlay: ${picks.join(' + ')}`,
         book: book.book,
         odds: Math.round(book.odds),
-        stake: Number((book.stake ?? 0).toFixed(2)) || 1,
+        stake,
         ev_pct: book.ev_pct,
         notes: result.legs.map((l, i) => `${l.pick} (${l.event}) ${formatOdds(book.leg_odds[i])}`)
             .join('; '),
       }),
-    });
-    alert(`Tracked parlay @ ${book.book}`);
+      });
+    } catch {
+      response = null;
+    }
+    if (response?.ok) {
+      notifyDataChanged();
+      toast(`Tracked parlay @ ${book.book}`, 'ok', {label: 'Open Tracker', tab: 'Tracker'});
+    } else {
+      toast(`Could not log the parlay @ ${book.book}. Nothing was saved.`, 'err');
+    }
   };
   return (
     <>
@@ -1123,7 +1176,7 @@ function LowHold() {
   const [market, setMarket] = useStored('lhMarket', '');
   const [sort, onSort, sorted] = useSort('Low Hold', {key: 'hold', dir: 'asc'});
   const marketParam = market ? `&market=${market}` : '';
-  const {data, refreshing} = useApiStatus(
+  const {data, refreshing, error, retry} = useApiStatus(
       `/api/lowhold?max_hold=${maxHold}&book=${encodeURIComponent(book)}&stake=${stake}${marketParam}`);
   // Nearest miss: only fetched once the filtered list comes back empty.
   const empty = Array.isArray(data) && data.length === 0;
@@ -1152,7 +1205,7 @@ function LowHold() {
         }} />
       </div>
       <ApiError data={data} />
-      <TableShell data={data} refreshing={refreshing} emptyText={lowHoldEmptyText(data, maxHold, lowest)} columns={8}>
+      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="low-hold" emptyText={lowHoldEmptyText(data, maxHold, lowest)} columns={8}>
       <table className="cards">
         <thead>
           <tr>
@@ -1204,26 +1257,30 @@ function Middles() {
   if (minEv !== '') params.set('min_ev', minEv);
   if (maxCost !== '') params.set('max_cost', maxCost);
   if (market) params.set('market', market);
-  const {data, refreshing} = useApiStatus(`/api/middles?${params}`);
+  const {data, refreshing, error, retry} = useApiStatus(`/api/middles?${params}`);
   const track = async (row) => {
-    for (const leg of row.legs) {
-      await fetch('/api/bets', {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        body: JSON.stringify({
-          event: row.event,
-          sport: row.sport,
-          market: row.market,
-          pick: leg.pick,
-          book: leg.book,
-          odds: leg.odds,
-          stake: Math.round(leg.stake * 100) / 100,
-          ev_pct: row.ev_pct,
-          notes: `middle ${row.legs.map((x) => x.pick).join(' / ')}`,
-        }),
-      });
+    const result = await trackLegs(row.legs, (leg) => fetch('/api/bets', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        event: row.event,
+        sport: row.sport,
+        market: row.market,
+        pick: leg.pick,
+        book: leg.book,
+        odds: leg.odds,
+        stake: legStake(leg),
+        ev_pct: row.ev_pct,
+        notes: `middle ${row.legs.map((x) => x.pick).join(' / ')}`,
+      }),
+    }));
+    notifyDataChanged();
+    if (result.ok) {
+      toast(`Tracked both legs: ${row.legs.map((l) => `${l.pick} @ ${l.book}`).join(', ')}`, 'ok',
+          {label: 'Open Tracker', tab: 'Tracker'});
+    } else {
+      toast(result.message, 'err');
     }
-    alert(`Tracked both legs: ${row.legs.map((l) => `${l.pick} @ ${l.book}`).join(', ')}`);
   };
   const onMinWindow = (e) => {
     const value = Number(e.target.value);
@@ -1256,7 +1313,7 @@ function Middles() {
         A <Term id="middle">middle</Term> wins both bets when the result lands in the window. Per $100 total stake, split so both misses cost the same. EV uses a normal model of the
         result (NFL margins weighted to key numbers).
       </div>
-      <TableShell data={data} refreshing={refreshing} emptyText={middlesEmptyText(data, minWindow, maxCost, minEv)} columns={8}>
+      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="middles" emptyText={middlesEmptyText(data, minWindow, maxCost, minEv)} columns={8}>
       <table className="cards">
         <thead>
           <tr>
@@ -1385,8 +1442,8 @@ const ANY_BOOKS = ['', ...BOOKS];
 
 function Alerts() {
   const [tick, setTick] = useState(0);
-  const rules = useApi(`/api/alerts/rules?t=${tick}`, 600000);
-  const feed = useApi(`/api/alerts?t=${tick}`, 30000);
+  const {data: rules, error: rulesError, retry: rulesRetry} = useApiStatus(`/api/alerts/rules?t=${tick}`, 600000);
+  const {data: feed, error: feedError, retry: feedRetry} = useApiStatus(`/api/alerts?t=${tick}`, 30000);
   const [form, setForm] = useState(BLANK_RULE);
   const [formError, setFormError] = useState(null);
   const reload = () => {
@@ -1409,7 +1466,13 @@ function Alerts() {
     reload();
   };
   const remove = async (rule) => {
-    await fetch(`/api/alerts/rules/${rule.id}`, {method: 'DELETE'});
+    try {
+      const response = await fetch(`/api/alerts/rules/${rule.id}`, {method: 'DELETE'});
+      if (!response.ok) throw new Error('delete failed');
+    } catch {
+      toast(`Could not delete the alert rule "${rule.name}". It is still active.`, 'err');
+      return;
+    }
     reload();
   };
   let discordNote = null;
@@ -1445,7 +1508,7 @@ function Alerts() {
         <button className="primary">Add alert</button>
         {formError && <span className="bad" role="alert">{formError}</span>}
       </form>
-      <TableShell data={rules} emptyText={alertsRulesEmptyText(rules)} columns={7}>
+      <TableShell data={rules} emptyText={alertsRulesEmptyText(rules)} error={rulesError} onRetry={rulesRetry} what="alert rules" columns={7}>
       <table>
         <thead>
           <tr>
@@ -1470,7 +1533,7 @@ function Alerts() {
       </table>
       </TableShell>
       <h3>Recent alerts</h3>
-      <TableShell data={feed && feed.items} emptyText={alertsEmptyText(feed)} columns={3}>
+      <TableShell data={feed && feed.items} emptyText={alertsEmptyText(feed)} error={feedError} onRetry={feedRetry} what="the alert feed" columns={3}>
       <table>
         <thead>
           <tr><th>When</th><th>Alert</th><th>Rule</th></tr>
@@ -1505,7 +1568,7 @@ function SharpMoney() {
   const [baselineMin, setBaselineMin] = useStored('smBaseline', 120);
   const [k, setK] = useStored('smK', 3);
   const [minVolume, setMinVolume] = useStored('smMinVolume', 500);
-  const {data, refreshing} = useApiStatus(`/api/sharp-money?window_minutes=${windowMin}&baseline_minutes=${baselineMin}` +
+  const {data, refreshing, error, retry} = useApiStatus(`/api/sharp-money?window_minutes=${windowMin}&baseline_minutes=${baselineMin}` +
       `&k=${k}&min_volume=${minVolume}`);
   const status = useApi('/api/sharp-money/status');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1553,7 +1616,7 @@ function SharpMoney() {
           }}>Set up an exchange in Help</button></>
         )}
       </div>
-      <TableShell data={data} refreshing={refreshing} emptyText={sharpEmptyText(data, k, windowMin, status)} columns={8}>
+      <TableShell data={data} refreshing={refreshing} error={error} onRetry={retry} what="sharp money" emptyText={sharpEmptyText(data, k, windowMin, status)} columns={8}>
       <table>
         <thead>
           <tr>
@@ -1722,7 +1785,7 @@ function App() {
       </nav>
       <div className="content">
         {showsStrip(tab) && <FreshnessStrip live={live} />}
-        <main>{welcome && <Welcome onJump={go} onClose={closeWelcome} />}<WelcomeContext.Provider key={pageKey} value={welcomeTab}><Page welcome={welcome} /></WelcomeContext.Provider></main>
+        <main>{welcome && <Welcome onJump={go} onClose={closeWelcome} />}<WelcomeContext.Provider key={pageKey} value={welcomeTab}><ErrorBoundary key={tab} tab={tab}><Page welcome={welcome} /></ErrorBoundary></WelcomeContext.Provider></main>
       </div>
       <div className="bottom-bar" role="navigation" aria-label="Main">
         {MOBILE_TABS.map((t) => (

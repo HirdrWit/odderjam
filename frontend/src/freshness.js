@@ -77,3 +77,17 @@ export function stripState(info, liveMode) {
     mock: false,
   };
 }
+
+/**
+ * @param {?{status: ?number, at: number}=} err The provider's last failure; `at` is epoch seconds.
+ * @return {?string} Text for the freshness strip, or null when the provider is fine.
+ */
+export function providerErrorText(err) {
+  if (!err) return null;
+  const since = new Date(err.at * 1000).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+  let why = 'offline or timed out';
+  if (err.status === 401 || err.status === 403) why = 'API key invalid or out of credits';
+  else if (err.status === 429) why = 'rate limited';
+  else if (err.status != null) why = `returned an error (${err.status})`;
+  return `Odds provider: ${why} since ${since}. Prices may be out of date.`;
+}

@@ -14,6 +14,46 @@ export function trackStake(row) {
 }
 
 /**
+ * @param {{stake: (number|undefined)}} leg
+ * @return {?number} The leg's stake rounded to cents, or null when it has none.
+ *     Never a made-up default: a leg with no stake is refused, not logged as $1.
+ */
+export function legStake(leg) {
+  const stake = Math.round(Number(leg.stake) * 100) / 100;
+  return stake > 0 ? stake : null;
+}
+
+/**
+ * Logs each leg in order and stops at the first one that fails, so the user is
+ * told exactly which leg was not saved.
+ * @param {!Array<{pick: string, stake: (number|undefined)}>} legs
+ * @param {function(!Object): !Promise<{ok: boolean}>} post Saves one leg.
+ * @return {!Promise<{ok: boolean, logged: number, failed: ?Object, message: string}>}
+ */
+export async function trackLegs(legs, post) {
+  const missing = legs.find((leg) => legStake(leg) == null);
+  if (missing) {
+    return {ok: false, logged: 0, failed: missing,
+      message: `No stake worked out for ${missing.pick}. Nothing was logged.`};
+  }
+  let logged = 0;
+  for (const leg of legs) {
+    let ok = false;
+    try {
+      ok = (await post(leg)).ok;
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      const some = logged ? ` ${logged} earlier leg${logged === 1 ? ' is' : 's are'} already in the Tracker; check it.` : '';
+      return {ok: false, logged, failed: leg, message: `Could not log ${leg.pick}.${some}`};
+    }
+    logged += 1;
+  }
+  return {ok: true, logged, failed: null, message: ''};
+}
+
+/**
  * @param {?string} text What the user typed into the stake prompt.
  * @return {?number} A positive amount, or null when it is blank or invalid.
  */

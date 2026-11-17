@@ -302,7 +302,7 @@ export function Tracker() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const query = filterQuery(filters);
   const all = useApi('/api/bets', 600000);
-  const {data: bets, refreshing: betsRefreshing} = useApiStatus(`/api/bets?${query}`, 600000);
+  const {data: bets, refreshing: betsRefreshing, error: betsError, retry: betsRetry} = useApiStatus(`/api/bets?${query}`, 600000);
   const stats = useApi(`/api/bets/stats?${query}`, 600000);
   const [sort, onSort, sorted] = useSort('Tracker', {key: 'date', dir: 'desc'});
   const [form, setForm] = useState(BLANK_BET);
@@ -345,7 +345,13 @@ export function Tracker() {
   };
   const remove = async (bet) => {
     if (!confirm(`Delete ${bet.pick}?`)) return;
-    await fetch(`/api/bets/${bet.id}`, {method: 'DELETE'});
+    try {
+      const response = await fetch(`/api/bets/${bet.id}`, {method: 'DELETE'});
+      if (!response.ok) throw new Error('delete failed');
+    } catch {
+      toast(`Could not delete ${bet.pick}. It is still in the Tracker.`, 'err');
+      return;
+    }
     reload();
   };
   const settle = async () => {
@@ -353,15 +359,17 @@ export function Tracker() {
     setBusy(true);
     try {
       const response = await fetch('/api/bets/settle', {method: 'POST'});
-      const result = await response.json();
       if (!response.ok) {
-        toast(result.detail || 'Auto-settle failed', 'err');
+        toast((await errorDetail(response)) || 'Auto-settle failed. Try again in a moment.', 'err');
         return;
       }
+      const result = await response.json();
       toast(result.settled.length ?
           `Settled ${result.settled.length} of ${result.checked} pending bets` :
           `No finished games for ${result.checked} pending bets`);
       reload();
+    } catch {
+      toast('Auto-settle failed. Check your connection and try again.', 'err');
     } finally {
       setBusy(false);
     }
@@ -501,7 +509,8 @@ export function Tracker() {
           </div>
         </form>
       )}
-      <TableShell data={bets} refreshing={betsRefreshing} columns={11}
+      <TableShell data={bets} refreshing={betsRefreshing} columns={11} error={betsError} onRetry={betsRetry}
+        what="your bets"
         emptyText={emptyText || 'No bets match these filters. Clear a filter to see more.'}>
       <table className="cards">
         <thead>

@@ -2,7 +2,7 @@ import {Fragment, useState} from 'react';
 
 import {eventTime, percent} from './fmt.js';
 import {americanToProb} from './calc.js';
-import {useApi, useSlip, useStored} from './hooks.js';
+import {useApi, useApiStatus, useSlip, useStored} from './hooks.js';
 import {toast} from './hooks.jsx';
 import {booksHelp, holdClass, introVisible, slipToast, suspectNote} from './oddsrow.js';
 import {TabIntro} from './TabIntro.jsx';
@@ -285,7 +285,8 @@ export function OddsScreen({welcome = false}) {
   const [history, setHistory] = useState(null);
   const [showBooks, setShowBooks] = useState(false);
   const slip = useSlip();
-  const data = useApi(`/api/odds${sport ? `?sport=${sport}` : ''}`) || [];
+  const {data: loaded, error, retry} = useApiStatus(`/api/odds${sport ? `?sport=${sport}` : ''}`);
+  const data = loaded || [];
 
   const books = allBooks(data);
   const shown = books.filter((b) => !hidden.includes(b));
@@ -324,7 +325,13 @@ export function OddsScreen({welcome = false}) {
           }}>{marketLabel(m)}</button>
         ))}
       </div>
-      {!shown.length && <div className="mut">No books selected.</div>}
+      {error && !loaded && (
+        <div role="alert">
+          <div className="bad">Couldn't load odds. {error}</div>
+          <button type="button" onClick={retry}>Retry</button>
+        </div>
+      )}
+      {!shown.length && !error && <div className="mut">No books selected.</div>}
       {events.length === 0 && data.length > 0 && <div className="mut">No events match “{query}”.</div>}
       {shown.length > 0 && [['Live', live], ['Upcoming', upcoming]].map(([title, list]) => list.length > 0 && (
         <Fragment key={title}>

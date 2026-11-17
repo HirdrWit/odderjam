@@ -12,12 +12,23 @@ export function EmptyState({text}) {
  * Wraps a table. No rows: the table (and its header) is replaced by the
  * empty-state text. First load: `skeleton` placeholder rows. Refresh: the
  * `loading` class dims the old rows.
+ * A failed first load shows "Couldn't load <what>" and a Retry button instead of skeleton rows.
  * @param {{data: *, rows: (!Array|undefined), emptyText: ?string, refreshing: boolean,
- *     columns: number, children: !Object}} props
+ *     columns: number, error: ?string, onRetry: (function()|undefined), what: (string|undefined),
+ *     children: !Object}} props
  */
-export function TableShell({data, rows, emptyText, refreshing = false, columns = 4, children}) {
-  const view = tableView({data, rows, emptyText, refreshing});
+export function TableShell({data, rows, emptyText, refreshing = false, columns = 4, error = null, onRetry,
+  what, children}) {
+  const view = tableView({data, rows, emptyText, refreshing, error, what});
   if (view.kind === 'error') return null;
+  if (view.kind === 'failed') {
+    return (
+      <div className={view.className} role="alert">
+        <div className="bad empty-state">{view.text}</div>
+        {onRetry && <button type="button" onClick={onRetry}>Retry</button>}
+      </div>
+    );
+  }
   if (view.kind === 'empty') return <div className={view.className}><EmptyState text={view.text} /></div>;
   if (view.kind === 'skeleton') {
     return (

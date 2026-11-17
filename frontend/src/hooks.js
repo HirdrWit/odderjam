@@ -1,5 +1,7 @@
 import {useEffect, useState} from 'react';
 
+import {loadState} from './api.js';
+
 /** Reads a JSON value from localStorage, or `fallback` if absent. */
 export function loadStored(key, fallback) {
   try {
@@ -46,18 +48,33 @@ export function useApi(url, every = 60000) {
  * Like useApi, plus whether a fetch is in flight.
  * @param {?string} url
  * @param {number=} every
- * @return {{data: *, refreshing: boolean}} `refreshing` is true while a fetch runs after data has loaded.
+ * @return {{data: *, refreshing: boolean, error: ?string, retry: function()}} `refreshing` is true while a fetch
+ *     runs after data has loaded; `error` is set when the request failed.
  */
 export function useApiStatus(url, every = 60000) {
   const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!url) return undefined;
+    // No url (an invalid form, say): drop the previous result so old numbers never stay on screen.
+    if (!url) {
+      setData(null);
+      setError(null);
+      return undefined;
+    }
     let live = true;
     const load = () => {
       setRefreshing(true);
-      return fetch(url).then((r) => r.json()).then((d) => {
-        if (live) setData(d);
+      return loadState(url).then((s) => {
+        if (!live) return;
+        if (s.error) {
+          // Keep the last good data on a failed refresh; the error shows only when there is none.
+          setError(s.error);
+        } else {
+          setData(s.data);
+          setError(null);
+        }
       }).finally(() => {
         if (live) setRefreshing(false);
       });
@@ -70,8 +87,9 @@ export function useApiStatus(url, every = 60000) {
       clearInterval(timer);
       window.removeEventListener('data-changed', load);
     };
-  }, [url]);
-  return {data, refreshing};
+  }, [url, attempt]);
+  const retry = () => setAttempt((n) => n + 1);
+  return {data, refreshing, error, retry};
 }
 
 // Parlay slip, shared across tabs through localStorage.
