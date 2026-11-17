@@ -16,6 +16,24 @@ CACHE = Path(__file__).resolve().parent.parent.parent / ".odds_cache.v3.json"
 LIVE_CACHE = CACHE.parent / ".odds_cache.live.json"
 BUDGET_FILE = CACHE.parent / ".odds_cache.budget.json"
 _lock = threading.Lock()
+
+
+class ProviderError(RuntimeError):
+    """The odds provider failed or could not be reached. `status` is the HTTP status, or None for network errors."""
+
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
+
+
+def record_provider_error(status: int | None) -> None:
+    raise NotImplementedError
+
+
+def clear_provider_error() -> None:
+    raise NotImplementedError
+
+
 log = logging.getLogger(__name__)
 MOCK_HISTORY_SECONDS = 300  # mock odds change every call; only keep one snapshot per 5 minutes
 
