@@ -55,7 +55,7 @@ def test_cache_info_returns_remaining_used_and_last_cost(api, monkeypatch):
     info = providers.cache_info()
     assert float(info["remaining"]) == 131
     assert float(info["used"]) == 69
-    assert float(info["last_cost"]) == 3
+    assert float(info["last_cost"]) == 6  # the whole fetch: 2 calls of 3
 
 
 # --- I3 ---
