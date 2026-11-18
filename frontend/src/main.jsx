@@ -305,7 +305,6 @@ function SettingsDialog({live, onClose, onFormat}) {
               credits per game
             </div>
           )}
-          <RefreshPicker />
           {refreshFailed && <div className="bad">Could not load the auto-refresh setting.</div>}
           {refresh && (
             <label className="fld">Auto-refresh
