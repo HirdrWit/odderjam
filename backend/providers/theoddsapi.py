@@ -1,11 +1,13 @@
 """The Odds API v4 adapter (h2h, spreads, totals, player props). Needs ODDS_API_KEY.
 
 Player props are only served by the per-event endpoint, so each game costs an extra
-(regions x prop markets) credits. They are OFF unless ODDS_PROP_MARKETS is set, e.g.
+(bookmaker groups x prop markets) credits. They are OFF unless ODDS_PROP_MARKETS is set, e.g.
 ODDS_PROP_MARKETS=player_points,player_threes,batter_hits. Each sport only requests the
 listed keys that belong to it (see SPORT_PROPS); keys we don't know are sent to every sport.
 """
 import json
+import logging
+import math
 import os
 import time
 from datetime import datetime, timezone
@@ -17,10 +19,10 @@ from ..engine.exchange import apply_commission, fee_for
 from ..engine.markets import is_prop
 from .. import providers
 from . import ProviderError
-from .books import REFERENCE_ONLY, us_name
+from .books import KEY_NAMES, REFERENCE_ONLY, us_name
 
 ALL = {"NBA": "basketball_nba", "NFL": "americanfootball_nfl", "MLB": "baseball_mlb", "NHL": "icehockey_nhl"}
-# Each sport costs (regions x markets) credits per fetch. Pick sports in season via ODDS_SPORTS
+# Each sport costs (bookmaker groups x markets) credits per fetch. Pick sports in season via ODDS_SPORTS
 # and markets via ODDS_MARKETS (e.g. "h2h" alone costs a third of "h2h,spreads,totals").
 SPORTS = {k: v for k, v in ALL.items() if k in os.environ.get("ODDS_SPORTS", "NFL,NBA").split(",")}
 MARKETS = [m.strip() for m in os.environ.get("ODDS_MARKETS", "h2h,spreads,totals").split(",") if m.strip()]
@@ -38,7 +40,8 @@ SPORT_PROPS = {
 PROP_MARKETS = [m.strip() for m in os.environ.get("ODDS_PROP_MARKETS", "").split(",") if m.strip()]
 DEFAULT_BOOKMAKERS = ["pinnacle", "betonlineag", "draftkings", "fanduel", "betmgm", "betrivers", "williamhill_us",
                       "fanatics", "espnbet", "hardrockbet"]
-BOOKMAKERS: list[str] = []  # stub: replaced in green
+MAX_PER_GROUP = 10  # The Odds API bills every group of 10 bookmakers as 1 region
+log = logging.getLogger(__name__)
 BASE = "https://api.the-odds-api.com/v4/sports"
 
 
@@ -67,7 +70,7 @@ def parse_event(e: dict, sport: str) -> dict:
     markets: dict[str, dict[tuple[str, float | None], dict]] = {}
     updated: dict[str, str] = {}
     for bk in e["bookmakers"]:
-        name = REFERENCE_ONLY.get(bk["key"]) or us_name(bk["title"])
+        name = REFERENCE_ONLY.get(bk["key"]) or KEY_NAMES.get(bk["key"]) or us_name(bk["title"])
         if name is None:
             continue  # not available to US bettors
         if bk.get("last_update"):
@@ -97,8 +100,8 @@ def parse_event(e: dict, sport: str) -> dict:
 
 
 def fetch_cost() -> int:
-    """Credits one live snapshot(live_only=True) costs: sports x regions x markets (no props)."""
-    return len(SPORTS) * 2 * len(MARKETS)
+    """Credits one live snapshot(live_only=True) costs: sports x ceil(bookmakers / 10) x markets (no props)."""
+    return len(SPORTS) * math.ceil(len(bookmakers()) / MAX_PER_GROUP) * len(MARKETS)
 
 
 def props_for(sport: str) -> list[str]:
@@ -117,7 +120,7 @@ def _write_meta(r: httpx.Response) -> None:
 
 
 def _get(url: str, params: dict) -> httpx.Response:
-    r = httpx.get(url, params={"apiKey": os.environ["ODDS_API_KEY"], "oddsFormat": "american",
+    r = httpx.get(url, params={"apiKey": os.environ["ODDS_API_KEY"], "bookmakers": ",".join(bookmakers()), "oddsFormat": "american",
                                **params}, timeout=20)
     _write_meta(r)
     return r
@@ -182,5 +185,9 @@ def scores(sports: list[str], days_from: int = 3) -> list[dict]:
 
 
 def bookmakers() -> list[str]:
-    """The bookmaker keys to request (stub)."""
-    return []
+    """Bookmaker keys to request: ODDS_BOOKMAKERS or the defaults. Warns above 10 (each extra group of 10 costs more)."""
+    raw = os.environ.get("ODDS_BOOKMAKERS")
+    keys = [k.strip() for k in (raw or "").split(",") if k.strip()] or list(DEFAULT_BOOKMAKERS)
+    if len(keys) > MAX_PER_GROUP:
+        log.warning("ODDS_BOOKMAKERS has %d keys; more than 10 costs an extra credit group per market", len(keys))
+    return keys

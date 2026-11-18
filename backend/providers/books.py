@@ -9,6 +9,9 @@ SHARP = "Pinnacle"
 # The Odds API bookmaker key -> name, for books used only as sharp references.
 REFERENCE_ONLY = {"pinnacle": SHARP, "betonlineag": "BetOnline.ag"}
 
+# Odds API bookmaker keys whose title is not a US book name (williamhill_us is Caesars).
+KEY_NAMES = {"williamhill_us": "Caesars"}
+
 # Sharp books that set the fair price, and their weight in the consensus.
 # Override with SHARP_WEIGHTS="Pinnacle:1,Circa Sports:0.5" (or per request from the UI).
 SHARP_BOOKS = ["Pinnacle", "Circa Sports", "Novig", "BetOnline.ag"]
