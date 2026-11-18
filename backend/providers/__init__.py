@@ -85,6 +85,9 @@ def _live() -> bool:
     return bool(os.environ.get("ODDS_API_KEY"))
 
 
+TICK_SLACK_SECONDS = 1.0
+
+
 def _ttl() -> float:
     from .. import refresh  # lazy: refresh imports db
     return refresh.cache_lifetime()
@@ -294,7 +297,9 @@ def _write_atomic(path: Path, text: str) -> None:
 
 def _pregame(force: bool) -> list[dict]:
     """Pre-game snapshot from the disk cache, refetched when older than the TTL. Caller holds _lock."""
-    fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < _ttl()
+    ttl = _ttl()
+    # A poll tick at the chosen interval lands a few ms before the TTL ends; count that as stale (odderjam-126).
+    fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < ttl - min(TICK_SLACK_SECONDS, ttl * 0.2)
     if fresh and not force:
         return json.loads(CACHE.read_text())
     if (_provider_error and not force and time.time() - _provider_error["at"] < FAIL_BACKOFF_SECONDS):
