@@ -91,3 +91,11 @@ export function providerErrorText(err) {
   else if (err.status != null) why = `returned an error (${err.status})`;
   return `Odds provider: ${why} since ${since}. Prices may be out of date.`;
 }
+
+/**
+ * @param {?{remaining: ?(string|number), last_cost: ?(string|number)}} info The /api/cache payload.
+ * @return {?string} "134 credits left · last fetch 6", or null when the credits are unknown.
+ */
+export function creditsText(info) {
+  return null;
+}

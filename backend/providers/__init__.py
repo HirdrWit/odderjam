@@ -318,3 +318,9 @@ def get_scores(sports: list[str]) -> list[dict]:
         raise RuntimeError("auto-settle needs ODDS_API_KEY (live scores)")
     from .theoddsapi import scores
     return scores(sports)
+
+
+def _real_cost() -> float | None:
+    """Credits the latest live fetch really cost, from the response headers; None if unknown."""
+    from .theoddsapi import last_fetch_cost
+    return last_fetch_cost()

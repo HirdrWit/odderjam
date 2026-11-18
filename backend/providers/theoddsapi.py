@@ -191,3 +191,8 @@ def bookmakers() -> list[str]:
     if len(keys) > MAX_PER_GROUP:
         log.warning("ODDS_BOOKMAKERS has %d keys; more than 10 costs an extra credit group per market", len(keys))
     return keys
+
+
+def last_fetch_cost() -> float | None:
+    """Sum of x-requests-last over the calls of the latest snapshot(); None if no call reported one."""
+    return None
