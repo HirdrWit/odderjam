@@ -26,7 +26,7 @@ def test_tracker_calls_due_settle_on_load_without_confirm_or_error_toast():
 
 def test_settings_dialog_has_switch():
     main = (SRC / "main.jsx").read_text()
-    dialog = main[main.index("function SettingsDialog"):main.index("function SettingsDialog") + 3500]
+    dialog = main[main.index("function SettingsDialog"):main.index("function SettingsDialog") + 6000]
     assert "Auto-settle when I open the Tracker" in dialog and "AUTO_SETTLE_KEY" in dialog
 
 

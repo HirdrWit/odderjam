@@ -86,7 +86,8 @@ def _live() -> bool:
 
 
 def _ttl() -> float:
-    return float(os.environ.get("ODDS_CACHE_MINUTES", "120")) * 60
+    from .. import refresh  # lazy: refresh imports db
+    return refresh.cache_lifetime()
 
 
 def _fetch() -> list[dict]:

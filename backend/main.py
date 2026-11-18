@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts, history, scan, sharp_money
+from . import alerts, history, refresh as refresh_mod, scan, sharp_money
 from .engine.bettable import multi_leg_flags as _multi_leg_flags
 from .scan import groups as _groups
 from .engine import (bettable, devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
@@ -630,6 +630,29 @@ def live_post(body: LiveSettings):
 def refresh():
     get_snapshot(force=True)
     return cache_info()
+
+
+class RefreshIn(BaseModel):
+    seconds: int = Field(strict=True)
+
+
+def _refresh_payload() -> dict:
+    from .providers import _fetch_cost, _remaining
+    return {"seconds": refresh_mod.get_seconds(), "default_seconds": refresh_mod.default_seconds(),
+            "options": refresh_mod.options(_fetch_cost(), _remaining())}
+
+
+@app.get("/api/refresh-interval")
+def refresh_interval_get():
+    return _refresh_payload()
+
+
+@app.put("/api/refresh-interval")
+def refresh_interval_put(body: RefreshIn):
+    if body.seconds not in refresh_mod.CHOICES:
+        raise HTTPException(422, f"seconds must be one of {refresh_mod.CHOICES}")
+    refresh_mod.set_seconds(body.seconds)
+    return _refresh_payload()
 
 
 @app.get("/api/cache")

@@ -50,6 +50,7 @@ import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {FORMATS, ageText, isProp} from './odds.js';
+import {loadInterval, optionText, setCurrentSeconds} from './refresh.js';
 import {createPoller, shouldRefreshOnShow} from './visibility.js';
 import {creditsText, providerErrorText, rowFreshness, showsStrip, stripState} from './freshness.js';
 import {dismissWelcome} from './welcome.js';
@@ -247,6 +248,26 @@ function SettingsDialog({live, onClose, onFormat}) {
   const [info, setInfo] = useState(null);
   const [format, setFormat] = useStored('oddsFormat', 'american');
   const [autoSettle, setAutoSettle] = useStored(AUTO_SETTLE_KEY, true);
+  const [refresh, setRefresh] = useState(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  useEffect(() => {
+    fetch('/api/refresh-interval').then((r) => {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    }).then(setRefresh).catch(() => setRefreshFailed(true));
+  }, []);
+  // Each choice shows its credits per hour and how long the credits left last at that rate.
+  const chooseRefresh = (seconds) => {
+    fetch('/api/refresh-interval', {
+      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({seconds}),
+    }).then((r) => {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    }).then((body) => {
+      setRefresh(body);
+      setCurrentSeconds(body.seconds);
+    }).catch(() => toast('Could not save the auto-refresh interval.', 'err'));
+  };
   useEffect(() => {
     fetch('/api/cache').then((r) => {
       if (!r.ok) throw new Error('bad status');
@@ -283,6 +304,15 @@ function SettingsDialog({live, onClose, onFormat}) {
               Player props on ({propCount} markets): each refresh costs about {propCount * 2} more
               credits per game
             </div>
+          )}
+          <RefreshPicker />
+          {refreshFailed && <div className="bad">Could not load the auto-refresh setting.</div>}
+          {refresh && (
+            <label className="fld">Auto-refresh
+              <select value={refresh.seconds} onChange={(e) => chooseRefresh(Number(e.target.value))}>
+                {refresh.options.map((o) => <option key={o.seconds} value={o.seconds}>{optionText(o)}</option>)}
+              </select>
+            </label>
           )}
           <LiveSettings live={live} />
           <AlertWatcher role="control" />
@@ -1927,6 +1957,9 @@ function App() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const live = useLive();
+  useEffect(() => {
+    loadInterval();
+  }, []);
   const [pageKey, setPageKey] = useState(0);
   const Page = TABS[tab];
   return (
