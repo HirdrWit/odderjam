@@ -36,7 +36,9 @@ SPORT_PROPS = {
     "NHL": {"player_points", "player_goals", "player_assists", "player_shots_on_goal"},
 }
 PROP_MARKETS = [m.strip() for m in os.environ.get("ODDS_PROP_MARKETS", "").split(",") if m.strip()]
-REGIONS = "us,eu"
+DEFAULT_BOOKMAKERS = ["pinnacle", "betonlineag", "draftkings", "fanduel", "betmgm", "betrivers", "williamhill_us",
+                      "fanatics", "espnbet", "hardrockbet"]
+BOOKMAKERS: list[str] = []  # stub: replaced in green
 BASE = "https://api.the-odds-api.com/v4/sports"
 
 
@@ -96,7 +98,7 @@ def parse_event(e: dict, sport: str) -> dict:
 
 def fetch_cost() -> int:
     """Credits one live snapshot(live_only=True) costs: sports x regions x markets (no props)."""
-    return len(SPORTS) * len(REGIONS.split(",")) * len(MARKETS)
+    return len(SPORTS) * 2 * len(MARKETS)
 
 
 def props_for(sport: str) -> list[str]:
@@ -115,7 +117,7 @@ def _write_meta(r: httpx.Response) -> None:
 
 
 def _get(url: str, params: dict) -> httpx.Response:
-    r = httpx.get(url, params={"apiKey": os.environ["ODDS_API_KEY"], "regions": REGIONS, "oddsFormat": "american",
+    r = httpx.get(url, params={"apiKey": os.environ["ODDS_API_KEY"], "oddsFormat": "american",
                                **params}, timeout=20)
     _write_meta(r)
     return r
@@ -177,3 +179,8 @@ def scores(sports: list[str], days_from: int = 3) -> list[dict]:
             raise ProviderError(f"scores request failed ({r.status_code})", status=r.status_code)
         games.extend({**g, "sport": sport} for g in r.json())
     return games
+
+
+def bookmakers() -> list[str]:
+    """The bookmaker keys to request (stub)."""
+    return []

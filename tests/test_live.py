@@ -140,7 +140,7 @@ def test_live_only_fetch_sends_commence_time_to(monkeypatch, tmp_path):
 def test_fetch_cost(monkeypatch):
     monkeypatch.setattr(theoddsapi, "SPORTS", {"NBA": "x", "NFL": "y"})
     monkeypatch.setattr(theoddsapi, "MARKETS", ["h2h", "spreads", "totals"])
-    assert theoddsapi.fetch_cost() == 2 * 2 * 3  # sports x regions (us, eu) x markets
+    assert theoddsapi.fetch_cost() == 2 * 1 * 3  # sports x ceil(10 bookmakers / 10) x markets
 
 
 # --- AC6: provider live refresh -----------------------------------------------------------------
