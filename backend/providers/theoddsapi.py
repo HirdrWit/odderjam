@@ -62,7 +62,7 @@ def _link(*candidates: str | None) -> str | None:
                 continue
             url = url.replace("{state}", STATE)
         return url
-    return sum(_call_costs) if _call_costs else None
+    return None
 
 
 def parse_event(e: dict, sport: str) -> dict:

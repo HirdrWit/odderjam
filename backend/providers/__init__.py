@@ -263,9 +263,9 @@ def _refresh_live(now: float) -> None:
     try:
         data = _fetch_live()
     except Exception:
-        _correct_spend(_real_cost())
         return  # keep serving the previous live prices
-    _correct_spend(_real_cost())
+    finally:
+        _correct_spend(_real_cost())
     LIVE_CACHE.write_text(json.dumps(data))
 
 
