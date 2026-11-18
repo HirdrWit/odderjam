@@ -37,8 +37,9 @@ def test_scores_keeps_previous_last_cost(api, monkeypatch):
 def test_props_calls_counted_in_last_cost(api, monkeypatch):
     monkeypatch.setattr(theoddsapi, "SPORTS", {"NBA": "basketball_nba"})
     monkeypatch.setattr(theoddsapi, "props_for", lambda sport: ["player_points"])
-    monkeypatch.setattr(theoddsapi, "parse_event", lambda e, sport: {"id": e["id"], "sport": sport, "markets": {}})
-    calls = iter([Resp(hdr(100, 1, 3), [{"id": "e1"}]), Resp(hdr(97, 4, 1), {})])
+    monkeypatch.setattr(theoddsapi, "parse_event",
+                        lambda e, sport: {"id": e.get("id"), "sport": sport, "markets": {}})
+    calls = iter([Resp(hdr(100, 1, 3), [{"id": "e1"}]), Resp(hdr(97, 4, 1), {"id": "e1"})])
     monkeypatch.setattr(httpx, "get", lambda *a, **k: next(calls))
     theoddsapi.snapshot()
     assert float(meta()["last_cost"]) == 4
