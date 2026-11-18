@@ -363,7 +363,7 @@ function FreshnessStrip({live}) {
       // One refresh at a time; a provider that is failing is not hit again on every show.
       if (refreshing || !d?.live || d.provider_error || !shouldRefreshOnShow(d.age_seconds, d.ttl_seconds)) return;
       refreshing = true;
-      return fetch('/api/refresh', {method: 'POST'}).then((r) => {
+      return fetch('/api/refresh?on_show=true', {method: 'POST'}).then((r) => {
         if (!r.ok) return;
         notifyDataChanged();
         return load();

@@ -627,8 +627,10 @@ def live_post(body: LiveSettings):
 
 
 @app.post("/api/refresh")
-def refresh():
-    get_snapshot(force=True)
+def refresh(on_show: bool = False):
+    """Refresh button: always fetches. `on_show` (tab shown) skips the fetch if another request
+    wrote the cache while this one waited for the lock."""
+    get_snapshot(force=True, not_before=time.time() if on_show else None)
     return cache_info()
 
 

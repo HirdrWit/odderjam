@@ -295,11 +295,19 @@ def _write_atomic(path: Path, text: str) -> None:
     tmp.replace(path)
 
 
-def _pregame(force: bool) -> list[dict]:
-    """Pre-game snapshot from the disk cache, refetched when older than the TTL. Caller holds _lock."""
+def _pregame(force: bool, not_before: float | None = None) -> list[dict]:
+    """Pre-game snapshot from the disk cache, refetched when older than the TTL. Caller holds _lock.
+
+    A forced call with `not_before` skips the fetch when the cache was written at or after that
+    moment: another request fetched while this one waited for the lock."""
     ttl = _ttl()
     # A poll tick at the chosen interval lands a few ms before the TTL ends; count that as stale (odderjam-126).
     fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < ttl - min(TICK_SLACK_SECONDS, ttl * 0.2)
+    if force and not_before is not None:
+        wrote = CACHE.exists() and CACHE.stat().st_mtime >= not_before
+        failed = _provider_error is not None and _provider_error["at"] >= not_before
+        if wrote or failed:  # another request just fetched (or just failed): don't spend again
+            force = False
     if fresh and not force:
         return json.loads(CACHE.read_text())
     if (_provider_error and not force and time.time() - _provider_error["at"] < FAIL_BACKOFF_SECONDS):
@@ -327,7 +335,7 @@ def _pregame(force: bool) -> list[dict]:
     return data
 
 
-def get_snapshot(force: bool = False, now: float | None = None) -> list[dict]:
+def get_snapshot(force: bool = False, now: float | None = None, not_before: float | None = None) -> list[dict]:
     if not _live():
         from .mock import snapshot
         data = snapshot(now=now)
@@ -335,7 +343,7 @@ def get_snapshot(force: bool = False, now: float | None = None) -> list[dict]:
         return data
     now = _now() if now is None else now
     with _lock:
-        data = _pregame(force)
+        data = _pregame(force, not_before)
         if not _live_config["enabled"]:
             return data
         _refresh_live(now)
