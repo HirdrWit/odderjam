@@ -120,14 +120,41 @@ def _note_cost(r: httpx.Response) -> None:
         pass  # no usable header: the cost of this call is unknown
 
 
+def _read_last_cost() -> str | float | None:
+    try:
+        return json.loads(META.read_text()).get("last_cost")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def _write_meta(r: httpx.Response) -> None:
-    """Save the credit headers atomically (a truncated file would break /api/cache)."""
+    """Save the credit headers atomically (a truncated file would break /api/cache).
+
+    remaining and used come from this response. last_cost is the cost of a whole fetch, not of one
+    call, so a single call keeps the stored figure; _store_fetch_cost() records the sum when a snapshot finishes.
+    """
     if "x-requests-remaining" in r.headers:
         tmp = META.with_name(META.name + ".tmp")
         tmp.write_text(json.dumps({"remaining": r.headers["x-requests-remaining"],
                                    "used": r.headers.get("x-requests-used"),
-                                   "last_cost": r.headers.get("x-requests-last")}))
+                                   "last_cost": _read_last_cost()}))
         tmp.replace(META)
+
+
+def _store_fetch_cost() -> None:
+    """Record the summed cost of the finished snapshot() as last_cost, keeping remaining and used."""
+    total = last_fetch_cost()
+    if total is None:
+        return
+    try:
+        meta = json.loads(META.read_text())
+    except (OSError, ValueError):
+        return
+    if not isinstance(meta, dict):
+        return
+    tmp = META.with_name(META.name + ".tmp")
+    tmp.write_text(json.dumps({**meta, "last_cost": total}))
+    tmp.replace(META)
 
 
 def _get(url: str, params: dict) -> httpx.Response:
@@ -169,6 +196,7 @@ def snapshot(live_only: bool = False, now: float | None = None) -> list[dict]:
             for e in sport_events:
                 _add_props(e, k, props)
         events.extend(sport_events)
+    _store_fetch_cost()
     if failures and not events:
         raise ProviderError(f"every sport failed ({failures[0]})", status=failures[0])
     if failures:
