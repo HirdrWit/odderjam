@@ -97,5 +97,11 @@ export function providerErrorText(err) {
  * @return {?string} "134 credits left · last fetch 6", or null when the credits are unknown.
  */
 export function creditsText(info) {
-  return null;
+  const left = info?.remaining;
+  if (left == null || left === '' || !Number.isFinite(Number(left))) return null;
+  const n = Number(left);
+  const text = `${n} credit${n === 1 ? '' : 's'} left`;
+  const last = info.last_cost;
+  if (last == null || last === '' || !Number.isFinite(Number(last))) return text;
+  return `${text} · last fetch ${Number(last)}`;
 }

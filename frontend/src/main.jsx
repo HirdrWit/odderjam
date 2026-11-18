@@ -50,7 +50,7 @@ import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {FORMATS, ageText, isProp} from './odds.js';
-import {providerErrorText, rowFreshness, showsStrip, stripState} from './freshness.js';
+import {creditsText, providerErrorText, rowFreshness, showsStrip, stripState} from './freshness.js';
 import {dismissWelcome} from './welcome.js';
 
 // Field names such as `age_seconds` and `ev_pct` come straight from the
@@ -360,6 +360,7 @@ function FreshnessStrip({live}) {
         {info.live && (
           <button onClick={refresh} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
         )}
+        {creditsText(info) && <span className="mut fresh-credits">{creditsText(info)}</span>}
         <LiveToggle live={live} />
         <BettableToggle />
       </div>

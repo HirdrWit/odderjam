@@ -62,7 +62,7 @@ def _link(*candidates: str | None) -> str | None:
                 continue
             url = url.replace("{state}", STATE)
         return url
-    return None
+    return sum(_call_costs) if _call_costs else None
 
 
 def parse_event(e: dict, sport: str) -> dict:
@@ -110,12 +110,23 @@ def props_for(sport: str) -> list[str]:
     return [m for m in PROP_MARKETS if m in SPORT_PROPS.get(sport, set()) or m not in known]
 
 
+_call_costs: list[float] = []  # x-requests-last of each call in the latest snapshot()
+
+
+def _note_cost(r: httpx.Response) -> None:
+    try:
+        _call_costs.append(float(r.headers["x-requests-last"]))
+    except (KeyError, TypeError, ValueError):
+        pass  # no usable header: the cost of this call is unknown
+
+
 def _write_meta(r: httpx.Response) -> None:
     """Save the credit headers atomically (a truncated file would break /api/cache)."""
     if "x-requests-remaining" in r.headers:
         tmp = META.with_name(META.name + ".tmp")
         tmp.write_text(json.dumps({"remaining": r.headers["x-requests-remaining"],
-                                   "used": r.headers.get("x-requests-used")}))
+                                   "used": r.headers.get("x-requests-used"),
+                                   "last_cost": r.headers.get("x-requests-last")}))
         tmp.replace(META)
 
 
@@ -123,6 +134,7 @@ def _get(url: str, params: dict) -> httpx.Response:
     r = httpx.get(url, params={"apiKey": os.environ["ODDS_API_KEY"], "bookmakers": ",".join(bookmakers()), "oddsFormat": "american",
                                **params}, timeout=20)
     _write_meta(r)
+    _note_cost(r)
     return r
 
 
@@ -146,6 +158,7 @@ def snapshot(live_only: bool = False, now: float | None = None) -> list[dict]:
         ts = time.time() if now is None else now
         params["commenceTimeTo"] = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     events, failures = [], []
+    _call_costs.clear()
     for sport, k in SPORTS.items():
         r = _get(f"{BASE}/{k}/odds", dict(params))
         if r.status_code != 200:
@@ -195,4 +208,4 @@ def bookmakers() -> list[str]:
 
 def last_fetch_cost() -> float | None:
     """Sum of x-requests-last over the calls of the latest snapshot(); None if no call reported one."""
-    return None
+    return sum(_call_costs) if _call_costs else None

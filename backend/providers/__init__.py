@@ -162,6 +162,15 @@ def _record_spend(cost: float, now: float) -> None:
     BUDGET_FILE.write_text(json.dumps([list(x) for x in b.spent]))
 
 
+def _correct_spend(real: float | None) -> None:
+    """Swap the estimate just recorded for the real cost, when the response headers gave one."""
+    if real is None:
+        return
+    b = budget()
+    b.set_last_cost(real)
+    BUDGET_FILE.write_text(json.dumps([list(x) for x in b.spent]))
+
+
 def _last_spend() -> float | None:
     spent = budget().spent
     return max(ts for ts, _ in spent) if spent else None
@@ -248,13 +257,15 @@ def _refresh_live(now: float) -> None:
     cost = _fetch_cost()
     if not budget().can_spend(cost, now):
         return
-    # Count the spend before fetching: a fetch that fails part-way has still been charged for the
-    # sports it reached, and recording it also stops a failing fetch being retried on every request.
+    # Record the estimate before fetching, so a failing fetch still counts toward the interval and
+    # is not retried on every request. The real cost (empty responses are free) replaces it after.
     _record_spend(cost, now)
     try:
         data = _fetch_live()
     except Exception:
+        _correct_spend(_real_cost())
         return  # keep serving the previous live prices
+    _correct_spend(_real_cost())
     LIVE_CACHE.write_text(json.dumps(data))
 
 

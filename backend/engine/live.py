@@ -47,6 +47,12 @@ class Budget:
     def record(self, cost: float, now: float) -> None:
         self.spent.append((float(now), float(cost)))
 
+    def set_last_cost(self, cost: float) -> None:
+        """Replace the cost of the newest entry (an estimate) with what the call really cost."""
+        if self.spent:
+            ts, _ = self.spent[-1]
+            self.spent[-1] = (ts, float(cost))
+
     def prune(self, now: float) -> None:
         self.spent = self._window(now)
 
