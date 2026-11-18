@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 
 import {loadState} from './api.js';
+import {createPoller} from './visibility.js';
 
 /** Reads a JSON value from localStorage, or `fallback` if absent. */
 export function loadStored(key, fallback) {
@@ -84,11 +85,11 @@ export function useApiStatus(url, every = 60000) {
       });
     };
     load();
-    const timer = setInterval(load, every);
+    const stopPolling = createPoller(load, every);
     window.addEventListener('data-changed', load);
     return () => {
       live = false;
-      clearInterval(timer);
+      stopPolling();
       window.removeEventListener('data-changed', load);
     };
   }, [url, attempt]);

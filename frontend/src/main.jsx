@@ -50,6 +50,7 @@ import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
 import {FORMATS, ageText, isProp} from './odds.js';
+import {createPoller, shouldRefreshOnShow} from './visibility.js';
 import {creditsText, providerErrorText, rowFreshness, showsStrip, stripState} from './freshness.js';
 import {dismissWelcome} from './welcome.js';
 
@@ -80,6 +81,16 @@ function formatNumber(value, digits = 0) {
 }
 
 /**
+ * Runs `fn` every `ms` while the tab is visible; the timer stops while it is hidden.
+ * @param {function()} fn
+ * @param {?number} ms Null for no polling.
+ * @param {!Array} deps
+ */
+function usePolling(fn, ms, deps) {
+  useEffect(() => (ms ? createPoller(fn, ms) : undefined), deps);
+}
+
+/**
  * Live-mode state and credit budget (GET/POST /api/live). While live mode is
  * on, refetches the tables every refresh interval.
  */
@@ -95,22 +106,13 @@ function useLive() {
   });
   useEffect(() => {
     load();
-    const timer = setInterval(load, 30000);
-    return () => {
-      clearInterval(timer);
-    };
   }, []);
+  usePolling(load, 30000, []);
   const every = status?.enabled ? Math.max(10, status.interval_seconds) * 1000 : null;
-  useEffect(() => {
-    if (!every) return undefined;
-    const timer = setInterval(() => {
-      notifyDataChanged();
-      load();
-    }, every);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [every]);
+  usePolling(() => {
+    notifyDataChanged();
+    load();
+  }, every, [every]);
   const save = async (change) => {
     let response = null;
     try {
@@ -316,21 +318,34 @@ function FreshnessStrip({live}) {
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    const load = () => {
-      fetch('/api/cache').then((r) => {
-        if (!r.ok) throw new Error('bad status');
-        return r.json();
-      }).then((d) => {
-        setInfo(d);
-      }).catch(() => {
-        // Keep the last reading; the strip is informational.
+    const load = () => fetch('/api/cache').then((r) => {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    }).then((d) => {
+      setInfo(d);
+      return d;
+    }).catch(() => {
+      // Keep the last reading; the strip is informational.
+      return null;
+    });
+    // Back in view: refresh once if the data is older than the refresh interval.
+    let refreshing = false;
+    const onShow = () => load().then((d) => {
+      // One refresh at a time; a provider that is failing is not hit again on every show.
+      if (refreshing || !d?.live || d.provider_error || !shouldRefreshOnShow(d.age_seconds, d.ttl_seconds)) return;
+      refreshing = true;
+      return fetch('/api/refresh', {method: 'POST'}).then((r) => {
+        if (!r.ok) return;
+        notifyDataChanged();
+        return load();
+      }).finally(() => {
+        refreshing = false;
       });
-    };
+    }).catch(() => {
+      // The next visit tries again.
+    });
     load();
-    const timer = setInterval(load, 30000);
-    return () => {
-      clearInterval(timer);
-    };
+    return createPoller(load, 30000, undefined, onShow);
   }, []);
   const refresh = async () => {
     if (busy) return;
@@ -1552,10 +1567,10 @@ function AlertWatcher({role = 'poller'}) {
       });
     };
     pollQuietly();
-    const timer = setInterval(pollQuietly, 30000);
+    const stopPolling = createPoller(pollQuietly, 30000);
     return () => {
       live = false;
-      clearInterval(timer);
+      stopPolling();
     };
   }, [on, permission]);
   if (role === 'poller' || permission === 'unsupported') return null;

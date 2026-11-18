@@ -215,6 +215,7 @@ EVENTS = [
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(main, "get_snapshot", lambda: EVENTS)
+    monkeypatch.setattr(main, "peek_live_snapshot", lambda: EVENTS)
     monkeypatch.setattr(main, "_now", lambda: NOW)
     providers.reset_live()
     yield TestClient(main.app)

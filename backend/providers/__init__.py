@@ -237,6 +237,21 @@ def peek_snapshot() -> list[dict]:
         return json.loads(CACHE.read_text()) if CACHE.exists() else []
 
 
+def peek_live_snapshot() -> list[dict]:
+    """Like get_snapshot, but never fetches: the cached pre-game data with the cached live overlay.
+    For status reads and background polls, which must not spend credits."""
+    if not _live():
+        from .mock import snapshot  # free and in memory, so no fetch to avoid
+        return snapshot()
+    data = peek_snapshot()
+    if not _live_config["enabled"]:
+        return data
+    with _lock:
+        if LIVE_CACHE.exists():
+            data = _overlay(data, json.loads(LIVE_CACHE.read_text()), _now())
+    return data
+
+
 def _overlay(base: list[dict], live_events: list[dict], now: float) -> list[dict]:
     """Replace base events with their live version (same id) and append live-only events.
 
