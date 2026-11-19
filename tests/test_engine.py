@@ -98,5 +98,5 @@ def test_shin_no_margin_is_identity():
 
 
 def test_worst_case_takes_max():
-    m, p, w = devig.multiplicative(TWO_WAY), devig.power(TWO_WAY), devig.worst_case(TWO_WAY)
-    assert w == [max(a, b) for a, b in zip(m, p)]
+    all_four = [f(TWO_WAY) for f in (devig.multiplicative, devig.additive, devig.power, devig.shin)]
+    assert devig.worst_case(TWO_WAY) == [min(c) for c in zip(*all_four)]

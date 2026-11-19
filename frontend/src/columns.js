@@ -15,6 +15,7 @@ export const COLUMNS = {
     {label: 'Market', text: 'The kind of bet, such as moneyline, spread or total.'},
     {label: 'Event', text: 'The game, and a LIVE tag if it has started.'},
     {label: 'Book', text: 'The sportsbook that offers this price.'},
+    {label: 'Worst EV', glossary: 'worst-ev'},
     {label: 'Odds', glossary: 'american-odds'},
     {label: 'Fair', glossary: 'fair-odds'},
     {label: 'Win %', glossary: 'win-probability'},

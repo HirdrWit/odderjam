@@ -88,21 +88,24 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
         fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold)
         if fair is None:
             continue
-        worst = sharp.group_consensus(g["outcomes"], weights, "worst_case", max_hold) or fair
+        worst = sharp.worst_consensus(g["outcomes"], weights, max_hold)
+        worst_probs = worst["probs"] if worst else fair["probs"]
+        worst_books = worst["books"] if worst else [None] * len(fair["probs"])
         for i, (o, fp) in enumerate(zip(g["outcomes"], fair["probs"])):
             for book_name, price in o["prices"].items():
                 if book_name not in US_BOOKS or (book and book_name != book) \
                         or not _price_ok(filters, book_name, price):
                     continue
                 v = ev.ev_pct(fp, price)
-                if v < min_ev:
+                worst_ev = ev.ev_pct(worst_probs[i], price)
+                if (worst_ev if method == "worst_case" else v) < min_ev:
                     continue
                 fresh = freshness(e, [book_name, *(u["book"] for u in fair["sharps"])], now)
                 if fresh is not None:
                     updated = e.get("updated", {})
                     flagged = bettable.flags({
                         "market": key, "odds": price, "ev_pct": v,
-                        "worst_ev_pct": ev.ev_pct(worst["probs"][i], price),
+                        "worst_ev_pct": worst_ev,
                         "is_live": fresh["live"], "live_enabled": cfg["enabled"],
                         "max_price_age": cfg["max_price_age"], "price_age": fresh["price_age_seconds"],
                         "update_times": {b: live.parse_time(updated.get(b))
@@ -119,11 +122,12 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         "point": o["point"], "pick": mk.label(o), "book": book_name,
                         "odds": price, "link": bet_link(book_name, o),
                         "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
+                        "worst_ev_pct": worst_ev, "worst_sharp": worst_books[i],
                         "stake": sizing.round_stake(kelly_stake, round_to, max_side),
                         "kelly_stake": kelly_stake,
                         "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"], "flags": flagged, **fresh,
                     })
-    return sorted(rows, key=lambda r: -r["ev_pct"])
+    return sorted(rows, key=lambda r: -(r["worst_ev_pct"] if method == "worst_case" else r["ev_pct"]))
 
 
 def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = None, sport: str | None = None,

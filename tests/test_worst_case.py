@@ -19,16 +19,17 @@ def probs(*prices):
 # ---- I1 ----------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("line", [probs(-300, 250), probs(300, -380), probs(150, 230, 180)])
-def test_worst_case_is_max_of_all_four_methods(line):
+def test_worst_case_is_least_favourable_of_all_four_methods(line):
     all_four = [devig.multiplicative(line), devig.additive(line), devig.power(line), devig.shin(line)]
-    assert devig.worst_case(line) == pytest.approx([max(c) for c in zip(*all_four)])
+    assert devig.worst_case(line) == pytest.approx([min(c) for c in zip(*all_four)])
 
 
-def test_worst_case_can_exceed_multiplicative_and_power():
-    line = probs(-1500, 800)
-    assert devig.worst_case(line)[1] >= max(devig.multiplicative(line)[1], devig.power(line)[1])
-    assert any(devig.worst_case(line)[i] > max(devig.multiplicative(line)[i], devig.power(line)[i]) + 1e-9
-               for i in range(2))
+def test_worst_case_is_never_above_any_method_so_ev_never_beats_them():
+    line = probs(150, 230, 180)
+    worst = devig.worst_case(line)
+    for f in (devig.multiplicative, devig.additive, devig.power, devig.shin):
+        assert all(w <= x + 1e-12 for w, x in zip(worst, f(line)))
+    assert any(w < m - 1e-6 for w, m in zip(worst, devig.multiplicative(line)))
 
 
 # ---- I2 ----------------------------------------------------------------------------------
@@ -46,9 +47,9 @@ def test_worst_consensus_takes_max_per_outcome_and_names_book():
     r = sharp.worst_consensus(outs, WEIGHTS, None)
     pin = devig.worst_case(probs(-110, -110))
     circa = devig.worst_case(probs(-125, 105))
-    assert r["probs"] == pytest.approx([max(pin[0], circa[0]), max(pin[1], circa[1])])
-    assert r["books"] == ["Circa Sports" if circa[0] > pin[0] else "Pinnacle",
-                          "Circa Sports" if circa[1] > pin[1] else "Pinnacle"]
+    assert r["probs"] == pytest.approx([min(pin[0], circa[0]), min(pin[1], circa[1])])
+    assert r["books"] == ["Circa Sports" if circa[0] < pin[0] else "Pinnacle",
+                          "Circa Sports" if circa[1] < pin[1] else "Pinnacle"]
 
 
 def test_worst_consensus_none_without_usable_sharp():

@@ -54,13 +54,12 @@ def shin(probs: list[float]) -> list[float]:
 
 
 def worst_case(probs: list[float]) -> list[float]:
-    """Fair prob = max of multiplicative and power results (conservative for the bettor).
+    """Fair prob = per-outcome min across multiplicative, additive, power and shin.
 
-    A higher fair prob means a lower EV, so each outcome takes the less favourable
-    estimate. The result does not sum to 1.
+    EV rises with the fair prob of the outcome bet, so the worst case for the bettor is the lowest estimate. The result does not sum to 1.
     """
-    m, p = multiplicative(probs), power(probs)
-    return [max(a, b) for a, b in zip(m, p)]
+    results = [multiplicative(probs), additive(probs), power(probs), shin(probs)]
+    return [min(c) for c in zip(*results)]
 
 
 METHODS = {"multiplicative": multiplicative, "additive": additive, "power": power, "shin": shin,

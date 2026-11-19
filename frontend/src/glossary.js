@@ -11,6 +11,11 @@ export const GLOSSARY = [
     example: 'A bet that wins 50% of the time but pays +110 earns money over many bets.',
   },
   {
+    id: 'worst-ev', label: 'Worst EV',
+    definition: 'The lowest edge this bet shows: each sharp book is devigged alone with every method, and the least favourable result counts.',
+    example: 'A 3% edge that is only 0.5% under Circa\'s price has a Worst EV of 0.5%. Hover the cell to see which sharp set it.',
+  },
+  {
     id: 'edge', label: 'Edge',
     definition: 'How much better the price you get is than the true price, as a percent of your stake.',
     example: 'A 3% edge means you expect to win about $3 for every $100 staked.',

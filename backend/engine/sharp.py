@@ -71,3 +71,18 @@ def consensus(ml: dict, weights: dict[str, float], method: str = "multiplicative
         return None
     r["home"], r["away"] = r["probs"]
     return r
+
+
+def worst_consensus(outcomes: list[dict], weights: dict[str, float], max_hold: float | None = None) -> dict | None:
+    """Lowest fair prob per outcome (lowest EV for the bettor) over every usable sharp, each devigged alone with worst_case.
+
+    The weighted mean is not used: one sharp pricing a side lower is enough. Returns None when no sharp
+    is usable, else {"probs": [...], "books": [the sharp that set each outcome's prob]}.
+    """
+    r = group_consensus(outcomes, weights, "worst_case", max_hold)
+    if r is None:
+        return None
+    per_book = r["sharp_probs"]
+    n = len(outcomes)
+    books = [min(per_book, key=lambda b: per_book[b][i]) for i in range(n)]
+    return {"probs": [per_book[books[i]][i] for i in range(n)], "books": books}

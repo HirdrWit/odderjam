@@ -566,12 +566,12 @@ const ROW_FMT = {odds: (o) => formatOdds(o), money: (m) => formatMoney(m)};
 
 const EV_COLUMNS = [
   ['ev', 'EV%', 'desc'], ['pick', 'Pick'], ['market', 'Market'], ['event', 'Event'], ['book', 'Book'],
-  ['odds', 'Odds', 'desc'], ['fair', 'Fair', 'desc'], ['win', 'Win %', 'desc'], ['sharps', 'Sharps (hold)'], ['stake', 'Stake', 'desc'],
+  ['worst', 'Worst EV', 'desc'], ['odds', 'Odds', 'desc'], ['fair', 'Fair', 'desc'], ['win', 'Win %', 'desc'], ['sharps', 'Sharps (hold)'], ['stake', 'Stake', 'desc'],
 ];
-const EV_NUM = new Set(['ev', 'odds', 'fair', 'win', 'stake']);
+const EV_NUM = new Set(['ev', 'worst', 'odds', 'fair', 'win', 'stake']);
 const EV_TERMS = {win: <Term id="win-probability">ⓘ</Term>};
 const EV_SORT = {
-  ev: (r) => r.ev_pct, pick: (r) => r.pick, market: (r) => marketName(r.market), event: (r) => r.event,
+  ev: (r) => r.ev_pct, worst: (r) => r.worst_ev_pct, pick: (r) => r.pick, market: (r) => marketName(r.market), event: (r) => r.event,
   book: (r) => r.book, odds: (r) => oddsKey(r.odds), fair: (r) => oddsKey(r.fair_odds), win: winSortKey, sharps: (r) => r.sharps.length,
   stake: (r) => r.stake,
 };
@@ -811,6 +811,10 @@ function PositiveEv() {
               <td className="c-event">{r.event} <LiveTag row={r} />{r.start && <span className="c-time mut small"> · {eventTime(r.start)}</span>}</td>
               <td className="c-book">{r.book}</td>
               <td className="num c-odds">{formatOdds(r.odds)}</td>
+              <td className={`num c-worst ${signClass(r.worst_ev_pct)}`}
+                title={r.worst_sharp ? `Lowest EV across every devig method, set by ${r.worst_sharp}` : undefined}>
+                {percent(r.worst_ev_pct, {signed: true})}
+              </td>
               <td className="num c-fair">{formatOdds(r.fair_odds)}</td>
               <td className="num c-win" data-label="Win %">
                 {evWinCell(r).win}
