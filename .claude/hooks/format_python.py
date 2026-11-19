@@ -1,1 +1,0 @@
-/home/rob/Development/harness/.claude/hooks/format_python.py
