@@ -95,25 +95,31 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
             sport: str | None = None, bankroll: float = 0.0, round_to: float = 1.0,
             max_side: float | None = None, props: bool = True,
             filters: "FilterSet | None" = None, now: float | None = None,
-            profile: dict | None = None) -> list[dict]:
+            profile: dict | None = None, fair_source: str = "sharp") -> list[dict]:
     """+EV rows priced against the weighted sharp consensus (sharps holding over `max_hold` % are dropped).
 
     `filters` narrows events, lines and bet prices (sports, start window, markets, sharp hold, books, odds range).
     Stale in-play rows are dropped (see freshness); the book and every sharp used must be fresh.
     Every row carries `flags` (see engine.bettable, `profile` overrides its thresholds); with
     `filters.bettable` the flagged rows are dropped.
+    `weights` is flat or per class (main lines vs props, see sharp.class_weights); fair_source="all_books"
+    ignores it and prices every line from every book that has all sides, each weighted 1.
     """
     now = time.time() if now is None else now
+    by_class = sharp.class_weights(weights)
+    all_books = fair_source == "all_books"
     profile = {**bettable.DEFAULT_PROFILE, **(profile or {})}
     cfg = live_config()
     rows = []
     for e, key, g in _filtered_groups(events, market, props, sport, filters):
         # Only sharps pricing every side of this exact line can devig it.
-        fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold)
+        weight_class = "props" if mk.is_prop(key) else "main"
+        w = by_class[weight_class]
+        fair = sharp.group_consensus(g["outcomes"], w, method, max_hold, all_books)
         if fair is None:
             continue
         arb_legs = _arb_legs(e, g, filters, now)
-        worst = sharp.worst_consensus(g["outcomes"], weights, max_hold)
+        worst = sharp.worst_consensus(g["outcomes"], w, max_hold, all_books)
         worst_probs = worst["probs"] if worst else fair["probs"]
         worst_books = worst["books"] if worst else [None] * len(fair["probs"])
         for i, (o, fp) in enumerate(zip(g["outcomes"], fair["probs"])):
@@ -152,6 +158,7 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         "arb_backed": backed, "arb_profit_pct": arb_legs[1] if backed else None,
                         "stake": sizing.round_stake(kelly_stake, round_to, max_side),
                         "kelly_stake": kelly_stake,
+                        "weight_class": weight_class, "fair_source": fair_source,
                         "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"], "flags": flagged, **fresh,
                     })
     return sorted(rows, key=lambda r: -(r["worst_ev_pct"] if method == "worst_case" else r["ev_pct"]))

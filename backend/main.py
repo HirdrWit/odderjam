@@ -17,7 +17,7 @@ from .engine.bettable import multi_leg_flags as _multi_leg_flags
 from .scan import groups as _groups
 from .engine import (bettable, devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
                      promo, sharp, sizing, suspect)
-from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, max_sharp_hold, sharp_weights_spec, us_only
+from .providers.books import SGP_BOOKS, SHARP, SHARP_BOOKS, US_BOOKS, DEFAULT_SHARP_WEIGHTS, max_sharp_hold, sharp_weights_spec, us_only
 from .routes import bets, filters as flt
 from .routes.filters import FilterSet
 from .providers import exchanges, cache_info, get_snapshot, peek_live_snapshot, live_config, live_status, set_live
@@ -82,10 +82,23 @@ def odds_screen(sport: str | None = None, live: bool | None = None):
     return rows
 
 
+FAIR_SOURCES = ("sharp", "all_books")
+
+
+def _parse_spec(spec: str) -> dict:
+    """parse_weights, with a bad spec reported as a 400."""
+    try:
+        return sharp.parse_weights(spec)
+    except ValueError as err:
+        raise HTTPException(400, f"bad sharp weights: {err}") from err
+
+
 @app.get("/api/sharps")
 def sharp_settings():
     """Defaults for the fair-price settings in the UI."""
-    return {"books": SHARP_BOOKS, "weights": sharp.parse_weights(sharp_weights_spec()),
+    weights = sharp.class_weights(_parse_spec(sharp_weights_spec()))
+    return {"books": SHARP_BOOKS, "weights": weights, "recommended": DEFAULT_SHARP_WEIGHTS,
+            "fair_source": "sharp", "fair_sources": list(FAIR_SOURCES),
             "max_hold": max_sharp_hold(), "methods": list(devig.METHODS)}
 
 
@@ -102,7 +115,7 @@ RoundTo = Annotated[float, Query(ge=0, allow_inf_nan=False)]
 def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str | None = None,
                 max_hold: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 round_to: RoundTo = 1.0, max_side: PositiveFloat | None = None,
-                props: bool = True, f: FilterSet = Depends(flt.query_filters),
+                props: bool = True, fair_source: str = "sharp", f: FilterSet = Depends(flt.query_filters),
                 bettable_odds_min: Annotated[float | None, Query(allow_inf_nan=False)] = None,
                 bettable_odds_max: Annotated[float | None, Query(allow_inf_nan=False)] = None,
                 ev_ceiling: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
@@ -118,7 +131,9 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
     `arb_backed=true` keeps only rows that are one leg of an arbitrage."""
     if method not in devig.METHODS:
         raise HTTPException(400, f"unknown devig method {method!r}")
-    weights = sharp.parse_weights(sharps if sharps is not None else sharp_weights_spec())
+    if fair_source not in FAIR_SOURCES:
+        raise HTTPException(400, f"unknown fair_source {fair_source!r}; use sharp or all_books")
+    weights = _parse_spec(sharps if sharps is not None else sharp_weights_spec())
     max_hold = max_sharp_hold() if max_hold is None else max_hold
     _check_sizing(round_to, max_side)
     profile = {k: v for k, v in {"odds_min": bettable_odds_min, "odds_max": bettable_odds_max,
@@ -132,7 +147,7 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
     min_ev = f.min_ev if f.min_ev is not None else 0.0
     rows = scan.ev_rows(get_snapshot(), weights, max_hold, min_ev=min_ev, method=method, kelly=kelly,
                         bankroll=bankroll, round_to=round_to, max_side=max_side, props=props, filters=f, now=_now(),
-                        profile=profile)
+                        profile=profile, fair_source=fair_source)
     if arb_backed:
         rows = [r for r in rows if r["arb_backed"]]
     return hidden.apply(rows, _now(), show_hidden)
@@ -347,7 +362,8 @@ def _market_matches(key: str, wanted: str) -> bool:
 
 def _pickem_probs(outcomes: list[dict], method: str) -> tuple[list[float], str] | None:
     """No-vig probs for one prop line: weighted sharp consensus, else the mean of every book pricing all sides."""
-    c = sharp.group_consensus(outcomes, sharp.parse_weights(sharp_weights_spec()), method, max_sharp_hold())
+    c = sharp.group_consensus(outcomes, sharp.class_weights(_parse_spec(sharp_weights_spec()))["props"], method,
+                              max_sharp_hold())
     if c:
         return c["probs"], "sharp"
     fn = devig.METHODS[method]

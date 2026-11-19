@@ -21,6 +21,7 @@ import {
   ARB_COLUMNS, ARB_DEFAULTS, ARB_SORT, arbChips, arbReset, arbStakingNote, arbTotalPlaceholder,
 } from './arbfilters.js';
 import {ARB_BACKED_TIP, arbBackedBadge, arbBackedParam, legEvText} from './arbbadge.js';
+import {CLASSES, FAIR_SOURCES, isCustom, setWeight as setClassWeight, weightsSpec} from './sharpweights.js';
 import {SHARP_DEFAULTS, SHARP_FIELDS, sharpChips, sharpHint, sharpReset} from './sharpfilters.js';
 import {DEFAULT_FILTERS, activeChips, clearFilter, resetFilters, sportsParam} from './evfilters.js';
 import {stakingSummary} from './staking.js';
@@ -531,21 +532,32 @@ function BettableSettings({values, onChange}) {
   );
 }
 
-function SharpWeights({cfg, weights, maxHold, canReset, onWeight, onMaxHold, onReset}) {
+function SharpWeights({cfg, weights, maxHold, fairSource, canReset, onWeight, onMaxHold, onFairSource, onReset}) {
   return (
     <div className="bar wrap">
-      <Term id="sharp-book">Sharp</Term> weights<FilterHelp help="sharpWeights" /> {cfg.books.map((b) => (
-        <span key={b}>
-          {b} <input className="mini" type="number" step="0.25" min="0" value={weights[b] ?? 0}
-            onChange={(e) => {
-              onWeight(b, Number(e.target.value));
-            }} />
-        </span>
+      <label>Fair price from <select value={fairSource} onChange={(e) => {
+        onFairSource(e.target.value);
+      }}>
+        {FAIR_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+      </select></label>
+      {fairSource === 'sharp' && CLASSES.map((cls) => (
+        <div key={cls} className="wrap">
+          <Term id="sharp-book">Sharp</Term> weights, {cls === 'main' ? 'main lines' : 'props'}
+          {cls === 'main' && <FilterHelp help="sharpWeights" />} {cfg.books.map((b) => (
+            <span key={b}>
+              {b} <input className="mini" type="number" step="0.25" min="0" value={weights[cls]?.[b] ?? 0}
+                onChange={(e) => {
+                  onWeight(cls, b, Number(e.target.value));
+                }} />
+            </span>
+          ))}
+        </div>
       ))}
       Max sharp <Term id="hold">hold</Term> %<FilterHelp help="maxHold" /> <input className="mini" type="number" step="0.5" value={maxHold}
         onChange={(e) => {
           onMaxHold(Number(e.target.value));
         }} />
+      <span className="mut small">Recommended weights: {weightsSpec(cfg.recommended).replace(/;/g, ' · ')}</span>
       {canReset && <button onClick={onReset}>Reset</button>}
     </div>
   );
@@ -702,19 +714,18 @@ function PositiveEv() {
   const {data: cfg, error: cfgError, retry: cfgRetry} = useApiStatus('/api/sharps', 600000);
   const [weights, setWeights] = useStored('evSharpWeights', null);
   const [maxHold, setMaxHold] = useStored('evMaxHold', null);
-  const sharpWeights = weights ?? cfg?.weights;
+  const [fairSource, setFairSource] = useStored('evFairSource', 'sharp');
+  const sharpWeights = (weights && weights.main ? weights : null) ?? cfg?.recommended;  // old flat saves are ignored
   const sharpMaxHold = maxHold ?? cfg?.max_hold;
-  const setWeight = (sharpBook, value) => {
-    setWeights({...sharpWeights, [sharpBook]: value});
+  const setWeight = (cls, sharpBook, value) => {
+    setWeights(setClassWeight(sharpWeights, cls, sharpBook, value));
   };
   const [thresholds, setThresholds] = useStored('evBettableThresholds', BETTABLE_DEFAULTS);
   const lastValid = useRef(BETTABLE_DEFAULTS);
   if (Object.keys(validateBettable(thresholds)).length === 0) lastValid.current = thresholds;
-  const sharpSpec = sharpWeights ?
-      Object.entries(sharpWeights).filter(([, v]) => v > 0).map(([b, v]) => `${b}:${v}`).join(',') :
-      null;
+  const sharpSpec = sharpWeights ? weightsSpec(sharpWeights) : null;
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
-      `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}` +
+      `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}&fair_source=${fairSource}` +
       `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${arbBackedParam(arbOnly)}${bettableQuery(thresholds, lastValid.current)}`;
   const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}&show_hidden=true`);
   const error = evError || cfgError;
@@ -796,10 +807,13 @@ function PositiveEv() {
           </div>
           {cfg && sharpWeights && (
             <SharpWeights cfg={cfg} weights={sharpWeights} maxHold={sharpMaxHold}
-              canReset={Boolean(weights) || maxHold != null} onWeight={setWeight} onMaxHold={setMaxHold}
+              fairSource={fairSource} onFairSource={setFairSource}
+              canReset={isCustom(weights, cfg.recommended) || maxHold != null || fairSource !== 'sharp'}
+              onWeight={setWeight} onMaxHold={setMaxHold}
               onReset={() => {
                 setWeights(null);
                 setMaxHold(null);
+                setFairSource('sharp');
               }} />
           )}
           <BettableSettings values={thresholds} onChange={setThresholds} />

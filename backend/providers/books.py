@@ -14,13 +14,20 @@ KEY_NAMES = {"williamhill_us": "Caesars"}
 
 # Sharp books that set the fair price, and their weight in the consensus.
 # Override with SHARP_WEIGHTS="Pinnacle:1,Circa Sports:0.5" (or per request from the UI).
-SHARP_BOOKS = ["Pinnacle", "Circa Sports", "Novig", "BetOnline.ag"]
-DEFAULT_SHARP_WEIGHTS = "Pinnacle:1,Circa Sports:0.5,Novig:0.5,BetOnline.ag:0.25"
+# Pinnacle is very sharp on main lines but takes little prop action, so props lean on other books too.
+SHARP_BOOKS = ["Pinnacle", "Circa Sports", "Novig", "BetOnline.ag", "FanDuel"]
+DEFAULT_SHARP_WEIGHTS = {
+    "main": {"Pinnacle": 1, "Circa Sports": 0.5, "Novig": 0.5, "BetOnline.ag": 0.25},
+    "props": {"Pinnacle": 0.5, "Circa Sports": 0.5, "Novig": 0.5, "FanDuel": 0.25},
+}
 
 
 def sharp_weights_spec() -> str:
     """Return the SHARP_WEIGHTS spec string: the env var, or the default."""
-    return os.environ.get("SHARP_WEIGHTS", DEFAULT_SHARP_WEIGHTS)
+    env = os.environ.get("SHARP_WEIGHTS")
+    if env is not None:
+        return env
+    return ";".join(f"{c}:" + ",".join(f"{b}:{w:g}" for b, w in ws.items()) for c, ws in DEFAULT_SHARP_WEIGHTS.items())
 
 
 def max_sharp_hold() -> float:
