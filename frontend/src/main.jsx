@@ -680,11 +680,15 @@ function PositiveEv() {
     const key = {event_id: row.event_id, market: row.market, player: row.player ?? null, point: row.point ?? null,
       pick: row.pick, book: row.book};
     let response;
-    if (row.hidden === 'hidden') {
-      const params = new URLSearchParams(Object.entries(key).filter(([, v]) => v !== null).map(([k, v]) => [k, String(v)]));
-      response = await fetch(`/api/hidden?${params}`, {method: 'DELETE'});
-    } else {
-      response = await postJson('/api/hidden', {...key, start: row.start});
+    try {
+      if (row.hidden === 'hidden') {
+        const params = new URLSearchParams(Object.entries(key).filter(([, v]) => v !== null).map(([k, v]) => [k, String(v)]));
+        response = await fetch(`/api/hidden?${params}`, {method: 'DELETE'});
+      } else {
+        response = await postJson('/api/hidden', {...key, start: row.start});
+      }
+    } catch {
+      response = {ok: false};
     }
     if (response.ok) {
       evRetry();
@@ -808,13 +812,13 @@ function PositiveEv() {
         </div>
       )}
       <ApiError data={data} />
-      {zeroStakeNote(data) && (
-        <p className="mut small stake-note">{zeroStakeNote(data)} <button type="button" className="secondary" onClick={() => {
+      {zeroStakeNote(split.visible) && (
+        <p className="mut small stake-note">{zeroStakeNote(split.visible)} <button type="button" className="secondary" onClick={() => {
           setPanel('staking');
         }}>Open Bankroll &amp; staking</button></p>
       )}
       <TableShell data={data} rows={Array.isArray(data) ? bettableRows : undefined} refreshing={refreshing} error={error} onRetry={retry} what="odds"
-        emptyText={hiddenRows.length ? 'Every bet is hidden by Bettable only. Use Show anyway above to see them.' : evEmptyText(data, minEv)} columns={10}>
+        emptyText={hiddenRows.length ? 'Every bet is hidden by Bettable only. Use Show anyway above to see them.' : split.hidden && !split.visible.length ? 'Every bet is hidden. Use Show hidden above to see them.' : evEmptyText(data, minEv)} columns={10}>
       <table className="cards">
         <thead>
           <tr>
@@ -883,7 +887,7 @@ function PositiveEv() {
         </tbody>
       </table>
       </TableShell>
-      <RowExample tab="+EV" row={Array.isArray(data) ? data[0] : null} fmt={ROW_FMT} />
+      <RowExample tab="+EV" row={split.visible[0] ?? null} fmt={ROW_FMT} />
     </>
   );
 }
