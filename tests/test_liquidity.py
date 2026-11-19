@@ -171,7 +171,9 @@ def test_size_arb_caps_each_leg():
 
 
 def test_arb_rows_cap_legs_at_liquidity():
-    markets = ml({"DraftKings": 120, "Kalshi": 130}, {"DraftKings": -150, "FanDuel": 120})
+    # Kalshi +110 / FanDuel +105 is a -3.6% hold: an arb, but above suspect.HOLD_FLOOR_PCT (-10), so it is not
+    # dropped as a mismatched market.
+    markets = ml({"DraftKings": 100, "Kalshi": 110}, {"DraftKings": -150, "FanDuel": 105})
     markets["moneyline"][0]["liquidity"] = {"Kalshi": 40.0}
     e = event("arb", NOW + 7200, markets)
     e["updated"].update({"Kalshi": iso(NOW - 5), "FanDuel": iso(NOW - 5)})
