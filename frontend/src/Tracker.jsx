@@ -11,6 +11,7 @@ import {TableShell} from './TableShell.jsx';
 import {eventTime, impliedPercent, money, percent, signClass} from './fmt.js';
 import {americanToProb} from './calc.js';
 import {formatOdds} from './odds.js';
+import {BAND_COLUMNS, BAND_SORT} from './bands.js';
 import {oddsKey} from './sorttable.js';
 import {
   ADD_BET_FIELDS, AUTO_SETTLE_KEY, DUE_SETTLE_URL, PROFIT, betFieldErrors, calendarWeeks, chartNote, chartReady, clvTileText, filterQuery, latestMonth, parseOddsInput,
@@ -195,6 +196,38 @@ function GroupTable({title, rows, label = (name) => name}) {
             <td className="num">{formatMoney(g.staked)}</td>
             <td className={`num ${signClass(g.profit)}`}>{money(g.profit, {signed: true})}</td>
             <td className={`num ${signClass(g.roi_pct)}`}>{percent(g.roi_pct, {signed: true})}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Sortable per-band table: profit next to expected profit, plus CLV over bets that have a closing line. */
+function BandTable({tab, title, rows}) {
+  const [sort, onSort, sorted] = useSort(tab, {key: 'name', dir: 'asc'});
+  if (!rows || !rows.length) return null;
+  return (
+    <table className="group">
+      <thead>
+        <tr>
+          {BAND_COLUMNS.map(([id, label, defaultDir]) => (
+            <SortTh key={id} tab={tab} id={id} label={id === 'name' ? title : label} sort={sort} onSort={onSort}
+              defaultDir={defaultDir} num={id !== 'name'} />
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {sorted(rows, BAND_SORT).map((g) => (
+          <tr key={g.name}>
+            <td>{g.name}</td>
+            <td className="num">{g.bets}</td>
+            <td className="num">{formatMoney(g.staked)}</td>
+            <td className={`num ${signClass(g.profit)}`}>{money(g.profit, {signed: true})}</td>
+            <td className="num">{money(g.expected_profit, {signed: true})}</td>
+            <td className={`num ${signClass(g.roi_pct)}`}>{percent(g.roi_pct, {signed: true})}</td>
+            <td className="num">{g.avg_clv == null ? '—' : percent(g.avg_clv, {signed: true})}</td>
+            <td className="num">{g.beat_close_pct == null ? '—' : percent(g.beat_close_pct)}</td>
           </tr>
         ))}
       </tbody>
@@ -568,6 +601,8 @@ export function Tracker() {
           <GroupTable title="Bet type" rows={stats.by_market} label={(n) => MARKETS[n] || n} />
           <GroupTable title="Sport" rows={stats.by_sport} />
           <GroupTable title="Book" rows={stats.by_book} />
+          <BandTable tab="TrackerOddsBand" title="Odds band" rows={stats.by_odds_band} />
+          <BandTable tab="TrackerEvBand" title="EV band" rows={stats.by_ev_band} />
         </div>
       )}
     </>

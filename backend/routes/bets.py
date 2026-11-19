@@ -206,6 +206,47 @@ def group(settled: list, key) -> list[dict]:
             for k, v in sorted(g.items(), key=lambda kv: -kv[1]["profit"])]
 
 
+ODDS_BANDS = [(-200, "-inf..-200"), (-110, "-200..-110"), (110, "-110..+110"), (200, "+110..+200"),
+              (400, "+200..+400"), (float("inf"), "+400..inf")]
+EV_BANDS = [(2, "0-2"), (4, "2-4"), (6, "4-6"), (10, "6-10"), (float("inf"), "10+")]
+
+
+def odds_band(r) -> str:
+    """Odds band, lower edge inclusive: -200 is in -200..-110, +110 in +110..+200."""
+    return next(name for hi, name in ODDS_BANDS if r["odds"] < hi)
+
+
+def ev_band(r) -> str | None:
+    """EV band at placement; bets with no EV or negative EV have none."""
+    ev = r["ev_pct"]
+    return None if ev is None or ev < 0 else next(name for hi, name in EV_BANDS if ev < hi)
+
+
+def band_groups(settled: list, key, bands: list) -> list[dict]:
+    """Per-band bets/staked/profit/ROI, CLV (only bets with a closing line) and expected profit, in band order."""
+    g = {}
+    for r in settled:
+        name = key(r)
+        if name is None:
+            continue
+        x = g.setdefault(name, {"bets": 0, "staked": 0.0, "profit": 0.0, "expected_profit": 0.0, "clvs": []})
+        x["bets"] += 1
+        x["staked"] += cash_stake(r)
+        x["profit"] += profit(r)
+        x["expected_profit"] += r["stake"] * (r["ev_pct"] or 0) / 100
+        if (v := clv(r)) is not None:
+            x["clvs"].append(v)
+    rows = []
+    for _, name in bands:
+        if name in g:
+            x = dict(g[name])
+            clvs = x.pop("clvs")
+            rows.append({"name": name, **x, "roi_pct": x["profit"] / x["staked"] * 100 if x["staked"] else 0,
+                         "avg_clv": sum(clvs) / len(clvs) if clvs else None,
+                         "beat_close_pct": sum(v > 0 for v in clvs) / len(clvs) * 100 if clvs else None})
+    return rows
+
+
 def daily(settled: list) -> list[dict]:
     """Per-day P/L in date order with a running total, for the profit chart and calendar."""
     g = defaultdict(lambda: {"bets": 0, "profit": 0.0})
@@ -241,6 +282,9 @@ def summarize(rows: list) -> dict:
         "by_book": group(settled, "book"),
         "by_market": group(settled, "market"),
         "by_strategy": group(settled, lambda r: r["strategy"] or "manual"),
+        "by_odds_band": band_groups(settled, odds_band, ODDS_BANDS),
+        "by_ev_band": band_groups(settled, ev_band, EV_BANDS),
+        "expected_profit": sum(r["stake"] * r["ev_pct"] / 100 for r in settled if r["ev_pct"] is not None),
         "daily": daily(settled),
     }
 
@@ -250,6 +294,11 @@ def stats(f: Filters = Depends()):
     history.capture_closing()
     with conn() as c:
         return summarize(query(c, f))
+
+
+@router.get("/analytics")
+def analytics(f: Filters = Depends()):
+    return stats(f)
 
 
 CSV_COLUMNS = ["id", "placed_at", "settled_at", *FIELDS]
