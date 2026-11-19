@@ -47,6 +47,7 @@ import {
 import {FILTER_HELP, ROW_ACTION_TIPS, methodLabel, pendingStartText} from './evbar.js';
 import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useBettable, useStored} from './hooks.jsx';
+import {MUSTBET_DEFAULTS, MUSTBET_FIELDS, MUSTBET_HELP, mustBetBadge, mustBetParam, mustBetQuery, mustBetReset, validateMustBet} from './mustbet.js';
 import {BETTABLE_DEFAULTS, BETTABLE_FIELDS, bettableQuery, bettableReset, validateBettable} from './thresholds.js';
 import {badgesFor, bettableChip, filterBettable, hiddenSummary, legWarning, parlayFlagState, showAnyway} from './bettable.js';
 import {failedText} from './tablestate.js';
@@ -532,6 +533,32 @@ function BettableSettings({values, onChange}) {
   );
 }
 
+/** "Must bet" section of the Model settings panel. */
+function MustBetSettings({values, onChange}) {
+  const errors = validateMustBet(values);
+  return (
+    <fieldset className="bar wrap bettable-settings">
+      <legend>Must bet</legend>
+      {MUSTBET_FIELDS.map((f) => (
+        <div key={f.key}>
+          <label>
+            {f.label}{' '}
+            <input className="mini" type="number" step={f.step} value={values[f.key]} aria-invalid={Boolean(errors[f.key])}
+              onChange={(e) => {
+                onChange({...values, [f.key]: e.target.value});
+              }} />
+          </label>
+          {errors[f.key] && <span className="bad small" role="alert"> {errors[f.key]}</span>}
+          <div className="mut small">{f.help}</div>
+        </div>
+      ))}
+      <button type="button" onClick={() => {
+        onChange(mustBetReset());
+      }}>Reset to defaults</button>
+    </fieldset>
+  );
+}
+
 function SharpWeights({cfg, weights, maxHold, fairSource, canReset, onWeight, onMaxHold, onFairSource, onReset}) {
   return (
     <div className="bar wrap">
@@ -722,11 +749,15 @@ function PositiveEv() {
   };
   const [thresholds, setThresholds] = useStored('evBettableThresholds', BETTABLE_DEFAULTS);
   const lastValid = useRef(BETTABLE_DEFAULTS);
+  const [mustOnly, setMustOnly] = useStored('evMustBetOnly', false);
+  const [mustThresholds, setMustThresholds] = useStored('evMustBetThresholds', MUSTBET_DEFAULTS);
+  const mustLastValid = useRef(MUSTBET_DEFAULTS);
+  if (Object.keys(validateMustBet(mustThresholds)).length === 0) mustLastValid.current = mustThresholds;
   if (Object.keys(validateBettable(thresholds)).length === 0) lastValid.current = thresholds;
   const sharpSpec = sharpWeights ? weightsSpec(sharpWeights) : null;
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}&fair_source=${fairSource}` +
-      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${arbBackedParam(arbOnly)}${bettableQuery(thresholds, lastValid.current)}`;
+      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${arbBackedParam(arbOnly)}${bettableQuery(thresholds, lastValid.current)}${mustBetQuery(mustThresholds, mustLastValid.current)}${mustBetParam(mustOnly)}`;
   const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}&show_hidden=true`);
   const error = evError || cfgError;
   const retry = () => {
@@ -758,7 +789,11 @@ function PositiveEv() {
           <label className="chk" title={ARB_BACKED_TIP}><input type="checkbox" checked={arbOnly} onChange={(e) => {
             setArbOnly(e.target.checked);
           }} /> Arb-backed only</label>
+          <label className="chk" title={MUSTBET_HELP}><input type="checkbox" checked={mustOnly} onChange={(e) => {
+            setMustOnly(e.target.checked);
+          }} /> Must bets only</label>
           <button type="button" className="link" onClick={() => {
+            setMustOnly(false);
             setArbOnly(false);
             resetAll(resetFilters());
           }}>Reset</button>
@@ -817,6 +852,7 @@ function PositiveEv() {
               }} />
           )}
           <BettableSettings values={thresholds} onChange={setThresholds} />
+          <MustBetSettings values={mustThresholds} onChange={setMustThresholds} />
         </div>
       )}
       {panel === 'staking' && (
@@ -855,7 +891,9 @@ function PositiveEv() {
           {sorted(bettableRows, EV_SORT).map((r, i) => (
             <tr key={i}>
               <td className={`num c-ev ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
-              <td className="c-pick">{r.pick}{badgesFor(r).map((b) => (
+              <td className="c-pick" title={mustBetBadge(r, true)?.tip}>{r.pick}{mustBetBadge(r) && (
+                <span className="chip must-bet-badge" tabIndex={0} title={mustBetBadge(r).tip}>{mustBetBadge(r).label}</span>
+              )}{badgesFor(r).map((b) => (
                 <span key={b.flag} className="chip risk-badge" title={b.tip} tabIndex={0}>{b.label}</span>
               ))}{r.arb_backed && (
                 <span className="chip risk-badge arb-badge" tabIndex={0}
@@ -1775,6 +1813,11 @@ function Alerts() {
           <input type="checkbox" checked={form.bettable} onChange={(e) => {
             setForm({...form, bettable: e.target.checked});
           }} /> Bettable only
+        </label>
+        <label>
+          <input type="checkbox" checked={Boolean(form.must_bet)} onChange={(e) => {
+            setForm({...form, must_bet: e.target.checked});
+          }} /> Must bets only
         </label>
         <span className="mut">{BETTABLE_HELP}</span>
         <button className="primary">Add alert</button>

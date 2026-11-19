@@ -123,12 +123,18 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
                 max_skew_seconds: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 max_sharp_spread: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 require_conservative: bool | None = None, show_hidden: bool = False,
-                arb_backed: bool = False):
+                arb_backed: bool = False, must_bet: bool = False,
+                must_bet_min_ev: NonNegative | None = None,
+                must_bet_odds_min: Annotated[float | None, Query(allow_inf_nan=False)] = None,
+                must_bet_odds_max: Annotated[float | None, Query(allow_inf_nan=False)] = None,
+                must_bet_max_hold: NonNegative | None = None):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
     more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price.
     `f` (query params and/or a saved `preset`) filters sports, books, markets, odds, start time and min EV.
     Rows the user hid, or already tracked, are left out unless `show_hidden`; then each carries `hidden`.
-    `arb_backed=true` keeps only rows that are one leg of an arbitrage."""
+    `arb_backed=true` keeps only rows that are one leg of an arbitrage.
+    Every row carries `must_bet` and `must_bet_reasons`; `must_bet=true` keeps only must bets
+    (thresholds: must_bet_min_ev, must_bet_odds_min/max, must_bet_max_hold)."""
     if method not in devig.METHODS:
         raise HTTPException(400, f"unknown devig method {method!r}")
     if fair_source not in FAIR_SOURCES:
@@ -140,7 +146,10 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
                                  "ev_ceiling": ev_ceiling, "prop_ev_ceiling": prop_ev_ceiling,
                                  "max_skew_seconds": max_skew_seconds,
                                  "max_sharp_spread": max_sharp_spread,
-                                 "require_conservative": require_conservative}.items() if v is not None}
+                                 "require_conservative": require_conservative,
+                                 "must_bet_min_ev": must_bet_min_ev, "must_bet_odds_min": must_bet_odds_min,
+                                 "must_bet_odds_max": must_bet_odds_max,
+                                 "must_bet_max_hold": must_bet_max_hold}.items() if v is not None}
     if err := bettable.profile_error({**bettable.DEFAULT_PROFILE, **profile}):
         raise HTTPException(422, err)
     bankroll = max(bets.bankroll_info()["current"], 0.0)
@@ -150,6 +159,8 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
                         profile=profile, fair_source=fair_source)
     if arb_backed:
         rows = [r for r in rows if r["arb_backed"]]
+    if must_bet:
+        rows = [r for r in rows if r["must_bet"]]
     return hidden.apply(rows, _now(), show_hidden)
 
 

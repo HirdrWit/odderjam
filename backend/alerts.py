@@ -37,10 +37,12 @@ def conn() -> sqlite3.Connection:
     c.execute("""CREATE TABLE IF NOT EXISTS alert_rules (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, kind TEXT NOT NULL,
         min_value REAL NOT NULL DEFAULT 0, book TEXT, market TEXT, sport TEXT, created_at TEXT NOT NULL,
-        bettable INTEGER NOT NULL DEFAULT 0)""")
+        bettable INTEGER NOT NULL DEFAULT 0, must_bet INTEGER NOT NULL DEFAULT 0)""")
     # Rules saved before 'Bettable only' existed keep their behaviour (off); new rules set it explicitly.
     if "bettable" not in {r[1] for r in c.execute("PRAGMA table_info(alert_rules)")}:
         c.execute("ALTER TABLE alert_rules ADD COLUMN bettable INTEGER NOT NULL DEFAULT 0")
+    if "must_bet" not in {r[1] for r in c.execute("PRAGMA table_info(alert_rules)")}:
+        c.execute("ALTER TABLE alert_rules ADD COLUMN must_bet INTEGER NOT NULL DEFAULT 0")
     c.execute("""CREATE TABLE IF NOT EXISTS opportunities (
         id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
         rule_id INTEGER, rule_name TEXT, kind TEXT NOT NULL, title TEXT NOT NULL, value REAL NOT NULL,
@@ -107,6 +109,8 @@ def matches(rule, events: list[dict]) -> list[tuple[str, dict]]:
             rows = [r for r in rows if any(leg["book"] == rule["book"] for leg in r["legs"])]
     if rule["bettable"]:  # phantom edges (in-play, longshot, ...) must not notify
         rows = [r for r in rows if not r.get("flags")]
+    if rule["must_bet"] and rule["kind"] == "ev":  # only rows that pass every check
+        rows = [r for r in rows if r.get("must_bet")]
     return [(rule["kind"], r) for r in rows]
 
 
@@ -204,6 +208,7 @@ class RuleIn(BaseModel):
     market: str = ""
     sport: str = ""
     bettable: bool = True
+    must_bet: bool = False
 
 
 @router.get("")
@@ -227,10 +232,10 @@ def list_rules():
 def add_rule(r: RuleIn, background: BackgroundTasks):
     name = r.name.strip() or f'{"+EV" if r.kind == "ev" else "Arb"} ≥ {r.min_value:g}%' + (f" @ {r.book}" if r.book else "")
     with conn() as c:
-        cur = c.execute("INSERT INTO alert_rules (name,kind,min_value,book,market,sport,created_at,bettable) "
-                        "VALUES (?,?,?,?,?,?,?,?)",
+        cur = c.execute("INSERT INTO alert_rules (name,kind,min_value,book,market,sport,created_at,bettable,must_bet) "
+                        "VALUES (?,?,?,?,?,?,?,?,?)",
                         (name, r.kind, r.min_value, r.book, r.market, r.sport,
-                         datetime.now(timezone.utc).isoformat(), int(r.bettable)))
+                         datetime.now(timezone.utc).isoformat(), int(r.bettable), int(r.must_bet)))
         rule = dict(c.execute("SELECT * FROM alert_rules WHERE id=?", (cur.lastrowid,)).fetchone())
     # Check the new rule against data already on hand (never fetches), after the response is sent, so a
     # failure or a slow webhook can't turn a saved rule into an error (and a duplicate on retry).

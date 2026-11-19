@@ -147,7 +147,7 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         continue
                     backed = arb_legs is not None and (i, book_name, price) in arb_legs[0]
                     kelly_stake = bankroll * ev.kelly_fraction(fp, price, kelly)
-                    rows.append({
+                    row = {
                         "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
                         "start": e["start"], "market": key, "player": g["player"],
                         "name": o["name"], "selection": o["name"],
@@ -160,7 +160,10 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         "kelly_stake": kelly_stake,
                         "weight_class": weight_class, "fair_source": fair_source,
                         "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"], "flags": flagged, **fresh,
-                    })
+                    }
+                    mb = bettable.must_bet(row, profile)
+                    rows.append({**row, "must_bet": mb["must_bet"], "must_bet_reasons": mb["reasons"],
+                                 "must_bet_missing": mb["missing"]})
     return sorted(rows, key=lambda r: -(r["worst_ev_pct"] if method == "worst_case" else r["ev_pct"]))
 
 
