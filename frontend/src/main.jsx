@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {Fragment, useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 
 import './style.css';
@@ -13,7 +13,8 @@ import {Help} from './Help.jsx';
 import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {loadStored} from './hooks.js';
 import {ALERTS_EVENT, PANEL_EVENT, SETTINGS_LABEL, SETTINGS_LINKS, requestPanel, takePanel} from './settings.js';
-import {OddsScreen} from './OddsScreen.jsx';
+import {OddsScreen, RowHistory} from './OddsScreen.jsx';
+import {ageText as holdAgeText, moveLabel} from './linemove.js';
 import {Pickem} from './Pickem.jsx';
 import {SizingBar, sizingQuery, useSizing} from './Sizing.jsx';
 import {filterCount, filtersLabel} from './cards.js';
@@ -675,6 +676,8 @@ function PositiveEv() {
   const chips = activeChips({book, minEv, sport, props});
   const [bettable, setBettable] = useBettable();
   const [showHidden, setShowHidden] = useState(false);
+  const [historyRow, setHistoryRow] = useState(null);
+  const rowId = (r) => `${r.event_id}|${r.market}|${r.player}|${r.point}|${r.pick}|${r.book}`;
   const split = splitHidden(data, showHidden);
   const hiddenRowsNote = hiddenRowsSummary(split);
   const {shown: bettableRows, hidden: hiddenRows} = filterBettable(split.visible, bettable);
@@ -889,7 +892,8 @@ function PositiveEv() {
         </thead>
         <tbody>
           {sorted(bettableRows, EV_SORT).map((r, i) => (
-            <tr key={i}>
+            <Fragment key={i}>
+            <tr>
               <td className={`num c-ev ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
               <td className="c-pick" title={mustBetBadge(r, true)?.tip}>{r.pick}{mustBetBadge(r) && (
                 <span className="chip must-bet-badge" tabIndex={0} title={mustBetBadge(r).tip}>{mustBetBadge(r).label}</span>
@@ -906,7 +910,14 @@ function PositiveEv() {
                 title={r.worst_sharp ? `Lowest EV across every devig method, set by ${r.worst_sharp}` : undefined}>
                 {percent(r.worst_ev_pct, {signed: true})}
               </td>
-              <td className="num c-odds">{formatOdds(r.odds)}</td>
+              <td className="num c-odds">{formatOdds(r.odds)}
+                {moveLabel(r.sharp_move) && (
+                  <div className={`small ${moveLabel(r.sharp_move).cls}`} title={moveLabel(r.sharp_move).tip}>
+                    {moveLabel(r.sharp_move).arrow} {moveLabel(r.sharp_move).label}
+                  </div>
+                )}
+                {r.price_age_minutes != null && <div className="mut small" title="How long this book has held this price">{holdAgeText(r.price_age_minutes)} old</div>}
+              </td>
               <td className="num c-fair">{formatOdds(r.fair_odds)}</td>
               <td className="num c-win" data-label="Win %">
                 {evWinCell(r).win}
@@ -925,6 +936,10 @@ function PositiveEv() {
                     aria-label={rowActionAria('track', tracked.has(trackKey(r)), r)} onClick={() => {
                     track(r);
                   }}>{trackButtonLabel(tracked.has(trackKey(r)))}</button>
+                  <button className={historyRow === rowId(r) ? 'secondary on' : 'secondary'} aria-expanded={historyRow === rowId(r)}
+                    aria-label={`History ${r.pick} @ ${r.book}`} title="Price history of this bet and the sharps" onClick={() => {
+                      setHistoryRow(historyRow === rowId(r) ? null : rowId(r));
+                    }}>History</button>
                   {r.hidden !== 'tracked' && (
                     <button className="secondary" aria-label={`${r.hidden ? 'Unhide' : 'Hide'} ${r.pick} @ ${r.book}`}
                       title="Hide this row until the event starts" onClick={() => {
@@ -944,6 +959,10 @@ function PositiveEv() {
                 </div>
               </td>
             </tr>
+            {historyRow === rowId(r) && (
+              <tr className="history-row"><td colSpan={EV_COLUMNS.length + 1}><RowHistory row={r} /></td></tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>

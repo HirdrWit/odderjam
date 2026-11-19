@@ -29,6 +29,8 @@ def conn() -> sqlite3.Connection:
     c.execute("""CREATE TABLE IF NOT EXISTS odds_history (
         event_id TEXT NOT NULL, market TEXT NOT NULL, outcome TEXT NOT NULL, point REAL,
         book TEXT NOT NULL, price REAL NOT NULL, fetched_at TEXT NOT NULL)""")
+    if "player" not in {r["name"] for r in c.execute("PRAGMA table_info(odds_history)")}:
+        c.execute("ALTER TABLE odds_history ADD COLUMN player TEXT")  # props: one line group per player
     c.execute("CREATE INDEX IF NOT EXISTS odds_history_event ON odds_history (event_id, market, fetched_at)")
     c.execute("CREATE INDEX IF NOT EXISTS odds_history_age ON odds_history (fetched_at)")
     # Sharp Money: public exchange trades, once per (book, trade_id). traded_at is epoch seconds.

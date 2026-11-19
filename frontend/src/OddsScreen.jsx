@@ -10,6 +10,7 @@ import {booksHelp, holdClass, introVisible, slipToast, suspectNote} from './odds
 import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {slipLeg} from './slip.js';
+import {historyQuery} from './linemove.js';
 import {
   FORMATS,
   ageText,
@@ -81,7 +82,7 @@ function formatProb(prob, format) {
   return formatOdds(american, format);
 }
 
-function MoveChart({rows, outcome, label, books, format}) {
+export function MoveChart({rows, outcome, label, books, format}) {
   const [hover, setHover] = useState(null);
   const points = rows.filter((r) => r.outcome === outcome && books.includes(r.book));
   if (!points.length) return null;
@@ -180,6 +181,30 @@ function LineMovement({event, books, format}) {
     <div className="moves">
       <MoveChart rows={rows} outcome={event.away} label={event.away} books={books} format={format} />
       <MoveChart rows={rows} outcome={event.home} label={event.home} books={books} format={format} />
+    </div>
+  );
+}
+
+/** History chart for one +EV row: the bet book and each sharp, for the row's side. */
+export function RowHistory({row, format}) {
+  const {data: rows, error, retry} = useApiStatus(
+      `/api/history/${encodeURIComponent(row.event_id)}?${historyQuery(row)}`, 300000);
+  const failed = failedText({data: rows, error, what: 'price history'});
+  if (failed) {
+    return (
+      <div role="alert">
+        <span className="bad">{failed}</span> <button type="button" onClick={retry}>Retry</button>
+      </div>
+    );
+  }
+  if (!rows) return null;
+  const books = [row.book, ...row.sharps.map((s) => s.book)];
+  if (!rows.some((r) => r.outcome === row.selection && books.includes(r.book))) {
+    return <div className="mut">No price history yet.</div>;
+  }
+  return (
+    <div className="moves">
+      <MoveChart rows={rows} outcome={row.selection} label={row.pick} books={books} format={format} />
     </div>
   );
 }

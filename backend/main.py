@@ -161,7 +161,7 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
         rows = [r for r in rows if r["arb_backed"]]
     if must_bet:
         rows = [r for r in rows if r["must_bet"]]
-    return hidden.apply(rows, _now(), show_hidden)
+    return hidden.apply(history.annotate(rows, _now()), _now(), show_hidden)
 
 
 def _check_sizing(round_to: float, max_side: float | None) -> None:
@@ -243,9 +243,11 @@ def promo_conversions(kind: PromoKind, book: str, amount: Amount = 100.0, boost_
 
 
 @app.get("/api/history/{event_id}")
-def odds_history(event_id: str, market: str = "moneyline"):
-    """Every stored price for one event and market, oldest first."""
-    return history.history(event_id, market)
+def odds_history(event_id: str, market: str = "moneyline", point: float | None = None,
+                 player: str | None = None):
+    """Every stored price for one event and market (optionally one `point` and `player`), oldest first.
+    Reads only the local store: no provider call, no API credits."""
+    return history.history(event_id, market, point, player)
 
 
 class LegIn(BaseModel):
