@@ -1814,11 +1814,11 @@ function Alerts() {
             setForm({...form, bettable: e.target.checked});
           }} /> Bettable only
         </label>
-        <label>
+        {form.kind === 'ev' && <label title="Uses the default Must bet thresholds, not the ones in Model settings">
           <input type="checkbox" checked={Boolean(form.must_bet)} onChange={(e) => {
             setForm({...form, must_bet: e.target.checked});
           }} /> Must bets only
-        </label>
+        </label>}
         <span className="mut">{BETTABLE_HELP}</span>
         <button className="primary">Add alert</button>
         {formError && <span className="bad" role="alert">{formError}</span>}
@@ -1827,7 +1827,7 @@ function Alerts() {
       <table>
         <thead>
           <tr>
-            <th>Rule</th><th>Type</th><th>Min</th><th>Book</th><th>Market</th><th>Sport</th><th>Bettable only</th><th></th>
+            <th>Rule</th><th>Type</th><th>Min</th><th>Book</th><th>Market</th><th>Sport</th><th>Bettable only</th><th>Must bets only</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -1840,6 +1840,7 @@ function Alerts() {
               <td>{MARKETS[r.market] || 'Any'}</td>
               <td>{r.sport || 'Any'}</td>
               <td>{r.bettable ? 'On' : 'Off'}</td>
+              <td>{r.kind === 'ev' && r.must_bet ? 'On' : 'Off'}</td>
               <td><button className="x" onClick={() => {
                 remove(r);
               }}>✕</button></td>

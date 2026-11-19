@@ -235,7 +235,7 @@ def add_rule(r: RuleIn, background: BackgroundTasks):
         cur = c.execute("INSERT INTO alert_rules (name,kind,min_value,book,market,sport,created_at,bettable,must_bet) "
                         "VALUES (?,?,?,?,?,?,?,?,?)",
                         (name, r.kind, r.min_value, r.book, r.market, r.sport,
-                         datetime.now(timezone.utc).isoformat(), int(r.bettable), int(r.must_bet)))
+                         datetime.now(timezone.utc).isoformat(), int(r.bettable), int(r.must_bet and r.kind == "ev")))
         rule = dict(c.execute("SELECT * FROM alert_rules WHERE id=?", (cur.lastrowid,)).fetchone())
     # Check the new rule against data already on hand (never fetches), after the response is sent, so a
     # failure or a slow webhook can't turn a saved rule into an error (and a duplicate on retry).
