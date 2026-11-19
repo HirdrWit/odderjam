@@ -20,6 +20,7 @@ import {filterCount, filtersLabel} from './cards.js';
 import {
   ARB_COLUMNS, ARB_DEFAULTS, ARB_SORT, arbChips, arbReset, arbStakingNote, arbTotalPlaceholder,
 } from './arbfilters.js';
+import {ARB_BACKED_TIP, arbBackedBadge, arbBackedParam, legEvText} from './arbbadge.js';
 import {SHARP_DEFAULTS, SHARP_FIELDS, sharpChips, sharpHint, sharpReset} from './sharpfilters.js';
 import {DEFAULT_FILTERS, activeChips, clearFilter, resetFilters, sportsParam} from './evfilters.js';
 import {stakingSummary} from './staking.js';
@@ -583,6 +584,7 @@ function PositiveEv() {
   const [kelly, setKelly] = useStored('evKelly', 0.25);
   const [props, setProps] = useStored('evProps', 'include');
   const [sport, setSport] = useStored('evSport', '');
+  const [arbOnly, setArbOnly] = useStored('evArbOnly', false);
   const [panel, setPanel] = useState(() => takePanel());
   useEffect(() => {
     const onPanel = () => {
@@ -713,7 +715,7 @@ function PositiveEv() {
       null;
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}` +
-      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${bettableQuery(thresholds, lastValid.current)}`;
+      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${arbBackedParam(arbOnly)}${bettableQuery(thresholds, lastValid.current)}`;
   const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}&show_hidden=true`);
   const error = evError || cfgError;
   const retry = () => {
@@ -742,7 +744,11 @@ function PositiveEv() {
             {SPORTS.map((x) => <option key={x} value={x}>{x || 'Any sport'}</option>)}
           </select>
           Market <PropsFilter value={props} onChange={setProps} />
+          <label className="chk" title={ARB_BACKED_TIP}><input type="checkbox" checked={arbOnly} onChange={(e) => {
+            setArbOnly(e.target.checked);
+          }} /> Arb-backed only</label>
           <button type="button" className="link" onClick={() => {
+            setArbOnly(false);
             resetAll(resetFilters());
           }}>Reset</button>
         </span>
@@ -837,7 +843,10 @@ function PositiveEv() {
               <td className={`num c-ev ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
               <td className="c-pick">{r.pick}{badgesFor(r).map((b) => (
                 <span key={b.flag} className="chip risk-badge" title={b.tip} tabIndex={0}>{b.label}</span>
-              ))}</td>
+              ))}{r.arb_backed && (
+                <span className="chip risk-badge arb-badge" tabIndex={0}
+                  title={`${arbBackedBadge(r).tip} (${percent(r.arb_profit_pct, {digits: 2, signed: true})})`}>{arbBackedBadge(r).label}</span>
+              )}</td>
               <td className="c-market">{marketName(r.market)}</td>
               <td className="c-event">{r.event} <LiveTag row={r} />{r.start && <span className="c-time mut small"> · {eventTime(r.start)}</span>}</td>
               <td className="c-book">{r.book}</td>
@@ -913,8 +922,10 @@ function ArbRow({arb, onTrack}) {
       </td>
       <td className="c-pick">
         {arb.legs.map((leg, j) => (
-          <div key={j}>
-            {leg.pick} {formatOdds(leg.odds)} @ {leg.book} — stake <b>{formatMoney(leg.stake)}</b>{' '}
+          <div key={j} className={leg.ev_leg ? 'ev-leg' : undefined}>
+            {leg.pick} {formatOdds(leg.odds)} @ {leg.book}{legEvText(leg) && (
+              <span className={`${signClass(leg.ev_pct)} small`} title={leg.ev_leg ? 'This leg is +EV against the fair price' : 'EV against the fair price'}> {legEvText(leg)}{leg.ev_leg ? ' ★' : ''}</span>
+            )} — stake <b>{formatMoney(leg.stake)}</b>{' '}
             <BetLink href={leg.link} />{' '}
             <span className="mut">
               · profit if wins{' '}

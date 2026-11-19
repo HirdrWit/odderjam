@@ -66,6 +66,30 @@ def _price_ok(filters: "FilterSet | None", book: str, price: float) -> bool:
     return filters is None or (filters.book_ok(book) and filters.odds_ok(price))
 
 
+def _best_legs(g: dict, filters: "FilterSet | None" = None) -> list[tuple[dict, str, float]] | None:
+    """Best US price per outcome of a line group as (outcome, book, price), or None if a side has no price or
+    the legs sit at fewer than two books (no arbitrage possible)."""
+    best = []
+    for o in g["outcomes"]:
+        us_prices = {b: p for b, p in us_only(o["prices"]).items() if _price_ok(filters, b, p)}
+        if not us_prices:
+            return None
+        best.append((o, *max(us_prices.items(), key=lambda kv: kv[1])))
+    return best if len({book for _, book, _ in best}) >= 2 else None
+
+
+def _arb_legs(e: dict, g: dict, filters: "FilterSet | None", now: float) -> tuple[set[tuple[int, str, float]], float] | None:
+    """({(outcome index, book, price) of each leg}, profit %) when the group's best prices form an arb that
+    arb_rows would show too: same filters, and every leg book fresh."""
+    best = _best_legs(g, filters)
+    if best is None or freshness(e, [book for _, book, _ in best], now) is None:
+        return None
+    profit = arbm.arb([price for _, _, price in best])["profit_pct"]
+    if profit <= 0:
+        return None
+    return {(i, book, price) for i, (_, book, price) in enumerate(best)}, profit
+
+
 def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None = None, min_ev: float = 0.0,
             method: str = "multiplicative", kelly: float = 0.25, market: str | None = None,
             sport: str | None = None, bankroll: float = 0.0, round_to: float = 1.0,
@@ -88,6 +112,7 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
         fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold)
         if fair is None:
             continue
+        arb_legs = _arb_legs(e, g, filters, now)
         worst = sharp.worst_consensus(g["outcomes"], weights, max_hold)
         worst_probs = worst["probs"] if worst else fair["probs"]
         worst_books = worst["books"] if worst else [None] * len(fair["probs"])
@@ -114,6 +139,7 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                     }, profile)
                     if filters is not None and filters.bettable and flagged:
                         continue
+                    backed = arb_legs is not None and (i, book_name, price) in arb_legs[0]
                     kelly_stake = bankroll * ev.kelly_fraction(fp, price, kelly)
                     rows.append({
                         "event_id": e["id"], "event": f'{e["away"]} @ {e["home"]}', "sport": e["sport"],
@@ -123,6 +149,7 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         "odds": price, "link": bet_link(book_name, o),
                         "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                         "worst_ev_pct": worst_ev, "worst_sharp": worst_books[i],
+                        "arb_backed": backed, "arb_profit_pct": arb_legs[1] if backed else None,
                         "stake": sizing.round_stake(kelly_stake, round_to, max_side),
                         "kelly_stake": kelly_stake,
                         "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"], "flags": flagged, **fresh,
@@ -132,24 +159,21 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
 
 def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = None, sport: str | None = None,
              total: float = 100.0, round_to: float = 1.0, max_side: float | None = None,
-             props: bool = True, filters: "FilterSet | None" = None, now: float | None = None) -> list[dict]:
+             props: bool = True, filters: "FilterSet | None" = None, now: float | None = None,
+             weights: dict | None = None, max_hold: float = 100.0, method: str = "multiplicative") -> list[dict]:
     """Arbs sized to `total`, rounded to `round_to`, capped at `max_side`.
 
     `filters` narrows events and lines, and limits each leg to the allowed books and odds range.
-    Stale in-play rows are dropped (see freshness).
+    Stale in-play rows are dropped (see freshness). With `weights`, each leg carries `ev_pct` against the
+    sharp consensus fair price (None without one) and `ev_leg` marks the leg(s) with positive EV.
     """
     now = time.time() if now is None else now
     rows = []
     for e, key, g in _filtered_groups(events, market, props, sport, filters):
-        best = []
-        for o in g["outcomes"]:
-            us_prices = {b: p for b, p in us_only(o["prices"]).items() if _price_ok(filters, b, p)}
-            if not us_prices:
-                break
-            best.append((o, *max(us_prices.items(), key=lambda kv: kv[1])))
-        else:
-            if len({book for _, book, _ in best}) < 2:
-                continue
+        best = _best_legs(g, filters)
+        if best is not None:
+            fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold) if weights else None
+            leg_ev = [ev.ev_pct(fair["probs"][i], price) if fair else None for i, (_, _, price) in enumerate(best)]
             result = arbm.arb([price for _, _, price in best])
             if result["profit_pct"] < min_profit:
                 continue
@@ -162,9 +186,11 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
                              "start": e["start"], "market": key, "player": g["player"], "point": g["point"],
                              "legs": [{"pick": mk.label(o), "selection": o["name"], "point": o["point"], "book": book,
                                        "odds": price, "link": bet_link(book, o), "stake": stake, "ideal_stake": ideal,
-                                       "profit_if_wins": won}
-                                      for (o, book, price), stake, ideal, won
-                                      in zip(best, sized["stakes"], sized["ideal_stakes"], sized["profits"])],
+                                       "profit_if_wins": won, "ev_pct": lev,
+                                       "ev_leg": lev is not None and lev > 0}
+                                      for (o, book, price), stake, ideal, won, lev
+                                      in zip(best, sized["stakes"], sized["ideal_stakes"], sized["profits"],
+                                             leg_ev)],
                              "profit_pct": result["profit_pct"],
                              **{k: sized[k] for k in ("total_stake", "min_profit", "max_profit", "min_profit_pct",
                                                       "capped", "rounding_loss", "over_total", "warning")}, **fresh,

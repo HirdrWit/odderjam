@@ -109,11 +109,13 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
                 prop_ev_ceiling: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 max_skew_seconds: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 max_sharp_spread: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
-                require_conservative: bool | None = None, show_hidden: bool = False):
+                require_conservative: bool | None = None, show_hidden: bool = False,
+                arb_backed: bool = False):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
     more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price.
     `f` (query params and/or a saved `preset`) filters sports, books, markets, odds, start time and min EV.
-    Rows the user hid, or already tracked, are left out unless `show_hidden`; then each carries `hidden`."""
+    Rows the user hid, or already tracked, are left out unless `show_hidden`; then each carries `hidden`.
+    `arb_backed=true` keeps only rows that are one leg of an arbitrage."""
     if method not in devig.METHODS:
         raise HTTPException(400, f"unknown devig method {method!r}")
     weights = sharp.parse_weights(sharps if sharps is not None else sharp_weights_spec())
@@ -131,6 +133,8 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
     rows = scan.ev_rows(get_snapshot(), weights, max_hold, min_ev=min_ev, method=method, kelly=kelly,
                         bankroll=bankroll, round_to=round_to, max_side=max_side, props=props, filters=f, now=_now(),
                         profile=profile)
+    if arb_backed:
+        rows = [r for r in rows if r["arb_backed"]]
     return hidden.apply(rows, _now(), show_hidden)
 
 
@@ -151,7 +155,8 @@ def arbs(total: PositiveFloat | None = None, round_to: RoundTo = 1.0, max_side: 
         total = total if total > 0 else 100.0
     min_profit = f.min_profit if f.min_profit is not None else 0.0
     return scan.arb_rows(get_snapshot(), min_profit=min_profit, total=total, round_to=round_to,
-                         max_side=max_side, props=props, filters=f, now=_now())
+                         max_side=max_side, props=props, filters=f, now=_now(),
+                         weights=sharp.parse_weights(sharp_weights_spec()), max_hold=max_sharp_hold())
 
 
 PromoKind = Literal["bonus-bet", "profit-boost", "second-chance"]
