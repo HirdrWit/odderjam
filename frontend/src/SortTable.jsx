@@ -36,7 +36,7 @@ export function SortTh({tab, label, id, sort, onSort, defaultDir, num = false, c
       <button type="button" className="sort" onClick={() => {
         onSort(id, defaultDir);
       }}>
-        {label}{tip && <span className="info" aria-hidden="true"> ⓘ</span>}
+        {label}{tip && !children && <span className="info" aria-hidden="true"> ⓘ</span>}
         <span className="arrow" aria-hidden="true"> {arrow(sort, id)}</span>
       </button>
       {children && <> {children}</>}
