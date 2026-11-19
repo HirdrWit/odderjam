@@ -8,7 +8,8 @@ import {trackerEmptyText} from './empty.js';
 import {errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
 import {failedText} from './tablestate.js';
 import {TableShell} from './TableShell.jsx';
-import {eventTime, money, percent, signClass} from './fmt.js';
+import {eventTime, impliedPercent, money, percent, signClass} from './fmt.js';
+import {americanToProb} from './calc.js';
 import {formatOdds} from './odds.js';
 import {oddsKey} from './sorttable.js';
 import {
@@ -241,6 +242,7 @@ function BetRow({bet, onPatch, onDelete}) {
         <input className="mini" type="number" defaultValue={bet.odds}
           onBlur={patchNumber('odds', bet.odds)} />
       </td>
+      <td className="num" data-label="Implied %">{impliedPercent(bet.odds)}</td>
       <td className="num" data-label="Stake">
         <input className="mini" type="number" step="0.01" defaultValue={bet.stake}
           onBlur={patchNumber('stake', bet.stake)} />
@@ -280,19 +282,20 @@ const SETTLE_PROMPT =
 
 const BET_COLUMNS = [
   ['date', 'Date', 'desc'], ['pick', 'Pick'], ['event', 'Event'], ['book', 'Book'], ['type', 'Type'],
-  ['odds', 'Odds', 'desc'], ['stake', 'Stake', 'desc'], ['close', 'Close', 'desc'],
+  ['odds', 'Odds', 'desc'], ['implied', 'Implied %', 'desc'], ['stake', 'Stake', 'desc'], ['close', 'Close', 'desc'],
   ['clv', 'CLV', 'desc'], ['sharpClv', 'Sharp CLV', 'desc'], ['status', 'Status'],
   ['profit', 'P/L', 'desc'],
 ];
 const BET_TERM_LABELS = {
+  implied: <Term id="win-probability">ⓘ</Term>,
   close: <Term id="closing-odds">ⓘ</Term>,
   clv: <Term id="clv">ⓘ</Term>,
   sharpClv: <Term id="sharp-clv">ⓘ</Term>,
 };
-const BET_NUM = new Set(['odds', 'stake', 'close', 'clv', 'sharpClv', 'profit']);
+const BET_NUM = new Set(['odds', 'implied', 'stake', 'close', 'clv', 'sharpClv', 'profit']);
 const BET_SORT = {
   date: (b) => Date.parse(b.placed_at), pick: (b) => b.pick, event: (b) => b.event, book: (b) => b.book,
-  type: (b) => MARKETS[b.market] || b.market, odds: (b) => oddsKey(b.odds), stake: (b) => b.stake,
+  type: (b) => MARKETS[b.market] || b.market, odds: (b) => oddsKey(b.odds), implied: (b) => (Number.isFinite(b.odds) && Math.abs(b.odds) >= 100 ? americanToProb(b.odds) : null), stake: (b) => b.stake,
   close: (b) => (b.closing_odds == null ? null : oddsKey(b.closing_odds)), clv: (b) => b.clv_pct,
   sharpClv: (b) => b.clv_sharp_pct, status: (b) => b.status, profit: (b) => b.profit,
 };
@@ -530,14 +533,14 @@ export function Tracker() {
           </div>
         </form>
       )}
-      <TableShell data={bets} refreshing={betsRefreshing} columns={11} error={betsError} onRetry={betsRetry}
+      <TableShell data={bets} refreshing={betsRefreshing} columns={12} error={betsError} onRetry={betsRetry}
         what="your bets"
         emptyText={emptyText || 'No bets match these filters. Clear a filter to see more.'}>
       <table className="cards">
         <thead>
           <tr>
             {BET_COLUMNS.map(([id, label, defaultDir]) => (
-              <SortTh key={id} id={id} label={label} sort={sort} onSort={onSort} defaultDir={defaultDir}
+              <SortTh key={id} tab="Tracker" id={id} label={label} sort={sort} onSort={onSort} defaultDir={defaultDir}
                 num={BET_NUM.has(id)}>
                 {BET_TERM_LABELS[id]}
               </SortTh>

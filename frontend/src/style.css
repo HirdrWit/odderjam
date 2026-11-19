@@ -157,6 +157,8 @@ nav button.link, .welcome button.link { text-decoration: underline; }
   table.cards td.c-fair { grid-column: 2; order: 3; text-align: left; }
   table.cards td.c-fair::before { content: "\2192 "; color: var(--text-muted); }
   table.cards td.c-ev { grid-column: 3; order: 3; text-align: right; font-size: var(--fs-4); font-weight: 700; }
+  table.cards td.c-win { order: 4; font-variant-numeric: tabular-nums; }
+  table.cards td.c-win .mut { display: inline; margin-left: var(--sp-2); }
   table.cards td.c-event { order: 4; color: var(--text-muted); }
   table.cards td.c-time { display: inline; }
   table.cards td.c-status, table.cards td.c-pl { order: 5; grid-column: auto; }

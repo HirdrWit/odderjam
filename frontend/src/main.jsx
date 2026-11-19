@@ -49,6 +49,7 @@ import {badgesFor, bettableChip, filterBettable, hiddenSummary, legWarning, parl
 import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
+import {evWinCell, winSortKey} from './winprob.js';
 import {FORMATS, ageText, isProp} from './odds.js';
 import {loadInterval, optionText, setCurrentSeconds} from './refresh.js';
 import {createPoller, shouldRefreshOnShow} from './visibility.js';
@@ -565,12 +566,13 @@ const ROW_FMT = {odds: (o) => formatOdds(o), money: (m) => formatMoney(m)};
 
 const EV_COLUMNS = [
   ['ev', 'EV%', 'desc'], ['pick', 'Pick'], ['market', 'Market'], ['event', 'Event'], ['book', 'Book'],
-  ['odds', 'Odds', 'desc'], ['fair', 'Fair', 'desc'], ['sharps', 'Sharps (hold)'], ['stake', 'Stake', 'desc'],
+  ['odds', 'Odds', 'desc'], ['fair', 'Fair', 'desc'], ['win', 'Win %', 'desc'], ['sharps', 'Sharps (hold)'], ['stake', 'Stake', 'desc'],
 ];
-const EV_NUM = new Set(['ev', 'odds', 'fair', 'stake']);
+const EV_NUM = new Set(['ev', 'odds', 'fair', 'win', 'stake']);
+const EV_TERMS = {win: <Term id="win-probability">ⓘ</Term>};
 const EV_SORT = {
   ev: (r) => r.ev_pct, pick: (r) => r.pick, market: (r) => marketName(r.market), event: (r) => r.event,
-  book: (r) => r.book, odds: (r) => oddsKey(r.odds), fair: (r) => oddsKey(r.fair_odds), sharps: (r) => r.sharps.length,
+  book: (r) => r.book, odds: (r) => oddsKey(r.odds), fair: (r) => oddsKey(r.fair_odds), win: winSortKey, sharps: (r) => r.sharps.length,
   stake: (r) => r.stake,
 };
 
@@ -785,13 +787,15 @@ function PositiveEv() {
         }}>Open Bankroll &amp; staking</button></p>
       )}
       <TableShell data={data} rows={Array.isArray(data) ? bettableRows : undefined} refreshing={refreshing} error={error} onRetry={retry} what="odds"
-        emptyText={hiddenRows.length ? 'Every bet is hidden by Bettable only. Use Show anyway above to see them.' : evEmptyText(data, minEv)} columns={9}>
+        emptyText={hiddenRows.length ? 'Every bet is hidden by Bettable only. Use Show anyway above to see them.' : evEmptyText(data, minEv)} columns={10}>
       <table className="cards">
         <thead>
           <tr>
             {EV_COLUMNS.map(([id, label, defaultDir]) => (
               <SortTh key={id} tab="+EV" id={id} label={label} sort={sort} onSort={onSort} defaultDir={defaultDir}
-                num={EV_NUM.has(id)} />
+                num={EV_NUM.has(id)}>
+                {EV_TERMS[id]}
+              </SortTh>
             ))}
             <th aria-label="Actions"></th>
           </tr>
@@ -808,6 +812,10 @@ function PositiveEv() {
               <td className="c-book">{r.book}</td>
               <td className="num c-odds">{formatOdds(r.odds)}</td>
               <td className="num c-fair">{formatOdds(r.fair_odds)}</td>
+              <td className="num c-win" data-label="Win %">
+                {evWinCell(r).win}
+                <div className="mut small">{evWinCell(r).implied} implied</div>
+              </td>
               <td className="mut small c-sharps">
                 {r.sharps.map((s) => `${s.book} ${s.hold_pct.toFixed(1)}%`).join(' · ')}
               </td>

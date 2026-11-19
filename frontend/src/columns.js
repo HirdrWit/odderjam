@@ -17,8 +17,15 @@ export const COLUMNS = {
     {label: 'Book', text: 'The sportsbook that offers this price.'},
     {label: 'Odds', glossary: 'american-odds'},
     {label: 'Fair', glossary: 'fair-odds'},
+    {label: 'Win %', glossary: 'win-probability'},
     {label: 'Sharps (hold)', text: 'The sharp books used to find the fair price, each with its hold (the margin it keeps).'},
     {label: 'Stake', glossary: 'kelly'},
+  ],
+  'Odds Screen': [
+    {label: 'Win %', glossary: 'win-probability'},
+  ],
+  'Tracker': [
+    {label: 'Implied %', text: 'The chance your logged odds assume, with the sportsbook\'s margin included. 1 divided by the decimal odds.'},
   ],
   'Low Hold': [
     {label: 'Hold', glossary: 'hold'},

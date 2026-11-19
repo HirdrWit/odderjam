@@ -1,6 +1,7 @@
 import {Fragment, useState} from 'react';
 
 import {eventTime, percent} from './fmt.js';
+import {sideWinText} from './winprob.js';
 import {americanToProb} from './calc.js';
 import {useApi, useApiStatus, useSlip, useStored} from './hooks.js';
 import {failedText} from './tablestate.js';
@@ -215,7 +216,7 @@ function GameRows({event, market, books, format, slip, historyOpen, onHistory}) 
     const t = slipToast(added, slip.slip.length + (added ? 1 : -1));
     toast(t.text, t.kind, t.action);
   };
-  const span = books.length + 4;
+  const span = books.length + 5;
   return (
     <tbody className={`game${rows.some((r) => r.suspect) ? ' suspect' : ''}`}>
       {rows.map((row, r) => row.sides.map((side, i) => {
@@ -244,6 +245,7 @@ function GameRows({event, market, books, format, slip, historyOpen, onHistory}) 
               {side.best ? <>{formatOdds(side.best.price, format)}{' '}<span className="mut small">{side.best.book}</span></> : '—'}
             </td>
             <td className="mut num">{formatOdds(side.fair, format) || '—'}</td>
+            <td className="mut num">{sideWinText(side.fair)}</td>
             {books.map((b) => (
               <td key={b} className={`num${side.isBest[b] ? ' bestcell' : ''}${leg && slip.has(slipLeg(event, market, side.outcome, b)) ? ' inslip' : ''}`}
                 onClick={() => {
@@ -270,6 +272,7 @@ function GameGrid({events, market, books, format, slip, history, setHistory}) {
           <tr>
             <th className="gamecol">Game</th><th>Line</th><th className="num">Best</th>
             <th className="num"><Term id="fair-odds">Fair</Term></th>
+            <th className="num"><Term id="win-probability">Win %</Term></th>
             {books.map((b) => <th key={b} className="num">{b}</th>)}
           </tr>
         </thead>

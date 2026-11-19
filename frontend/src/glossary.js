@@ -21,6 +21,11 @@ export const GLOSSARY = [
     example: 'A 50/50 coin flip has fair odds of +100, even if books offer -110.',
   },
   {
+    id: 'win-probability', label: 'Win % and Implied %',
+    definition: 'Win % is the fair chance the bet hits, with the sportsbook\'s margin removed. Implied % is the chance the offered price assumes, margin included.',
+    example: 'A bet at +300 implies 25.0%. If the fair Win % is 28.0%, the 3.0 point gap is your edge.',
+  },
+  {
     id: 'devig', label: 'Devig (no-vig)',
     definition: 'Removing the sportsbook\'s margin from a set of prices to find the true chances.',
     example: '-110 on both sides adds up to 104.8%; devigged, each side is 50%.',

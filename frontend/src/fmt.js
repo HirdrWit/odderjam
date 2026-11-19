@@ -72,12 +72,14 @@ export function eventTime(when, now = new Date()) {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${time12(d)}`;
 }
 
-/** @param {?number} american An American price. @return {string} Implied chance, e.g. '52.4%', or '—'. */
-export function impliedPercent(american) {
-  return '';
-}
-
 /** @param {?number} prob A probability from 0 to 1. @return {string} e.g. '24.6%', or '—'. */
 export function probPercent(prob) {
-  return '';
+  if (typeof prob !== 'number' || !Number.isFinite(prob) || prob <= 0 || prob > 1) return '—';
+  return `${(prob * 100).toFixed(1)}%`;
+}
+
+/** @param {?number} american An American price. @return {string} Implied chance, e.g. '52.4%', or '—'. */
+export function impliedPercent(american) {
+  if (typeof american !== 'number' || !Number.isFinite(american) || Math.abs(american) < 100) return '—';
+  return probPercent(american < 0 ? -american / (-american + 100) : 100 / (american + 100));
 }
