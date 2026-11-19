@@ -214,3 +214,9 @@ def test_ui_shows_liquidity_on_the_three_tables():
     assert main_jsx.count("fmtLiquidity(") >= 2   # +EV and Arbitrage rows
     assert "fmtLiquidity(" in odds_jsx
     assert "bettableQuery(" in main_jsx
+
+
+def test_polymarket_bad_size_is_null_not_a_dropped_quote():
+    from backend.providers import polymarket
+    out = polymarket._liquidity({"bestAsk": 0.5, "bestBid": 0.4, "bestAskSize": "n/a", "bestBidSize": "100"}, [0.5, 0.6])
+    assert out == [None, 60.0]

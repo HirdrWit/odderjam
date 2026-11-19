@@ -1,4 +1,4 @@
-import {Fragment, useEffect, useRef, useState} from 'react';
+import {Fragment, useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 
 import './style.css';
@@ -751,7 +751,8 @@ function PositiveEv() {
   const setWeight = (cls, sharpBook, value) => {
     setWeights(setClassWeight(sharpWeights, cls, sharpBook, value));
   };
-  const [thresholds, setThresholds] = useStored('evBettableThresholds', BETTABLE_DEFAULTS);
+  const [storedThresholds, setThresholds] = useStored('evBettableThresholds', BETTABLE_DEFAULTS);
+  const thresholds = useMemo(() => ({...BETTABLE_DEFAULTS, ...storedThresholds}), [storedThresholds]);
   const lastValid = useRef(BETTABLE_DEFAULTS);
   const [mustOnly, setMustOnly] = useStored('evMustBetOnly', false);
   const [mustThresholds, setMustThresholds] = useStored('evMustBetThresholds', MUSTBET_DEFAULTS);

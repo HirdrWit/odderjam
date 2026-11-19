@@ -47,7 +47,10 @@ def _liquidity(m: dict, asks: list[float]) -> list[float | None]:
         return [None, None]
     out = []
     for size, price in ((ask_size, asks[0]), (bid_size, asks[1])):
-        out.append(None if size in (None, "") else round(float(size) * price, 2))
+        try:
+            out.append(None if size in (None, "") else round(float(size) * price, 2))
+        except (TypeError, ValueError):
+            out.append(None)
     return out
 
 

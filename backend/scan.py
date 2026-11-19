@@ -207,6 +207,8 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
                 continue
             fresh = freshness(e, [book for _, book, _ in best], now)
             liquidities = [liquidity_of(o, b) for o, b, _ in best]
+            if any(lq is not None and lq < sizing._inc(round_to) for lq in liquidities):
+                continue  # a leg can't fill one increment: the arb can't be balanced
             flags = bettable.multi_leg_flags(e, [b for _, b, _ in best], [p for _, _, p in best], now,
                                              profit_pct=result["profit_pct"], liquidities=liquidities)
             if fresh is not None and not (filters and filters.bettable and flags):
