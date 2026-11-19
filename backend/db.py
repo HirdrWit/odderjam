@@ -40,4 +40,5 @@ def conn() -> sqlite3.Connection:
               "ON exchange_trades (book, event_id, outcome, traded_at)")
     c.execute("CREATE INDEX IF NOT EXISTS exchange_trades_market ON exchange_trades (book, market, traded_at)")
     c.execute("CREATE INDEX IF NOT EXISTS exchange_trades_age ON exchange_trades (traded_at)")
+    c.execute("CREATE TABLE IF NOT EXISTS hidden_rows (key TEXT PRIMARY KEY, expires_at REAL NOT NULL)")
     return c

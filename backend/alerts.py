@@ -21,7 +21,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, providers, scan
+from . import db, hidden, providers, scan
 from .engine import sharp
 from .providers.books import max_sharp_hold, sharp_weights_spec
 
@@ -95,6 +95,7 @@ def matches(rule, events: list[dict]) -> list[tuple[str, dict]]:
         # Same fair price as the +EV screen's defaults (SHARP_WEIGHTS, MAX_SHARP_HOLD).
         rows = scan.ev_rows(events, sharp.parse_weights(sharp_weights_spec()), max_sharp_hold(),
                             book=rule["book"] or None, min_ev=rule["min_value"], **f)
+        rows = hidden.apply(rows)  # hidden or already-tracked rows must not notify
     else:
         rows = scan.arb_rows(events, min_profit=rule["min_value"], **f)
         if rule["book"]:

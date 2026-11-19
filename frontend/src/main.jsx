@@ -30,6 +30,7 @@ import {NAV_GROUPS, NAV_SUBTITLES, MOBILE_TABS, moreTabs, navLabel} from './navg
 import {buildHash, evFiltersToParams, evParamsToFilters, parseHash} from './routes.js';
 import {Tracker} from './Tracker.jsx';
 import {AUTO_SETTLE_KEY} from './tracker.js';
+import {hiddenSummary as hiddenRowsSummary, splitHidden} from './hiddenrows.js';
 import {alertFlagBadges, BETTABLE_HELP, BLANK_RULE_FIELDS, ruleFormError} from './alerts.js';
 import {windowText} from './middles.js';
 import {PROMO_COLUMNS, PROMO_DEFAULT_SORT, PROMO_NUM, PROMO_SORT, promoLegs} from './promos.js';
@@ -632,7 +633,10 @@ function PositiveEv() {
   }, [book, minEv]);
   const chips = activeChips({book, minEv, sport, props});
   const [bettable, setBettable] = useBettable();
-  const {shown: bettableRows, hidden: hiddenRows} = filterBettable(Array.isArray(data) ? data : [], bettable);
+  const [showHidden, setShowHidden] = useState(false);
+  const split = splitHidden(data, showHidden);
+  const hiddenRowsNote = hiddenRowsSummary(split);
+  const {shown: bettableRows, hidden: hiddenRows} = filterBettable(split.visible, bettable);
   const hiddenText = hiddenSummary(hiddenRows);
   const modeChip = bettableChip(bettable);
   const resetAll = (d) => {
@@ -672,6 +676,22 @@ function PositiveEv() {
     }
     notifyDataChanged();
   };
+  const hideRow = async (row) => {
+    const key = {event_id: row.event_id, market: row.market, player: row.player ?? null, point: row.point ?? null,
+      pick: row.pick, book: row.book};
+    let response;
+    if (row.hidden === 'hidden') {
+      const params = new URLSearchParams(Object.entries(key).filter(([, v]) => v !== null).map(([k, v]) => [k, String(v)]));
+      response = await fetch(`/api/hidden?${params}`, {method: 'DELETE'});
+    } else {
+      response = await postJson('/api/hidden', {...key, start: row.start});
+    }
+    if (response.ok) {
+      evRetry();
+    } else {
+      toast('Could not change the hidden list', 'err');
+    }
+  };
   const {slip, has, toggle} = useSlip();
   const {data: cfg, error: cfgError, retry: cfgRetry} = useApiStatus('/api/sharps', 600000);
   const [weights, setWeights] = useStored('evSharpWeights', null);
@@ -690,7 +710,7 @@ function PositiveEv() {
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}` +
       `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${bettableQuery(thresholds, lastValid.current)}`;
-  const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}`);
+  const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}&show_hidden=true`);
   const error = evError || cfgError;
   const retry = () => {
     cfgRetry();
@@ -742,6 +762,13 @@ function PositiveEv() {
             }}>{modeChip.label} ✕</button>
           )}
         </div>
+      )}
+      {hiddenRowsNote && (
+        <p className="mut small hidden-note" role="status">{hiddenRowsNote}
+          {split.tracked > 0 && <span className="chip">Already tracked</span>}
+          <button type="button" className="secondary" aria-pressed={showHidden} onClick={() => {
+            setShowHidden(!showHidden);
+          }}>{showHidden ? 'Hide hidden' : `Show hidden (${split.hidden})`}</button></p>
       )}
       {hiddenText && (
         <p className="mut small bettable-note" role="status">{hiddenText}. <button type="button" className="secondary" onClick={() => {
@@ -833,6 +860,12 @@ function PositiveEv() {
                     aria-label={rowActionAria('track', tracked.has(trackKey(r)), r)} onClick={() => {
                     track(r);
                   }}>{trackButtonLabel(tracked.has(trackKey(r)))}</button>
+                  {r.hidden !== 'tracked' && (
+                    <button className="secondary" aria-label={`${r.hidden ? 'Unhide' : 'Hide'} ${r.pick} @ ${r.book}`}
+                      title="Hide this row until the event starts" onClick={() => {
+                        hideRow(r);
+                      }}>{r.hidden ? 'Unhide' : 'Hide'}</button>
+                  )}
                   {!r.player && (
                     <button className={has(r) ? 'secondary on' : 'secondary'} title={ROW_ACTION_TIPS.slip}
                       aria-label={rowActionAria('slip', has(r), r)}

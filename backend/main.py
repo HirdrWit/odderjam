@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts, history, refresh as refresh_mod, scan, sharp_money
+from . import alerts, hidden, history, refresh as refresh_mod, scan, sharp_money
 from .engine.bettable import multi_leg_flags as _multi_leg_flags
 from .scan import groups as _groups
 from .engine import (bettable, devig, live as _live_mod, lowhold, markets as mk, middles as mid, odds, parlay as pm, pickem,
@@ -32,6 +32,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="odderjam", lifespan=lifespan)
 app.include_router(bets.router)
+app.include_router(hidden.router)
 app.include_router(bets.bankroll_router)
 app.include_router(alerts.router)
 app.include_router(flt.router)
@@ -108,10 +109,11 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
                 prop_ev_ceiling: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 max_skew_seconds: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
                 max_sharp_spread: Annotated[float | None, Query(ge=0, allow_inf_nan=False)] = None,
-                require_conservative: bool | None = None):
+                require_conservative: bool | None = None, show_hidden: bool = False):
     """+EV rows. `sharps` is 'Book:weight,...' (default SHARP_WEIGHTS); sharp books holding
     more than `max_hold` percent (default MAX_SHARP_HOLD) are left out of the fair price.
-    `f` (query params and/or a saved `preset`) filters sports, books, markets, odds, start time and min EV."""
+    `f` (query params and/or a saved `preset`) filters sports, books, markets, odds, start time and min EV.
+    Rows the user hid, or already tracked, are left out unless `show_hidden`; then each carries `hidden`."""
     if method not in devig.METHODS:
         raise HTTPException(400, f"unknown devig method {method!r}")
     weights = sharp.parse_weights(sharps if sharps is not None else sharp_weights_spec())
@@ -126,9 +128,10 @@ def positive_ev(method: str = "multiplicative", kelly: Kelly = 0.25, sharps: str
         raise HTTPException(422, err)
     bankroll = max(bets.bankroll_info()["current"], 0.0)
     min_ev = f.min_ev if f.min_ev is not None else 0.0
-    return scan.ev_rows(get_snapshot(), weights, max_hold, min_ev=min_ev, method=method, kelly=kelly,
+    rows = scan.ev_rows(get_snapshot(), weights, max_hold, min_ev=min_ev, method=method, kelly=kelly,
                         bankroll=bankroll, round_to=round_to, max_side=max_side, props=props, filters=f, now=_now(),
                         profile=profile)
+    return hidden.apply(rows, _now(), show_hidden)
 
 
 def _check_sizing(round_to: float, max_side: float | None) -> None:
