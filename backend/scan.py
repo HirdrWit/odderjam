@@ -175,11 +175,13 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
     sharp consensus fair price (None without one) and `ev_leg` marks the leg(s) with positive EV.
     """
     now = time.time() if now is None else now
+    by_class = sharp.class_weights(weights) if weights else None
     rows = []
     for e, key, g in _filtered_groups(events, market, props, sport, filters):
         best = _best_legs(g, filters)
         if best is not None:
-            fair = sharp.group_consensus(g["outcomes"], weights, method, max_hold) if weights else None
+            fair = (sharp.group_consensus(g["outcomes"], by_class["props" if mk.is_prop(key) else "main"],
+                                          method, max_hold) if by_class else None)
             leg_ev = [ev.ev_pct(fair["probs"][i], price) if fair else None for i, (_, _, price) in enumerate(best)]
             result = arbm.arb([price for _, _, price in best])
             if result["profit_pct"] < min_profit:

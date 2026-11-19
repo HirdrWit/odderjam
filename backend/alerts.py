@@ -93,7 +93,12 @@ def matches(rule, events: list[dict]) -> list[tuple[str, dict]]:
     f = {"market": rule["market"] or None, "sport": rule["sport"] or None}
     if rule["kind"] == "ev":
         # Same fair price as the +EV screen's defaults (SHARP_WEIGHTS, MAX_SHARP_HOLD).
-        rows = scan.ev_rows(events, sharp.parse_weights(sharp_weights_spec()), max_sharp_hold(),
+        try:
+            weights = sharp.parse_weights(sharp_weights_spec())
+        except ValueError as err:
+            log.warning("alerts: bad SHARP_WEIGHTS, skipping ev rules: %s", err)
+            return []
+        rows = scan.ev_rows(events, weights, max_sharp_hold(),
                             book=rule["book"] or None, min_ev=rule["min_value"], **f)
         rows = hidden.apply(rows)  # hidden or already-tracked rows must not notify
     else:

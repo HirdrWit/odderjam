@@ -171,7 +171,7 @@ def arbs(total: PositiveFloat | None = None, round_to: RoundTo = 1.0, max_side: 
     min_profit = f.min_profit if f.min_profit is not None else 0.0
     return scan.arb_rows(get_snapshot(), min_profit=min_profit, total=total, round_to=round_to,
                          max_side=max_side, props=props, filters=f, now=_now(),
-                         weights=sharp.parse_weights(sharp_weights_spec()), max_hold=max_sharp_hold())
+                         weights=_parse_spec(sharp_weights_spec()), max_hold=max_sharp_hold())
 
 
 PromoKind = Literal["bonus-bet", "profit-boost", "second-chance"]

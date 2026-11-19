@@ -122,6 +122,8 @@ def group_consensus(outcomes: list[dict], weights: dict[str, float], method: str
 
     With all_books every book pricing every outcome counts, each with weight 1 (the market average).
     """
+    if not outcomes:
+        return None
     if all_books:
         weights = {b: 1.0 for b in set.intersection(*(set(o["prices"]) for o in outcomes))}
     lines = {b: [o["prices"][b] for o in outcomes] for b in weights
