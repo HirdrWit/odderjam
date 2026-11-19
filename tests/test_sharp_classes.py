@@ -95,7 +95,8 @@ def test_all_books_weights_every_book_equally():
 
 def test_all_books_drops_books_over_max_hold():
     ev = ml_event()
-    rs = scan.ev_rows([ev], {"Pinnacle": 1.0}, 3.0, min_ev=-100, now=0.0, fair_source="all_books")
+    # max_hold 4: Pinnacle -150/+130 holds 3.48% (kept); DraftKings -110/-110 holds 4.76% (dropped)
+    rs = scan.ev_rows([ev], {"Pinnacle": 1.0}, 4.0, min_ev=-100, now=0.0, fair_source="all_books")
     books_used = {s["book"] for s in rs[0]["sharps"]}
     assert "DraftKings" not in books_used and "Pinnacle" in books_used
 
