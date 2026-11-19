@@ -71,3 +71,13 @@ export function eventTime(when, now = new Date()) {
   if (days >= 1 && days <= 5) return `${DAYS[d.getDay()]} ${time12(d)}`;
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${time12(d)}`;
 }
+
+/** @param {?number} american An American price. @return {string} Implied chance, e.g. '52.4%', or '—'. */
+export function impliedPercent(american) {
+  return '';
+}
+
+/** @param {?number} prob A probability from 0 to 1. @return {string} e.g. '24.6%', or '—'. */
+export function probPercent(prob) {
+  return '';
+}
