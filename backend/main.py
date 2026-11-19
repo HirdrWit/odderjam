@@ -496,6 +496,9 @@ def low_hold(max_hold: Annotated[float, Query(allow_inf_nan=False)] = 1.0, book:
             pair = lowhold.best_pair(us_only(a["prices"]), us_only(b["prices"]), book or None, stake)
             if pair is None or pair["hold_pct"] > max_hold:
                 continue
+            if any(scan.liquidity_of(o, leg["book"]) is not None and leg["stake"] > scan.liquidity_of(o, leg["book"])
+                   for o, leg in zip((a, b), pair["legs"])):
+                continue  # an exchange leg can't absorb this stake
             fresh = scan.freshness(e, [leg["book"] for leg in pair["legs"]], now)
             if fresh is None:
                 continue
@@ -593,6 +596,9 @@ def middles(
                     cost_pct = max(-m["worst_case"], 0.0) / stake * 100
                     if max_cost is not None and cost_pct > max_cost:
                         continue
+                    if any(scan.liquidity_of(o, bk) is not None and st > scan.liquidity_of(o, bk)
+                           for o, bk, st in ((oa, ba, m["stake_a"]), (ob, bb, m["stake_b"]))):
+                        continue  # an exchange leg can't absorb this stake
                     fresh = scan.freshness(e, [ba, bb], now)
                     if fresh is None:
                         continue
