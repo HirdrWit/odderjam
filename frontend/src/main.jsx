@@ -810,11 +810,11 @@ function PositiveEv() {
               <td className="c-market">{marketName(r.market)}</td>
               <td className="c-event">{r.event} <LiveTag row={r} />{r.start && <span className="c-time mut small"> · {eventTime(r.start)}</span>}</td>
               <td className="c-book">{r.book}</td>
-              <td className="num c-odds">{formatOdds(r.odds)}</td>
-              <td className={`num c-worst ${signClass(r.worst_ev_pct)}`}
+              <td className={`num c-worst ${signClass(r.worst_ev_pct)}`} data-label="Worst EV"
                 title={r.worst_sharp ? `Lowest EV across every devig method, set by ${r.worst_sharp}` : undefined}>
                 {percent(r.worst_ev_pct, {signed: true})}
               </td>
+              <td className="num c-odds">{formatOdds(r.odds)}</td>
               <td className="num c-fair">{formatOdds(r.fair_odds)}</td>
               <td className="num c-win" data-label="Win %">
                 {evWinCell(r).win}
