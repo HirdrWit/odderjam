@@ -40,9 +40,27 @@ def _iso(ts: str) -> str:
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).isoformat()
 
 
-def _best(fee: dict, *cents: float | None) -> float | None:
-    prices = [a for a in (contract_to_american(c, fee) for c in cents if c is not None) if a is not None]
-    return max(prices, default=None)
+def _ask_dollars_available(market: dict, side: str, cents: float) -> float | None:
+    """Dollars resting at ``side``'s best ask (contracts x price), or None when the market gives no size."""
+    size = market.get(f"{side}_ask_size_fp")
+    if size in (None, ""):
+        size = market.get(f"{side}_ask_size")
+    try:
+        return None if size in (None, "") else round(float(size) * cents / 100, 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _best(fee: dict, *options: tuple[float | None, float | None]) -> tuple[float | None, float | None]:
+    """(American odds, dollars available) of the cheapest option; options are ``(cents, dollars)``."""
+    best = (None, None)
+    for cents, dollars in options:
+        if cents is None:
+            continue
+        a = contract_to_american(cents, fee)
+        if a is not None and (best[0] is None or a > best[0]):
+            best = (a, dollars)
+    return best
 
 
 def parse(payload: dict, sport: str, fee: dict) -> list[dict]:
@@ -61,17 +79,22 @@ def parse(payload: dict, sport: str, fee: dict) -> list[dict]:
             start, lag = a.get("expected_expiration_time"), GAME_HOURS.get(sport, 3.0)
         if not start:
             continue  # close_time can be weeks after the game, too loose to match on
-        prices, tickers = {}, {}
+        prices, tickers, liquidity = {}, {}, {}
         for team, other in ((a, b), (b, a)):
-            price = _best(fee, _ask_cents(team, "yes"), _ask_cents(other, "no"))
+            options = []
+            for mkt, side in ((team, "yes"), (other, "no")):
+                cents = _ask_cents(mkt, side)
+                options.append((cents, None if cents is None else _ask_dollars_available(mkt, side, cents)))
+            price, dollars = _best(fee, *options)
             if price is not None:
                 prices[team["yes_sub_title"]] = price
                 tickers[team["yes_sub_title"]] = team.get("ticker")
+                liquidity[team["yes_sub_title"]] = dollars
         if len(prices) == 2:
             # ``start`` is the market's timestamp; ``lag_hours`` is how far it trails the game start.
             # ``markets`` maps each team to its market ticker, for the Sharp Money trade feed.
             quotes.append({"book": BOOK, "sport": sport, "start": _iso(start), "lag_hours": lag, "prices": prices,
-                           "markets": tickers})
+                           "markets": tickers, "liquidity": liquidity})
     return quotes
 
 

@@ -1,4 +1,5 @@
 """Opportunity scanners shared by the API endpoints and the alert job."""
+import math
 import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
@@ -60,6 +61,18 @@ def freshness(e: dict, books, now: float) -> dict | None:
     if cfg["enabled"] and is_live and live.is_stale(age, cfg["max_price_age"]):
         return None
     return {"event_id": e["id"], "live": is_live, "price_age_seconds": age}
+
+
+def liquidity_of(o: dict, book: str) -> float | None:
+    """Dollars resting at `book`'s price on outcome `o`, or None when the book gives no size data."""
+    return (o.get("liquidity") or {}).get(book)
+
+
+def _cap_stake(stake: float, liquidity: float | None) -> float:
+    """`stake` limited to the dollars available (rounded down to the cent); unchanged when size is unknown."""
+    if liquidity is None:
+        return stake
+    return min(stake, math.floor(max(liquidity, 0.0) * 100 + 1e-9) / 100)
 
 
 def _price_ok(filters: "FilterSet | None", book: str, price: float) -> bool:
@@ -132,6 +145,7 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                 if (worst_ev if method == "worst_case" else v) < min_ev:
                     continue
                 fresh = freshness(e, [book_name, *(u["book"] for u in fair["sharps"])], now)
+                liquidity = liquidity_of(o, book_name)
                 if fresh is not None:
                     updated = e.get("updated", {})
                     flagged = bettable.flags({
@@ -142,6 +156,7 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         "update_times": {b: live.parse_time(updated.get(b))
                                          for b in [book_name, *(u["book"] for u in fair["sharps"])]},
                         "sharp_probs": [p[i] for p in fair["sharp_probs"].values()],
+                        "liquidity": liquidity,
                     }, profile)
                     if filters is not None and filters.bettable and flagged:
                         continue
@@ -156,7 +171,8 @@ def ev_rows(events: list[dict], weights: dict, max_hold: float, book: str | None
                         "fair_prob": fp, "fair_odds": odds.prob_to_american(fp), "ev_pct": v,
                         "worst_ev_pct": worst_ev, "worst_sharp": worst_books[i],
                         "arb_backed": backed, "arb_profit_pct": arb_legs[1] if backed else None,
-                        "stake": sizing.round_stake(kelly_stake, round_to, max_side),
+                        "stake": _cap_stake(sizing.round_stake(kelly_stake, round_to, max_side), liquidity),
+                        "liquidity": liquidity,
                         "kelly_stake": kelly_stake,
                         "weight_class": weight_class, "fair_source": fair_source,
                         "sharps": fair["sharps"], "sharp_hold_pct": fair["hold_pct"], "flags": flagged, **fresh,
@@ -190,19 +206,20 @@ def arb_rows(events: list[dict], min_profit: float = 0.0, market: str | None = N
             if result["profit_pct"] < min_profit:
                 continue
             fresh = freshness(e, [book for _, book, _ in best], now)
+            liquidities = [liquidity_of(o, b) for o, b, _ in best]
             flags = bettable.multi_leg_flags(e, [b for _, b, _ in best], [p for _, _, p in best], now,
-                                             profit_pct=result["profit_pct"])
+                                             profit_pct=result["profit_pct"], liquidities=liquidities)
             if fresh is not None and not (filters and filters.bettable and flags):
-                sized = sizing.size_arb([price for _, _, price in best], total, round_to, max_side)
+                sized = sizing.size_arb([price for _, _, price in best], total, round_to, max_side, leg_caps=liquidities)
                 rows.append({"event": f'{e["away"]} @ {e["home"]}', "event_id": e["id"], "sport": e["sport"],
                              "start": e["start"], "market": key, "player": g["player"], "point": g["point"],
                              "legs": [{"pick": mk.label(o), "selection": o["name"], "point": o["point"], "book": book,
                                        "odds": price, "link": bet_link(book, o), "stake": stake, "ideal_stake": ideal,
                                        "profit_if_wins": won, "ev_pct": lev,
-                                       "ev_leg": lev is not None and lev > 0}
-                                      for (o, book, price), stake, ideal, won, lev
+                                       "ev_leg": lev is not None and lev > 0, "liquidity": liq}
+                                      for (o, book, price), stake, ideal, won, lev, liq
                                       in zip(best, sized["stakes"], sized["ideal_stakes"], sized["profits"],
-                                             leg_ev)],
+                                             leg_ev, liquidities)],
                              "profit_pct": result["profit_pct"],
                              **{k: sized[k] for k in ("total_stake", "min_profit", "max_profit", "min_profit_pct",
                                                       "capped", "rounding_loss", "over_total", "warning")}, **fresh,

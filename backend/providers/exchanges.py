@@ -89,6 +89,10 @@ def merge_quotes(events: list[dict], quotes: list[dict], tolerance_hours: float 
                 o = {"name": team, "point": None, "prices": {}}
                 outcomes.append(o)
             o["prices"][q["book"]] = price
+        for name, dollars in (q.get("liquidity") or {}).items():
+            if dollars is not None and name in mapping:  # missing stays missing, never 0
+                o = next(o for o in outcomes if o["name"] == mapping[name])
+                o.setdefault("liquidity", {})[q["book"]] = dollars
         tickers = q.get("markets")
         if tickers:
             e.setdefault("exchange_markets", {})[q["book"]] = {

@@ -9,7 +9,7 @@ import {
 test('defaults match the backend profile', () => {
   assert.deepEqual(BETTABLE_DEFAULTS, {
     oddsMin: -250, oddsMax: 250, evCeiling: 8, propEvCeiling: 12, maxSkewSeconds: 20, maxSharpSpread: 3,
-    requireConservative: true,
+    maxCounterpartyLiquidity: 5000, requireConservative: true,
   });
 });
 

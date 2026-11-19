@@ -40,6 +40,17 @@ def _asks(m: dict) -> list[float]:
     return listed
 
 
+def _liquidity(m: dict, asks: list[float]) -> list[float | None]:
+    """Dollars resting at each outcome's price: shares at the best ask / bid x that outcome's price. None if unknown."""
+    ask_size, bid_size = m.get("bestAskSize"), m.get("bestBidSize")
+    if m.get("bestAsk") is None or m.get("bestBid") is None:
+        return [None, None]
+    out = []
+    for size, price in ((ask_size, asks[0]), (bid_size, asks[1])):
+        out.append(None if size in (None, "") else round(float(size) * price, 2))
+    return out
+
+
 def parse(payload: list, sport: str, fee: dict) -> list[dict]:
     """Quotes ``{book, sport, start, prices: {team: american}}`` from a GET /events response."""
     quotes = []
@@ -56,7 +67,8 @@ def parse(payload: list, sport: str, fee: dict) -> list[dict]:
                     continue
                 prices = {n: contract_to_american(round(a * 100, 4), fee) for n, a in zip(names, asks)}
                 if all(p is not None for p in prices.values()):
-                    quotes.append({"book": BOOK, "sport": sport, "start": _iso(start), "prices": prices})
+                    quotes.append({"book": BOOK, "sport": sport, "start": _iso(start), "prices": prices,
+                                   "liquidity": dict(zip(names, _liquidity(m, asks)))})
             except (ValueError, TypeError):
                 continue  # one malformed market never drops the rest
     return quotes

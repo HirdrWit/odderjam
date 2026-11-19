@@ -3,7 +3,8 @@
 Pure functions. `ctx` describes one +EV row:
   market, odds (American), ev_pct, worst_ev_pct (EV under worst-case devig), is_live, live_enabled,
   max_price_age, price_age (seconds or None), update_times ({book: epoch or None}, bet book + sharps),
-  sharp_probs (each sharp's own fair probability for this outcome, 0..1).
+  sharp_probs (each sharp's own fair probability for this outcome, 0..1),
+  liquidity (dollars resting at the shown exchange price, or None when unknown).
 """
 import math
 
@@ -18,6 +19,7 @@ DEFAULT_PROFILE = {
     "min_ev": 0.0,                           # percent; worst-case devig EV below this is fragile
     "max_skew_seconds": 20.0,                # book vs sharp update gap allowed for a live row
     "max_sharp_spread": 0.03,                # probability (0..1) gap allowed between sharps
+    "max_counterparty_liquidity": 5000.0,    # dollars; a bigger resting order on an exchange is probably a sharp
     "require_conservative": True,            # flag `fragile` rows (EV gone under the worst-case devig)
     "must_bet_min_ev": 2.0,                  # percent; worst-case EV a "must bet" needs
     "must_bet_odds_min": -200.0, "must_bet_odds_max": 200.0,  # American; a must bet is not a heavy favourite or longshot
@@ -31,6 +33,7 @@ LABELS = {
     "too_good": "Too good to be true: real edges are a few percent",
     "fragile": "Edge disappears under a more cautious devig",
     "sharps_disagree": "Sharp books disagree on the fair price",
+    "sharp_counterparty": "Large order on the other side: likely a sharp bettor",
 }
 
 
@@ -62,6 +65,9 @@ def flags(ctx: dict, profile: dict) -> list[str]:
     probs = ctx.get("sharp_probs", [])
     if len(probs) >= 2 and max(probs) - min(probs) > profile["max_sharp_spread"]:
         out.append("sharps_disagree")
+    liquidity = ctx.get("liquidity")
+    if liquidity is not None and liquidity > profile["max_counterparty_liquidity"]:
+        out.append("sharp_counterparty")
     return out
 
 
@@ -127,7 +133,7 @@ def profile_error(profile: dict) -> str | None:
         return (f"must_bet_odds_min ({profile['must_bet_odds_min']:g}) is greater than "
                 f"must_bet_odds_max ({profile['must_bet_odds_max']:g})")
     for k in ("ev_ceiling", "prop_ev_ceiling", "max_skew_seconds", "max_sharp_spread",
-              "must_bet_min_ev", "must_bet_max_hold"):
+              "must_bet_min_ev", "must_bet_max_hold", "max_counterparty_liquidity"):
         if profile[k] < 0:
             return f"{k} must not be negative"
     return None
@@ -142,8 +148,11 @@ LONGSHOT_ODDS = 1000  # a leg above +1000
 
 
 def multi_leg_flags(event: dict, books: list[str], prices: list[float], now: float, *,
-                    profit_pct: float | None = None, ev_pct: float | None = None) -> list[str]:
-    """Flags for a row with one leg per (book, price). Order: in_play, leg_skew, too_good, longshot_leg."""
+                    profit_pct: float | None = None, ev_pct: float | None = None,
+                    liquidities: list[float | None] | None = None,
+                    max_counterparty: float = DEFAULT_PROFILE["max_counterparty_liquidity"]) -> list[str]:
+    """Flags for a row with one leg per (book, price). Order: in_play, leg_skew, too_good, longshot_leg,
+    sharp_counterparty (a leg's resting order is above `max_counterparty` dollars)."""
     flags = []
     if live.is_live(event, now):
         flags.append("in_play")
@@ -156,4 +165,6 @@ def multi_leg_flags(event: dict, books: list[str], prices: list[float], now: flo
         flags.append("too_good")
     if any(p > LONGSHOT_ODDS for p in prices):
         flags.append("longshot_leg")
+    if any(x is not None and x > max_counterparty for x in liquidities or []):
+        flags.append("sharp_counterparty")
     return flags

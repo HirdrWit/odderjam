@@ -11,6 +11,7 @@ import {TabIntro} from './TabIntro.jsx';
 import {Term} from './Term.jsx';
 import {slipLeg} from './slip.js';
 import {historyQuery} from './linemove.js';
+import {fmtLiquidity} from './liquidity.js';
 import {
   FORMATS,
   ageText,
@@ -277,6 +278,7 @@ function GameRows({event, market, books, format, slip, historyOpen, onHistory}) 
                   togglePrice(side, b);
                 }}>
                 {formatOdds(side.prices[b], format)}
+                {fmtLiquidity(side.outcome?.liquidity?.[b]) && <div className="mut small">{fmtLiquidity(side.outcome.liquidity[b])}</div>}
               </td>
             ))}
           </tr>

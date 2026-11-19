@@ -50,6 +50,7 @@ import {slipToast} from './oddsrow.js';
 import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useBettable, useStored} from './hooks.jsx';
 import {MUSTBET_DEFAULTS, MUSTBET_FIELDS, MUSTBET_HELP, mustBetBadge, mustBetParam, mustBetQuery, mustBetReset, validateMustBet} from './mustbet.js';
 import {BETTABLE_DEFAULTS, BETTABLE_FIELDS, bettableQuery, bettableReset, validateBettable} from './thresholds.js';
+import {fmtLiquidity} from './liquidity.js';
 import {badgesFor, bettableChip, filterBettable, hiddenSummary, legWarning, parlayFlagState, showAnyway} from './bettable.js';
 import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
@@ -905,7 +906,7 @@ function PositiveEv() {
               )}</td>
               <td className="c-market">{marketName(r.market)}</td>
               <td className="c-event">{r.event} <LiveTag row={r} />{r.start && <span className="c-time mut small"> · {eventTime(r.start)}</span>}</td>
-              <td className="c-book">{r.book}</td>
+              <td className="c-book">{r.book}{fmtLiquidity(r.liquidity) && <div className="mut small">{fmtLiquidity(r.liquidity)}</div>}</td>
               <td className={`num c-worst ${signClass(r.worst_ev_pct)}`} data-label="Worst EV"
                 title={r.worst_sharp ? `Lowest EV across every devig method, set by ${r.worst_sharp}` : undefined}>
                 {percent(r.worst_ev_pct, {signed: true})}
@@ -994,7 +995,7 @@ function ArbRow({arb, onTrack}) {
       <td className="c-pick">
         {arb.legs.map((leg, j) => (
           <div key={j} className={leg.ev_leg ? 'ev-leg' : undefined}>
-            {leg.pick} {formatOdds(leg.odds)} @ {leg.book}{legEvText(leg) && (
+            {leg.pick} {formatOdds(leg.odds)} @ {leg.book}{fmtLiquidity(leg.liquidity) && <span className="mut small"> ({fmtLiquidity(leg.liquidity)})</span>}{legEvText(leg) && (
               <span className={`${signClass(leg.ev_pct)} small`} title={leg.ev_leg ? 'This leg is +EV against the fair price' : 'EV against the fair price'}> {legEvText(leg)}{leg.ev_leg ? ' ★' : ''}</span>
             )} — stake <b>{formatMoney(leg.stake)}</b>{' '}
             <BetLink href={leg.link} />{' '}

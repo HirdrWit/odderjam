@@ -48,6 +48,10 @@ export const FLAGS = {
     badge: 'Sharps disagree', summary: 'sharps disagree',
     tip: 'Sharps disagree: the sharp books do not agree on the true price, so the edge is unreliable.',
   },
+  sharp_counterparty: {
+    badge: 'Large order against', summary: 'large order on the other side',
+    tip: 'Large order on the other side: likely a sharp bettor. Someone resting a big order against you probably has a strong view.',
+  },
 };
 
 /**

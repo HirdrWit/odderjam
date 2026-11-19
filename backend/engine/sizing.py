@@ -48,7 +48,7 @@ def _choices(target: float, inc: float, cap: float) -> list[float]:
 
 
 def size_arb(american_odds: list[float], total: float, increment: float | None = 1.0,
-             max_per_side: float | None = None) -> dict:
+             max_per_side: float | None = None, leg_caps: list[float | None] | None = None) -> dict:
     """Rounded, capped stakes for an arb (or low-hold) bet across mutually exclusive outcomes.
 
     The ideal split of `total` is scaled down if a side would exceed `max_per_side`, then each
@@ -60,7 +60,11 @@ def size_arb(american_odds: list[float], total: float, increment: float | None =
     dec = [american_to_decimal(a) for a in american_odds]
     ideal = arb(american_odds, total)
     inc, cap = _inc(increment), stake_cap(increment, max_per_side)
-    scale = min(1.0, cap / max(ideal["stakes"])) if ideal["stakes"] else 1.0
+    caps = [cap] * len(dec)  # per leg: the max-per-side cap, tightened by the dollars available on that leg
+    for i, lc in enumerate(leg_caps or []):
+        if lc is not None:
+            caps[i] = min(cap, max(math.floor(lc / inc + EPS) * inc, 0.0) or math.floor(lc * 100) / 100)
+    scale = min([1.0] + [c / s for c, s in zip(caps, ideal["stakes"]) if s > 0])
     target_total = total * scale
     targets = [s * scale for s in ideal["stakes"]]
 
@@ -69,7 +73,7 @@ def size_arb(american_odds: list[float], total: float, increment: float | None =
         worst = min(s * d for s, d in zip(stakes, dec)) - staked
         return round(worst / staked, 9), -abs(staked - target_total)
 
-    combos = list(product(*(_choices(t, inc, cap) for t in targets)))
+    combos = list(product(*(_choices(t, inc, c) for t, c in zip(targets, caps))))
     within = [c for c in combos if sum(c) <= total + EPS]
     stakes = list(max(within or combos, key=score))
     staked = round(sum(stakes), 2)

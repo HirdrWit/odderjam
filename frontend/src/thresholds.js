@@ -6,7 +6,7 @@
 /** @const {!Object} Defaults; they match backend/engine/bettable.py DEFAULT_PROFILE. */
 export const BETTABLE_DEFAULTS = {
   oddsMin: -250, oddsMax: 250, evCeiling: 8, propEvCeiling: 12, maxSkewSeconds: 20, maxSharpSpread: 3,
-  requireConservative: true,
+  maxCounterpartyLiquidity: 5000, requireConservative: true,
 };
 
 /** @const {!Array<{key: string, label: string, help: string, step: number}>} */
@@ -23,6 +23,8 @@ export const BETTABLE_FIELDS = [
     help: 'A live game is only trusted when the book and sharp prices updated this close together. Default: 20.'},
   {key: 'maxSharpSpread', label: 'Max sharp disagreement (pts)', step: 0.5,
     help: 'When two sharp books differ by more than this many percentage points, the fair price is flagged. Default: 3.'},
+  {key: 'maxCounterpartyLiquidity', label: 'Max order on the other side ($)', step: 500,
+    help: 'On an exchange, a resting order above this many dollars is probably a sharp bettor, so the bet is flagged. Default: 5000.'},
   {key: 'requireConservative', label: 'Require conservative devig', step: 0,
     help: 'Flag a bet whose edge disappears under the cautious Worst case devig. Default: on.'},
 ];
@@ -73,5 +75,5 @@ export function bettableQuery(values, lastValid = BETTABLE_DEFAULTS) {
   return `&bettable_odds_min=${n('oddsMin')}&bettable_odds_max=${n('oddsMax')}` +
       `&ev_ceiling=${n('evCeiling')}&prop_ev_ceiling=${n('propEvCeiling')}` +
       `&max_skew_seconds=${n('maxSkewSeconds')}&max_sharp_spread=${Number((n('maxSharpSpread') / 100).toFixed(6))}` +
-      `&require_conservative=${v.requireConservative !== false}`;
+      `&max_counterparty_liquidity=${n('maxCounterpartyLiquidity')}&require_conservative=${v.requireConservative !== false}`;
 }
