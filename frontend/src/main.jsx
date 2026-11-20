@@ -24,7 +24,7 @@ import {
 import {ARB_BACKED_TIP, arbBackedBadge, arbBackedParam, legEvText} from './arbbadge.js';
 import {CLASSES, FAIR_SOURCES, isCustom, setWeight as setClassWeight, weightsSpec} from './sharpweights.js';
 import {SHARP_DEFAULTS, SHARP_FIELDS, sharpChips, sharpHint, sharpReset} from './sharpfilters.js';
-import {DEFAULT_FILTERS, activeChips, clearFilter, resetFilters, sportsParam} from './evfilters.js';
+import {DEFAULT_FILTERS, activeChips, clearFilter, evFilterCount, oddsParam, resetFilters, sportsParam, validateOdds} from './evfilters.js';
 import {stakingSummary} from './staking.js';
 import {TabIntro, WelcomeContext} from './TabIntro.jsx';
 import {afterNavigate, initialWelcome} from './onboarding.js';
@@ -625,6 +625,11 @@ function PositiveEv() {
   const [kelly, setKelly] = useStored('evKelly', 0.25);
   const [props, setProps] = useStored('evProps', 'include');
   const [sport, setSport] = useStored('evSport', '');
+  const [oddsMin, setOddsMin] = useStored('evOddsMin', '');
+  const [oddsMax, setOddsMax] = useStored('evOddsMax', '');
+  const oddsErrors = validateOdds(oddsMin, oddsMax);
+  const oddsValid = useRef({min: '', max: ''});
+  if (Object.keys(oddsErrors).length === 0) oddsValid.current = {min: oddsMin, max: oddsMax};
   const [arbOnly, setArbOnly] = useStored('evArbOnly', false);
   const [panel, setPanel] = useState(() => takePanel());
   useEffect(() => {
@@ -659,7 +664,8 @@ function PositiveEv() {
       // Storage can be unavailable; the choice just is not remembered.
     }
   };
-  const setters = {book: pickBook, minEv: setMinEv, sport: setSport, props: setProps};
+  const setters = {book: pickBook, minEv: setMinEv, sport: setSport, props: setProps,
+    oddsMin: setOddsMin, oddsMax: setOddsMax};
   // Filters in the URL win over stored ones on load; later changes are written back to it.
   useEffect(() => {
     const url = parseHash(window.location.hash);
@@ -674,7 +680,7 @@ function PositiveEv() {
     const next = buildHash('+EV', evFiltersToParams({book, minEv}));
     if (window.location.hash !== next) window.history.replaceState(null, '', next);
   }, [book, minEv]);
-  const chips = activeChips({book, minEv, sport, props});
+  const chips = activeChips({book, minEv, sport, props, oddsMin, oddsMax});
   const [bettable, setBettable] = useBettable();
   const [showHidden, setShowHidden] = useState(false);
   const [historyRow, setHistoryRow] = useState(null);
@@ -757,7 +763,7 @@ function PositiveEv() {
   const sharpSpec = sharpWeights ? weightsSpec(sharpWeights) : null;
   const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}&fair_source=${fairSource}` +
-      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${arbBackedParam(arbOnly)}${bettableQuery(thresholds, lastValid.current)}${mustBetQuery(mustThresholds, mustLastValid.current)}${mustBetParam(mustOnly)}`;
+      `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${oddsParam(oddsValid.current.min, oddsValid.current.max)}${arbBackedParam(arbOnly)}${bettableQuery(thresholds, lastValid.current)}${mustBetQuery(mustThresholds, mustLastValid.current)}${mustBetParam(mustOnly)}`;
   const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}&show_hidden=true`);
   // Derived from `data`, so declared after it: reading it earlier throws (temporal dead zone) and crashed the tab.
   const split = splitHidden(data, showHidden);
@@ -776,7 +782,7 @@ function PositiveEv() {
       <div className="bar filter-bar">
         <button type="button" className="filters-toggle" aria-expanded={filtersOpen} onClick={() => {
           setFiltersOpen((open) => !open);
-        }}>{filtersLabel(filterCount({book, minEv, sport, props}, DEFAULT_FILTERS))}</button>
+        }}>{filtersLabel(evFilterCount({book, minEv, sport, props, oddsMin, oddsMax}))}</button>
         <span className={`collapsible${filtersOpen ? ' open' : ''}`}>
           Book <select value={book} onChange={(e) => {
             pickBook(e.target.value);
@@ -786,6 +792,12 @@ function PositiveEv() {
           Min <Term id="ev">EV</Term> % <input type="number" step="0.5" value={minEv} onChange={(e) => {
             setMinEv(Number(e.target.value));
           }} />
+          Odds from <input type="number" step="5" placeholder="any" aria-label="Odds from" aria-invalid={!!oddsErrors.min} value={oddsMin} onChange={(e) => {
+            setOddsMin(e.target.value);
+          }} /> to <input type="number" step="5" placeholder="any" aria-label="Odds to" aria-invalid={!!oddsErrors.max} value={oddsMax} onChange={(e) => {
+            setOddsMax(e.target.value);
+          }} />
+          {(oddsErrors.min || oddsErrors.max) && <span className="err" role="alert">{oddsErrors.min || oddsErrors.max}</span>}
           Sport <select value={sport} onChange={(e) => {
             setSport(e.target.value);
           }}>
@@ -815,7 +827,12 @@ function PositiveEv() {
         <div className="chips">
           {chips.map((c) => (
             <button key={c.key} type="button" className="chip" aria-label={`Remove filter ${c.label}`} onClick={() => {
-              setters[c.key](clearFilter({book, minEv, sport, props}, c.key)[c.key]);
+              if (c.key === 'odds') {
+                setOddsMin('');
+                setOddsMax('');
+              } else {
+                setters[c.key](clearFilter({book, minEv, sport, props}, c.key)[c.key]);
+              }
             }}>{c.label} ✕</button>
           ))}
           {modeChip && (

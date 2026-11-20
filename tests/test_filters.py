@@ -114,3 +114,12 @@ def test_preset_applies_to_ev_and_arbs_and_params_override(client):
     over = client.get("/api/ev", params={"preset": p["id"], "sports": "NFL"}).json()
     assert over and {(r["sport"], r["market"]) for r in over} == {("NFL", "totals")}
     assert client.get("/api/ev", params={"preset": 999}).status_code == 404
+
+
+def test_ev_odds_range_fixture(client, monkeypatch):
+    rows = [{"odds": o} for o in (-300, -150, 250, 400)]
+    fs = FilterSet(odds_min=-220, odds_max=320)
+    assert [r["odds"] for r in rows if fs.odds_ok(r["odds"])] == [-150, 250]
+    live = client.get("/api/ev", params={**ALL_EV, "odds_min": -220, "odds_max": 320}).json()
+    assert live and all(-220 <= r["odds"] <= 320 for r in live)
+    assert len(live) < len(client.get("/api/ev", params=ALL_EV).json())

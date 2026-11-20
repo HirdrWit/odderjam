@@ -43,3 +43,34 @@ test('sports query param is empty for any sport', () => {
   assert.equal(sportsParam(''), '');
   assert.equal(sportsParam('NBA'), '&sports=NBA');
 });
+
+import {evFilterCount, oddsParam, validateOdds} from './evfilters.js';
+
+test('oddsParam builds the query fragment', () => {
+  assert.equal(oddsParam(-220, 320), '&odds_min=-220&odds_max=320');
+  assert.equal(oddsParam('', 320), '&odds_max=320');
+  assert.equal(oddsParam(-220, ''), '&odds_min=-220');
+  assert.equal(oddsParam('', ''), '');
+});
+
+test('validateOdds rejects bad values and accepts good ones', () => {
+  assert.match(validateOdds(50, '').min, /100/);
+  assert.ok(validateOdds('', -99).max);
+  assert.ok(validateOdds(NaN, '').min);
+  assert.ok(validateOdds(300, 200).max);
+  assert.deepEqual(validateOdds(-220, 100), {});
+  assert.deepEqual(validateOdds(-100, 320), {});
+  assert.deepEqual(validateOdds('', ''), {});
+});
+
+test('odds chip label, count and reset', () => {
+  const f = {...DEFAULT_FILTERS, oddsMin: -220, oddsMax: 320};
+  assert.deepEqual(activeChips(f).map((c) => [c.key, c.label]), [['odds', 'Odds -220 to +320']]);
+  assert.equal(activeChips({...DEFAULT_FILTERS, oddsMin: -220})[0].label, 'Odds ≥ -220');
+  assert.equal(activeChips({...DEFAULT_FILTERS, oddsMax: 320})[0].label, 'Odds ≤ +320');
+  assert.equal(evFilterCount(f), 1);
+  assert.equal(evFilterCount({...f, sport: 'NBA'}), 2);
+  assert.deepEqual(clearFilter(f, 'odds'), DEFAULT_FILTERS);
+  assert.deepEqual(resetFilters(), {...DEFAULT_FILTERS});
+  assert.equal(evFilterCount(resetFilters()), 0);
+});

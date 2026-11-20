@@ -3,8 +3,8 @@
  * React), tested in evfilters.test.js.
  */
 
-/** @const {{book: string, minEv: number, sport: string, props: string}} */
-export const DEFAULT_FILTERS = {book: 'DraftKings', minEv: 1, sport: '', props: 'include'};
+/** @const {{book: string, minEv: number, sport: string, props: string, oddsMin: (number|string), oddsMax: (number|string)}} */
+export const DEFAULT_FILTERS = {book: 'DraftKings', minEv: 1, sport: '', props: 'include', oddsMin: '', oddsMax: ''};
 
 /** @return {!Object} A fresh copy of the default filters. */
 export function resetFilters() {
@@ -17,6 +17,7 @@ export function resetFilters() {
  * @return {!Object} New filters.
  */
 export function clearFilter(filters, key) {
+  if (key === 'odds') return {...filters, oddsMin: '', oddsMax: ''};
   return {...filters, [key]: DEFAULT_FILTERS[key]};
 }
 
@@ -32,9 +33,76 @@ const CHIP_LABELS = {
  * @return {!Array<{key: string, label: string}>} One chip per non-default filter.
  */
 export function activeChips(filters) {
-  return Object.keys(DEFAULT_FILTERS)
+  const chips = Object.keys(CHIP_LABELS)
       .filter((key) => filters[key] !== DEFAULT_FILTERS[key])
       .map((key) => ({key, label: CHIP_LABELS[key](filters[key])}));
+  const odds = oddsChip(filters.oddsMin, filters.oddsMax);
+  return odds ? [...chips, {key: 'odds', label: odds}] : chips;
+}
+
+/** @param {*} v Odds field value. @return {boolean} True when the field is filled in. */
+function isSet(v) {
+  return v !== '' && v != null;
+}
+
+/** @param {number} n @return {string} American odds with an explicit sign. */
+function signed(n) {
+  return n > 0 ? `+${n}` : `${n}`;
+}
+
+/** @return {string} Chip text for the odds range, or '' when neither side is set. */
+function oddsChip(min, max) {
+  if (isSet(min) && isSet(max)) return `Odds ${signed(Number(min))} to ${signed(Number(max))}`;
+  if (isSet(min)) return `Odds ≥ ${signed(Number(min))}`;
+  if (isSet(max)) return `Odds ≤ ${signed(Number(max))}`;
+  return '';
+}
+
+/**
+ * @param {!Object} filters Current filters.
+ * @return {number} Filters that differ from default; the odds range counts once.
+ */
+export function evFilterCount(filters) {
+  const plain = Object.keys(CHIP_LABELS).filter((key) => filters[key] !== DEFAULT_FILTERS[key]).length;
+  return plain + (oddsChip(filters.oddsMin, filters.oddsMax) ? 1 : 0);
+}
+
+/**
+ * @param {(number|string)} v One odds field.
+ * @return {string} Error message, or '' when blank or valid.
+ */
+function oddsError(v) {
+  if (!isSet(v)) return '';
+  const n = typeof v === 'string' ? Number(v) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return 'Enter a number';
+  if (Math.abs(n) < 100) return 'American odds must be -100 or lower, or +100 or higher';
+  return '';
+}
+
+/**
+ * @param {(number|string)} min
+ * @param {(number|string)} max
+ * @return {{min: (string|undefined), max: (string|undefined)}} Error per invalid field.
+ */
+export function validateOdds(min, max) {
+  const errors = {};
+  const lo = oddsError(min);
+  const hi = oddsError(max);
+  if (lo) errors.min = lo;
+  if (hi) errors.max = hi;
+  if (!lo && !hi && isSet(min) && isSet(max) && Number(min) > Number(max)) {
+    errors.max = 'Max odds must not be below min odds';
+  }
+  return errors;
+}
+
+/**
+ * @param {(number|string)} min
+ * @param {(number|string)} max
+ * @return {string} Query fragment for /api/ev; blank sides are left out.
+ */
+export function oddsParam(min, max) {
+  return (isSet(min) ? `&odds_min=${Number(min)}` : '') + (isSet(max) ? `&odds_max=${Number(max)}` : '');
 }
 
 /**
