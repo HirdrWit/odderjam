@@ -183,7 +183,7 @@ def test_jsx_wiring():  # AC6 / AC7
     jsx = (FRONTEND / "src" / "main.jsx").read_text()
     assert "mustbet.js" in jsx and "Must bets only" in jsx
     assert "mustBetBadge(" in jsx and "mustBetQuery(" in jsx and "MustBetSettings" in jsx
-    ev = re.search(r"const query = `book=.*?;", jsx, re.S).group(0)
+    ev = re.search(r"const query = `min_ev=.*?;", jsx, re.S).group(0)
     assert "mustBetQuery" in ev and "mustBetParam" in ev
     body = re.search(r"\nfunction Alerts\(\) \{(.*?)\n\}\n", jsx, re.S).group(1)
     assert "form.must_bet" in body

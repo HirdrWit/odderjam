@@ -2,6 +2,8 @@
  * @fileoverview Hash routes: tab <-> `#/slug?filters` (no React), tested in
  * routes.test.js.
  */
+import {knownBooks} from './evfilters.js';
+
 
 /** @const {!Object<string, string>} Tab name to URL slug. */
 export const TAB_SLUGS = {
@@ -47,21 +49,22 @@ export function buildHash(tab, params) {
 
 /**
  * @param {!Object<string, string>} params URL params.
- * @param {{book: string, minEv: number}} defaults Fallback filters.
- * @return {{book: string, minEv: number}} +EV filters from the URL.
+ * @param {{books: !Array<string>, minEv: number}} defaults Fallback filters.
+ * @return {{books: !Array<string>, minEv: number}} +EV filters from the URL.
  */
 export function evParamsToFilters(params, defaults) {
   const min = params.min == null || params.min === '' ? NaN : Number(params.min);
+  const raw = params.books ?? params.book;
   return {
-    book: params.book ?? defaults.book,
+    books: raw == null ? defaults.books : knownBooks(raw.split(',')),
     minEv: Number.isFinite(min) ? min : defaults.minEv,
   };
 }
 
 /**
- * @param {{book: string, minEv: number}} f +EV filters.
+ * @param {{books: !Array<string>, minEv: number}} f +EV filters.
  * @return {!Object<string, string>} URL params.
  */
 export function evFiltersToParams(f) {
-  return {book: f.book, min: String(f.minEv)};
+  return {books: f.books.join(','), min: String(f.minEv)};
 }

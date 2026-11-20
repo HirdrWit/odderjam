@@ -24,7 +24,7 @@ import {
 import {ARB_BACKED_TIP, arbBackedBadge, arbBackedParam, legEvText} from './arbbadge.js';
 import {CLASSES, FAIR_SOURCES, isCustom, setWeight as setClassWeight, weightsSpec} from './sharpweights.js';
 import {SHARP_DEFAULTS, SHARP_FIELDS, sharpChips, sharpHint, sharpReset} from './sharpfilters.js';
-import {DEFAULT_FILTERS, activeChips, clearFilter, evFilterCount, oddsParam, resetFilters, sportsParam, validateOdds} from './evfilters.js';
+import {DEFAULT_FILTERS, EV_BOOK_NAMES, activeChips, booksParam, clearFilter, evFilterCount, knownBooks, loadBooks, oddsParam, resetFilters, serializeBooks, sportsParam, validateOdds} from './evfilters.js';
 import {stakingSummary} from './staking.js';
 import {TabIntro, WelcomeContext} from './TabIntro.jsx';
 import {afterNavigate, initialWelcome} from './onboarding.js';
@@ -462,15 +462,14 @@ const BOOKS = [
 ];
 // Exchanges and prediction markets: shown where a single leg is placed, not on promo tools.
 const EXCHANGE_BOOKS = ['Kalshi', 'Polymarket', 'Novig', 'ProphetX'];
-const EV_BOOKS = [...BOOKS, ...EXCHANGE_BOOKS, ''];
 const SPORTS = ['', 'NBA', 'NFL', 'MLB', 'NHL'];
 
 function loadEvBook() {
   try {
-    return localStorage.getItem('evBook') ?? 'DraftKings';
+    return loadBooks(localStorage.getItem('evBook'));
   } catch {
     // Storage can be unavailable; use the default book.
-    return 'DraftKings';
+    return [...DEFAULT_FILTERS.books];
   }
 }
 
@@ -666,7 +665,7 @@ function PositiveEv() {
     }
   }, [scrollTo, panel]);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [book, setBook] = useState(() => loadEvBook());
+  const [books, setBooks] = useState(() => loadEvBook());
   const [sort, onSort, sorted] = useSort('+EV', {key: 'ev', dir: 'desc'});
   const {data: bank, error: bankError, retry: bankRetry} = useApiStatus('/api/bankroll', 30000);
   const bankFailed = failedText({data: bank, error: bankError, what: 'bankroll'});
@@ -681,31 +680,31 @@ function PositiveEv() {
     }
     notifyDataChanged();
   };
-  const pickBook = (next) => {
-    setBook(next);
+  const pickBooks = (next) => {
+    setBooks(next);
     try {
-      localStorage.setItem('evBook', next);
+      localStorage.setItem('evBook', serializeBooks(next));
     } catch {
       // Storage can be unavailable; the choice just is not remembered.
     }
   };
-  const setters = {book: pickBook, minEv: setMinEv, sport: setSport, props: setProps,
+  const setters = {books: pickBooks, minEv: setMinEv, sport: setSport, props: setProps,
     oddsMin: setOddsMin, oddsMax: setOddsMax};
   // Filters in the URL win over stored ones on load; later changes are written back to it.
   useEffect(() => {
     const url = parseHash(window.location.hash);
     if (url.tab === '+EV') {
-      const f = evParamsToFilters(url.params, {book, minEv});
+      const f = evParamsToFilters(url.params, {books, minEv});
       // Shared-link values apply to this view only; they are not saved over the visitor's own settings.
-      if (f.book !== book && EV_BOOKS.includes(f.book)) setBook(f.book);
+      if (f.books.join() !== books.join()) setBooks(f.books);
       if (f.minEv !== minEv) setMinEvLocal(f.minEv);
     }
   }, []);
   useEffect(() => {
-    const next = buildHash('+EV', evFiltersToParams({book, minEv}));
+    const next = buildHash('+EV', evFiltersToParams({books, minEv}));
     if (window.location.hash !== next) window.history.replaceState(null, '', next);
-  }, [book, minEv]);
-  const chips = activeChips({book, minEv, sport, props, oddsMin: oddsValid.current.min, oddsMax: oddsValid.current.max});
+  }, [books, minEv]);
+  const chips = activeChips({books, minEv, sport, props, oddsMin: oddsValid.current.min, oddsMax: oddsValid.current.max});
   const [bettable, setBettable] = useBettable();
   const [showHidden, setShowHidden] = useState(false);
   const [historyRow, setHistoryRow] = useState(null);
@@ -786,7 +785,7 @@ function PositiveEv() {
   if (Object.keys(validateMustBet(mustThresholds)).length === 0) mustLastValid.current = mustThresholds;
   if (Object.keys(validateBettable(thresholds)).length === 0) lastValid.current = thresholds;
   const sharpSpec = sharpWeights ? weightsSpec(sharpWeights) : null;
-  const query = `book=${encodeURIComponent(book)}&min_ev=${minEv}&method=${method}&kelly=${kelly}` +
+  const query = `min_ev=${minEv}${booksParam(books)}&method=${method}&kelly=${kelly}` +
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}&fair_source=${fairSource}` +
       `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${oddsParam(oddsValid.current.min, oddsValid.current.max)}${arbBackedParam(arbOnly)}${bettableQuery(thresholds, lastValid.current)}${mustBetQuery(mustThresholds, mustLastValid.current)}${mustBetParam(mustOnly)}`;
   const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}&show_hidden=true`);
@@ -807,13 +806,18 @@ function PositiveEv() {
       <div className="bar filter-bar">
         <button type="button" className="filters-toggle" aria-expanded={filtersOpen} onClick={() => {
           setFiltersOpen((open) => !open);
-        }}>{filtersLabel(evFilterCount({book, minEv, sport, props, oddsMin: oddsValid.current.min, oddsMax: oddsValid.current.max}))}</button>
+        }}>{filtersLabel(evFilterCount({books, minEv, sport, props, oddsMin: oddsValid.current.min, oddsMax: oddsValid.current.max}))}</button>
         <span className={`collapsible${filtersOpen ? ' open' : ''}`}>
-          Book <select value={book} onChange={(e) => {
-            pickBook(e.target.value);
-          }}>
-            {EV_BOOKS.map((b) => <option key={b} value={b}>{b || 'All books'}</option>)}
-          </select>
+          Book <span className="subnav" role="group" aria-label="Books">
+            {EV_BOOK_NAMES.map((b) => (
+              <button key={b} type="button" aria-pressed={books.includes(b)} className={books.includes(b) ? 'on' : ''} onClick={() => {
+                pickBooks(books.includes(b) ? books.filter((x) => x !== b) : knownBooks([...books, b]));
+              }}>{b}</button>
+            ))}
+            <button type="button" aria-pressed={books.length === 0} className={books.length === 0 ? 'on' : ''} onClick={() => {
+              pickBooks([]);
+            }}>All books</button>
+          </span>
           Min <Term id="ev">EV</Term> % <input type="number" step="0.5" value={minEv} onChange={(e) => {
             setMinEv(Number(e.target.value));
           }} />
@@ -856,7 +860,7 @@ function PositiveEv() {
                 setOddsMin('');
                 setOddsMax('');
               } else {
-                setters[c.key](clearFilter({book, minEv, sport, props}, c.key)[c.key]);
+                setters[c.key](clearFilter({books, minEv, sport, props}, c.key)[c.key]);
               }
             }}>{c.label} ✕</button>
           ))}

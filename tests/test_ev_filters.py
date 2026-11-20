@@ -30,7 +30,7 @@ def test_filter_and_staking_js():
 def test_main_bar_has_only_everyday_filters():
     body = _fn("PositiveEv")
     bar = body.split('<div className="bar')[1].split("</div>")[0]
-    for kept in ("EV_BOOKS", "setMinEv", "SPORTS", "PropsFilter", "resetFilters"):
+    for kept in ("EV_BOOK_NAMES", "setMinEv", "SPORTS", "PropsFilter", "resetFilters"):
         assert kept in bar, kept
     for moved in ("setMethod", "setKelly", "<Bankroll", "<SizingBar"):
         assert moved not in bar, f"{moved} belongs in a settings panel"

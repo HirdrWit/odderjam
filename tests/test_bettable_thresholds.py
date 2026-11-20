@@ -47,5 +47,5 @@ def test_model_panel_renders_the_section_and_sends_the_query():
     assert "Bettable mode" in JSX
     assert "bettableQuery(" in JSX and "validateBettable(" in JSX and "bettableReset(" in JSX
     assert "Reset to defaults" in JSX
-    ev = re.search(r"const query = `book=.*?;", JSX, re.S).group(0)
+    ev = re.search(r"const query = `min_ev=.*?;", JSX, re.S).group(0)
     assert "bettableQuery" in ev
