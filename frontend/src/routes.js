@@ -4,7 +4,6 @@
  */
 import {knownBooks} from './evfilters.js';
 
-
 /** @const {!Object<string, string>} Tab name to URL slug. */
 export const TAB_SLUGS = {
   'Odds Screen': 'odds',
@@ -55,8 +54,10 @@ export function buildHash(tab, params) {
 export function evParamsToFilters(params, defaults) {
   const min = params.min == null || params.min === '' ? NaN : Number(params.min);
   const raw = params.books ?? params.book;
+  const named = raw ? knownBooks(raw.split(',')) : [];
   return {
-    books: raw == null ? defaults.books : knownBooks(raw.split(',')),
+    // A link naming only unknown books keeps the visitor's own choice instead of widening to all books.
+    books: named.length ? named : defaults.books,
     minEv: Number.isFinite(min) ? min : defaults.minEv,
   };
 }

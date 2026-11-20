@@ -57,12 +57,16 @@ export function loadBooks(stored) {
   if (stored.startsWith('[')) {
     try {
       const v = JSON.parse(stored);
-      if (Array.isArray(v)) return knownBooks(v);
+      if (Array.isArray(v)) {
+        const known = knownBooks(v);
+        return known.length || v.length === 0 ? known : [...DEFAULT_FILTERS.books];
+      }
     } catch {
       return [...DEFAULT_FILTERS.books];
     }
   }
-  return knownBooks([stored]);
+  const one = knownBooks([stored]);
+  return one.length || stored === '' ? one : [...DEFAULT_FILTERS.books];
 }
 
 /** @param {!Array<string>} books Selection. @return {string} Value to store. */
