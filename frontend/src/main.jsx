@@ -679,11 +679,6 @@ function PositiveEv() {
   const [showHidden, setShowHidden] = useState(false);
   const [historyRow, setHistoryRow] = useState(null);
   const rowId = (r) => `${r.event_id}|${r.market}|${r.player}|${r.point}|${r.pick}|${r.book}`;
-  const split = splitHidden(data, showHidden);
-  const hiddenRowsNote = hiddenRowsSummary(split);
-  const {shown: bettableRows, hidden: hiddenRows} = filterBettable(split.visible, bettable);
-  const hiddenText = hiddenSummary(hiddenRows);
-  const modeChip = bettableChip(bettable);
   const resetAll = (d) => {
     Object.keys(d).forEach((key) => setters[key](d[key]));
   };
@@ -764,6 +759,12 @@ function PositiveEv() {
       `&sharps=${encodeURIComponent(sharpSpec)}&max_hold=${sharpMaxHold}&fair_source=${fairSource}` +
       `${sizingQuery(sizing)}${propsParam(props)}${sportsParam(sport)}${arbBackedParam(arbOnly)}${bettableQuery(thresholds, lastValid.current)}${mustBetQuery(mustThresholds, mustLastValid.current)}${mustBetParam(mustOnly)}`;
   const {data, refreshing, error: evError, retry: evRetry} = useApiStatus(cfg && `/api/ev?${query}&show_hidden=true`);
+  // Derived from `data`, so declared after it: reading it earlier throws (temporal dead zone) and crashed the tab.
+  const split = splitHidden(data, showHidden);
+  const hiddenRowsNote = hiddenRowsSummary(split);
+  const {shown: bettableRows, hidden: hiddenRows} = filterBettable(split.visible, bettable);
+  const hiddenText = hiddenSummary(hiddenRows);
+  const modeChip = bettableChip(bettable);
   const error = evError || cfgError;
   const retry = () => {
     cfgRetry();
