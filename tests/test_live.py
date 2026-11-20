@@ -266,7 +266,10 @@ def test_tool_rows_not_dropped_when_live_mode_off(client):
     assert _events(rows) == {"live-fresh", "live-stale", "pre-stale"}
 
 
-def test_live_endpoint_reports_budget(client, monkeypatch):
+def test_live_endpoint_reports_budget(client, monkeypatch, tmp_path):
+    # Isolate the spend ledger: the real .odds_cache.budget.json holds the running server's spend.
+    monkeypatch.setattr(providers, "BUDGET_FILE", tmp_path / "budget.json")
+    monkeypatch.setattr(providers, "_budget", None)
     monkeypatch.setattr(providers, "_fetch_cost", lambda: 6)
     monkeypatch.setattr(providers, "_remaining", lambda: 500.0)
     monkeypatch.setattr(providers, "_now", lambda: NOW)

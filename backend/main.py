@@ -712,6 +712,20 @@ def health():
     return {"ok": True}
 
 
+class UiFiles(StaticFiles):
+    """The built UI. index.html must be revalidated on every load: without a Cache-Control header the browser
+    guesses a freshness lifetime from Last-Modified and kept serving a days-old build that pointed at
+    deleted assets. Vite's hashed /assets/ files never change under one name, so they are cached for a year."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if dist.exists():
-    app.mount("/", StaticFiles(directory=dist, html=True), name="ui")
+    app.mount("/", UiFiles(directory=dist, html=True), name="ui")
