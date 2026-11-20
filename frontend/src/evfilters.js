@@ -112,3 +112,18 @@ export function oddsParam(min, max) {
 export function sportsParam(sport) {
   return sport ? `&sports=${encodeURIComponent(sport)}` : '';
 }
+
+/** @return {string} Query fragment for /api/ev (stub). */
+export function booksParam(books) {
+  return '';
+}
+
+/** @return {!Array<string>} Books from a stored value (stub). */
+export function loadBooks(stored) {
+  return [];
+}
+
+/** @return {string} Storable form of the selection (stub). */
+export function serializeBooks(books) {
+  return '';
+}

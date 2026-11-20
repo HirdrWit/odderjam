@@ -28,9 +28,9 @@ test('every nav tab has a unique slug and glossary opens Help', () => {
 });
 
 test('+EV filters map to and from params', () => {
-  const d = {book: 'DraftKings', minEv: 1};
-  assert.deepEqual(evParamsToFilters({book: 'FanDuel', min: '2.5'}, d), {book: 'FanDuel', minEv: 2.5});
+  const d = {books: ['DraftKings'], minEv: 1};
+  assert.deepEqual(evParamsToFilters({book: 'FanDuel', min: '2.5'}, d), {books: ['FanDuel'], minEv: 2.5});
   assert.deepEqual(evParamsToFilters({min: 'abc'}, d), d);
   assert.deepEqual(evParamsToFilters({}, d), d);
-  assert.deepEqual(evFiltersToParams({book: 'FanDuel', minEv: 2.5}), {book: 'FanDuel', min: '2.5'});
+  assert.deepEqual(evFiltersToParams({books: ['FanDuel'], minEv: 2.5}), {books: 'FanDuel', min: '2.5'});
 });

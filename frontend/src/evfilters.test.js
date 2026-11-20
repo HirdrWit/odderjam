@@ -8,8 +8,8 @@ test('default filters produce no chips', () => {
 });
 
 test('each non-default filter shows one chip with a readable label', () => {
-  const chips = activeChips({book: 'FanDuel', minEv: 3, sport: 'NBA', props: 'mainlines'});
-  assert.deepEqual(chips.map((c) => c.key), ['book', 'minEv', 'sport', 'props']);
+  const chips = activeChips({books: ['FanDuel'], minEv: 3, sport: 'NBA', props: 'mainlines'});
+  assert.deepEqual(chips.map((c) => c.key), ['books', 'minEv', 'sport', 'props']);
   assert.match(chips[0].label, /FanDuel/);
   assert.match(chips[1].label, /3/);
   assert.match(chips[2].label, /NBA/);
@@ -22,13 +22,13 @@ test('only the changed filter gets a chip', () => {
 });
 
 test('all books is a non-default choice and is labelled', () => {
-  const chips = activeChips({...DEFAULT_FILTERS, book: ''});
+  const chips = activeChips({...DEFAULT_FILTERS, books: []});
   assert.equal(chips.length, 1);
   assert.match(chips[0].label, /all books/i);
 });
 
 test('removing a chip restores that one filter only', () => {
-  const start = {book: 'FanDuel', minEv: 3, sport: 'NBA', props: 'mainlines'};
+  const start = {books: ['FanDuel'], minEv: 3, sport: 'NBA', props: 'mainlines'};
   assert.deepEqual(clearFilter(start, 'sport'), {...start, sport: DEFAULT_FILTERS.sport});
 });
 

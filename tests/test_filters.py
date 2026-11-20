@@ -123,3 +123,13 @@ def test_ev_odds_range_fixture(client, monkeypatch):
     live = client.get("/api/ev", params={**ALL_EV, "odds_min": -220, "odds_max": 320}).json()
     assert live and all(-220 <= r["odds"] <= 320 for r in live)
     assert len(live) < len(client.get("/api/ev", params=ALL_EV).json())
+
+
+def test_ev_several_books_both_present(client):
+    rows = client.get("/api/ev", params={**ALL_EV, "books": "DraftKings,FanDuel"}).json()
+    assert {r["book"] for r in rows} == {"DraftKings", "FanDuel"}
+
+
+def test_ev_single_book_alias(client):
+    rows = client.get("/api/ev", params={**ALL_EV, "book": "DraftKings"}).json()
+    assert rows and {r["book"] for r in rows} == {"DraftKings"}
