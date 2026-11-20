@@ -126,7 +126,7 @@ def test_fragile_uses_worst_consensus_value(client):
 
 def test_ev_tab_has_worst_ev_column_and_option():
     jsx = (SRC / "main.jsx").read_text()
-    assert "['worst', 'Worst EV'" in jsx and "r.worst_ev_pct" in jsx and "r.worst_sharp" in jsx
+    assert "['worst', 'Worst EV'" in (SRC / "evcolumns.js").read_text() and "r.worst_ev_pct" in jsx and "r.worst_sharp" in jsx
     cols = (SRC / "columns.js").read_text()
     assert "Worst EV" in cols
     assert "worst-ev" in (SRC / "glossary.js").read_text()

@@ -52,7 +52,7 @@ test('columns and glossary carry help for the new columns', () => {
 
 test('+EV table: Win % column after Fair, sortable desc, with implied beneath', () => {
   const main = src('./main.jsx');
-  assert.match(main, /\['fair', 'Fair', 'desc'\], \['win', 'Win %', 'desc'\]/);
+  assert.match(src('./evcolumns.js'), /\['fair', 'Fair', 'desc'\],\s*\['win', 'Win %', 'desc'\]/);
   assert.match(main, /win: winSortKey/);
   assert.match(main, /EV_NUM = new Set\([^)]*'win'/);
   assert.match(main, /evWinCell\(r\)/);

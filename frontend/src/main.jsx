@@ -12,7 +12,7 @@ import {legStake, parseStakeInput, rowActionAria, slipButtonLabel, trackButtonLa
 import {Help} from './Help.jsx';
 import {GOTO_EVENT, HELP_TAB} from './help.js';
 import {loadStored} from './hooks.js';
-import {ALERTS_EVENT, PANEL_EVENT, SETTINGS_LABEL, SETTINGS_LINKS, requestPanel, takePanel} from './settings.js';
+import {ALERTS_EVENT, PANEL_EVENT, RULES_BUTTON, RULES_FIELDSET_ID, SETTINGS_LABEL, SETTINGS_LINKS, requestPanel, requestRules, takePanel} from './settings.js';
 import {OddsScreen, RowHistory} from './OddsScreen.jsx';
 import {ageText as holdAgeText, moveLabel} from './linemove.js';
 import {Pickem} from './Pickem.jsx';
@@ -51,7 +51,8 @@ import {Toaster, errorDetail, postJson, toast, useApi, useApiStatus, useBettable
 import {MUSTBET_DEFAULTS, MUSTBET_FIELDS, MUSTBET_HELP, mustBetBadge, mustBetParam, mustBetQuery, mustBetReset, validateMustBet} from './mustbet.js';
 import {BETTABLE_DEFAULTS, BETTABLE_FIELDS, bettableQuery, bettableReset, validateBettable} from './thresholds.js';
 import {fmtLiquidity} from './liquidity.js';
-import {badgesFor, bettableChip, filterBettable, hiddenSummary, legWarning, parlayFlagState, showAnyway} from './bettable.js';
+import {EV_COLUMNS, statusIcon, statusSortKey} from './evcolumns.js';
+import {badgesFor, bettableChip, bettableRank, bettableStatus, filterBettable, hiddenSummary, legWarning, parlayFlagState, showAnyway} from './bettable.js';
 import {failedText} from './tablestate.js';
 import {EmptyState, TableShell} from './TableShell.jsx';
 import {eventTime, money, percent, signClass} from './fmt.js';
@@ -507,7 +508,7 @@ function Bankroll({bank, onSetStart}) {
 function BettableSettings({values, onChange}) {
   const errors = validateBettable(values);
   return (
-    <fieldset className="bar wrap bettable-settings">
+    <fieldset id={RULES_FIELDSET_ID} className="bar wrap bettable-settings">
       <legend>Bettable mode</legend>
       {BETTABLE_FIELDS.map((f) => (
         <div key={f.key}>
@@ -607,17 +608,28 @@ function ApiError({data}) {
 const ROW_FMT = {odds: (o) => formatOdds(o), money: (m) => formatMoney(m)};
 
 
-const EV_COLUMNS = [
-  ['ev', 'EV%', 'desc'], ['pick', 'Pick'], ['market', 'Market'], ['event', 'Event'], ['book', 'Book'],
-  ['worst', 'Worst EV', 'desc'], ['odds', 'Odds', 'desc'], ['fair', 'Fair', 'desc'], ['win', 'Win %', 'desc'], ['sharps', 'Sharps (hold)'], ['stake', 'Stake', 'desc'],
-];
 const EV_NUM = new Set(['ev', 'worst', 'odds', 'fair', 'win', 'stake']);
 const EV_TERMS = {win: <Term id="win-probability">ⓘ</Term>};
 const EV_SORT = {
   ev: (r) => r.ev_pct, worst: (r) => r.worst_ev_pct, pick: (r) => r.pick, market: (r) => marketName(r.market), event: (r) => r.event,
   book: (r) => r.book, odds: (r) => oddsKey(r.odds), fair: (r) => oddsKey(r.fair_odds), win: winSortKey, sharps: (r) => r.sharps.length,
-  stake: (r) => r.stake,
+  stake: (r) => r.stake, status: statusSortKey,
 };
+
+/** Status cell: Bettable or Not bettable with an icon, a reasons tooltip and a link to the rules. */
+function StatusCell({row, onRules}) {
+  const s = bettableStatus(row);
+  const ok = !s.reasons.length;
+  return (
+    <>
+      <span className={`status-badge ${ok ? 'bettable' : 'not-bettable'}`} tabIndex={0}
+        title={ok ? 'No risk flags on this bet.' : s.reasons.join('\n')}>
+        <span aria-hidden="true">{statusIcon(s.label)}</span> {s.label}
+      </span>
+      {!ok && <button type="button" className="link small" onClick={onRules}>{RULES_BUTTON}</button>}
+    </>
+  );
+}
 
 function PositiveEv() {
   const [minEv, setMinEv, setMinEvLocal] = useStored('evMin', 1);
@@ -640,6 +652,19 @@ function PositiveEv() {
     window.addEventListener(PANEL_EVENT, onPanel);
     return () => window.removeEventListener(PANEL_EVENT, onPanel);
   }, []);
+  const [scrollTo, setScrollTo] = useState(null);
+  const openRules = () => {
+    const target = requestRules();
+    takePanel(); // consume the pending request: this tab is already mounted
+    setPanel(target.panel);
+    setScrollTo(target.scrollTo);
+  };
+  useEffect(() => {
+    if (scrollTo && panel === 'model') {
+      document.getElementById(scrollTo)?.scrollIntoView({block: 'center'});
+      setScrollTo(null);
+    }
+  }, [scrollTo, panel]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [book, setBook] = useState(() => loadEvBook());
   const [sort, onSort, sorted] = useSort('+EV', {key: 'ev', dir: 'desc'});
@@ -852,7 +877,7 @@ function PositiveEv() {
       {hiddenText && (
         <p className="mut small bettable-note" role="status">{hiddenText}. <button type="button" className="secondary" onClick={() => {
           setBettable(showAnyway());
-        }}>Show anyway</button></p>
+        }}>Show anyway</button> <button type="button" className="link" onClick={openRules}>{RULES_BUTTON}</button></p>
       )}
       {panel === 'model' && (
         <div className="panel">
@@ -897,7 +922,7 @@ function PositiveEv() {
         }}>Open Bankroll &amp; staking</button></p>
       )}
       <TableShell data={data} rows={Array.isArray(data) ? bettableRows : undefined} refreshing={refreshing} error={error} onRetry={retry} what="odds"
-        emptyText={hiddenRows.length ? 'Every bet is hidden by Bettable only. Use Show anyway above to see them.' : split.hidden && !split.visible.length ? 'Every bet is hidden. Use Show hidden above to see them.' : evEmptyText(data, minEv)} columns={10}>
+        emptyText={hiddenRows.length ? 'Every bet is hidden by Bettable only. Use Show anyway above to see them.' : split.hidden && !split.visible.length ? 'Every bet is hidden. Use Show hidden above to see them.' : evEmptyText(data, minEv)} columns={11}>
       <table className="cards">
         <thead>
           <tr>
@@ -913,8 +938,11 @@ function PositiveEv() {
         <tbody>
           {sorted(bettableRows, EV_SORT).map((r, i) => (
             <Fragment key={i}>
-            <tr>
+            <tr className={bettableRank(r) ? 'not-bettable' : undefined}>
               <td className={`num c-ev ${signClass(r.ev_pct)}`}>{percent(r.ev_pct, {signed: true})}</td>
+              <td className="c-status" data-label="Status">
+                <StatusCell row={r} onRules={openRules} />
+              </td>
               <td className="c-pick" title={mustBetBadge(r, true)?.tip}>{r.pick}{mustBetBadge(r) && (
                 <span className="chip must-bet-badge" tabIndex={0} title={mustBetBadge(r).tip}>{mustBetBadge(r).label}</span>
               )}{badgesFor(r).map((b) => (

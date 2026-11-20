@@ -2,8 +2,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {FLAGS, badgesFor, bettableChip, filterBettable, hiddenSummary, readBettable, showAnyway, writeBettable}
-  from './bettable.js';
+import {BETTABLE_KEY, FLAGS, badgesFor, bettableChip, bettableStatus, bettableRank, filterBettable, hiddenSummary,
+  readBettable, showAnyway, writeBettable} from './bettable.js';
 import {findEntry} from './glossary.js';
 import {HELP_SECTIONS} from './help.js';
 
@@ -51,11 +51,32 @@ test('one badge per flag, each with tooltip text; unknown flags still get a badg
   assert.deepEqual(badgesFor({}), []);
 });
 
-test('storage: defaults to ON when empty, throws or junk (I3)', () => {
-  assert.equal(readBettable({getItem: () => null}), true);
-  assert.equal(readBettable({getItem: () => { throw new Error('denied'); }}), true);
-  assert.equal(readBettable({getItem: () => 'banana'}), true);
-  assert.equal(readBettable(undefined), true);
+test('storage: defaults to OFF when empty, throws or junk (I1)', () => {
+  assert.equal(readBettable({getItem: () => null}), false);
+  assert.equal(readBettable({getItem: () => { throw new Error('denied'); }}), false);
+  assert.equal(readBettable({getItem: () => 'banana'}), false);
+  assert.equal(readBettable(undefined), false);
+});
+
+test('storage: new key is bettableOnly.v2 and the old key is ignored (I1)', () => {
+  assert.equal(BETTABLE_KEY, 'bettableOnly.v2');
+  assert.equal(readBettable({getItem: (k) => (k === 'bettableOnly' ? 'true' : null)}), false);
+  assert.equal(readBettable({getItem: (k) => (k === 'bettableOnly.v2' ? 'true' : null)}), true);
+});
+
+test('status: unflagged row is Bettable with no reasons (I2)', () => {
+  assert.deepEqual(bettableStatus({flags: []}), {label: 'Bettable', reasons: []});
+  assert.deepEqual(bettableStatus({}), {label: 'Bettable', reasons: []});
+});
+
+test('status: flagged row is Not bettable and lists each flag tip (I2)', () => {
+  const s = bettableStatus({flags: ['in_play', 'fragile']});
+  assert.equal(s.label, 'Not bettable');
+  assert.deepEqual(s.reasons, [FLAGS.in_play.tip, FLAGS.fragile.tip]);
+});
+
+test('rank: Bettable rows sort before Not bettable (I3)', () => {
+  assert.ok(bettableRank({flags: []}) < bettableRank({flags: ['longshot']}));
 });
 
 test('storage: persists and reads back OFF and ON (I3)', () => {
@@ -65,6 +86,7 @@ test('storage: persists and reads back OFF and ON (I3)', () => {
   assert.equal(readBettable(s), false);
   writeBettable(s, true);
   assert.equal(readBettable(s), true);
+  assert.equal(mem['bettableOnly.v2'], 'true');
 });
 
 test('write does not throw when storage throws (I3)', () => {

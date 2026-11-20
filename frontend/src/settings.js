@@ -42,3 +42,18 @@ export function takePanel() {
 
 /** @const {string} Event fired when the Browser alerts choice changes. */
 export const ALERTS_EVENT = 'odderjam:alerts';
+
+/** @const {string} Label of the control that opens the Bettable rules. */
+export const RULES_BUTTON = 'Change these rules';
+
+/** @const {string} DOM id of the Bettable mode fieldset in Model settings. */
+export const RULES_FIELDSET_ID = 'bettable-mode';
+
+/**
+ * Asks the +EV tab to open Model settings scrolled to the Bettable mode fieldset.
+ * @return {{panel: string, scrollTo: string}}
+ */
+export function requestRules() {
+  requestPanel('model');
+  return {panel: 'model', scrollTo: RULES_FIELDSET_ID};
+}

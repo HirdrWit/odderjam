@@ -11,6 +11,7 @@ import {windowText} from './middles.js';
 export const COLUMNS = {
   '+EV': [
     {label: 'EV%', glossary: 'edge'},
+    {label: 'Status', text: 'Bettable means no risk flag fired. Not bettable means at least one did; hover it to see why.'},
     {label: 'Pick', text: 'The side of the bet to take.'},
     {label: 'Market', text: 'The kind of bet, such as moneyline, spread or total.'},
     {label: 'Event', text: 'The game, and a LIVE tag if it has started.'},

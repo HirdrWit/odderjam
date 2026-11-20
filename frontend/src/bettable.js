@@ -5,7 +5,7 @@
  */
 
 /** localStorage key for the global toggle. */
-export const BETTABLE_KEY = 'bettableOnly';
+export const BETTABLE_KEY = 'bettableOnly.v2';
 
 /** Window event fired when the toggle changes, so every tab's hook updates. */
 export const BETTABLE_EVENT = 'odderjam:bettable';
@@ -56,14 +56,15 @@ export const FLAGS = {
 
 /**
  * @param {?Storage|undefined} storage
- * @return {boolean} The saved choice; ON when nothing usable is saved.
+ * @return {boolean} The saved choice; OFF unless the v2 key holds "true". The old
+ *     `bettableOnly` key is ignored so its stored default does not keep hiding rows.
  */
 export function readBettable(storage = globalThis.localStorage) {
   try {
-    return storage.getItem(BETTABLE_KEY) === 'false' ? false : true;
+    return storage.getItem(BETTABLE_KEY) === 'true';
   } catch {
-    // Storage can be missing or throw; the safe default is ON.
-    return true;
+    // Storage can be missing or throw; the default is OFF (show every row).
+    return false;
   }
 }
 
@@ -164,4 +165,22 @@ export function pickemLegMark(leg, on) {
   if (!on) return '';
   const labels = badgesFor(leg).map((b) => b.label);
   return labels.length ? `${labels.join(', ')}: left out of suggested slips` : '';
+}
+
+/**
+ * @param {{flags: (!Array<string>|undefined)}} row
+ * @return {{label: string, reasons: !Array<string>}} "Bettable" for an unflagged row, otherwise
+ *     "Not bettable" with each flag's tip.
+ */
+export function bettableStatus(row) {
+  const reasons = badgesFor(row).map((b) => b.tip);
+  return reasons.length ? {label: 'Not bettable', reasons} : {label: 'Bettable', reasons: []};
+}
+
+/**
+ * @param {{flags: (!Array<string>|undefined)}} row
+ * @return {number} Sort key for the Status column: 0 for Bettable, 1 for Not bettable.
+ */
+export function bettableRank(row) {
+  return row.flags?.length ? 1 : 0;
 }
