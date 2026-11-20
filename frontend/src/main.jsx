@@ -680,7 +680,7 @@ function PositiveEv() {
     const next = buildHash('+EV', evFiltersToParams({book, minEv}));
     if (window.location.hash !== next) window.history.replaceState(null, '', next);
   }, [book, minEv]);
-  const chips = activeChips({book, minEv, sport, props, oddsMin, oddsMax});
+  const chips = activeChips({book, minEv, sport, props, oddsMin: oddsValid.current.min, oddsMax: oddsValid.current.max});
   const [bettable, setBettable] = useBettable();
   const [showHidden, setShowHidden] = useState(false);
   const [historyRow, setHistoryRow] = useState(null);
@@ -782,7 +782,7 @@ function PositiveEv() {
       <div className="bar filter-bar">
         <button type="button" className="filters-toggle" aria-expanded={filtersOpen} onClick={() => {
           setFiltersOpen((open) => !open);
-        }}>{filtersLabel(evFilterCount({book, minEv, sport, props, oddsMin, oddsMax}))}</button>
+        }}>{filtersLabel(evFilterCount({book, minEv, sport, props, oddsMin: oddsValid.current.min, oddsMax: oddsValid.current.max}))}</button>
         <span className={`collapsible${filtersOpen ? ' open' : ''}`}>
           Book <select value={book} onChange={(e) => {
             pickBook(e.target.value);
