@@ -7,8 +7,8 @@ import pytest
 from backend.providers import theoddsapi
 from backend.providers.books import US_BOOKS, us_only
 
-DEFAULT = ["pinnacle", "betonlineag", "draftkings", "fanduel", "betmgm", "betrivers", "williamhill_us",
-           "fanatics", "espnbet", "hardrockbet"]
+DEFAULT = ["pinnacle", "betonlineag", "draftkings", "fanduel", "betmgm", "betrivers", "espnbet", "hardrockbet",
+           "novig", "prophetx"]
 
 
 def _event(bk_key="draftkings", title="DraftKings"):

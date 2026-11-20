@@ -38,8 +38,10 @@ SPORT_PROPS = {
     "NHL": {"player_points", "player_goals", "player_assists", "player_shots_on_goal"},
 }
 PROP_MARKETS = [m.strip() for m in os.environ.get("ODDS_PROP_MARKETS", "").split(",") if m.strip()]
-DEFAULT_BOOKMAKERS = ["pinnacle", "betonlineag", "draftkings", "fanduel", "betmgm", "betrivers", "williamhill_us",
-                      "fanatics", "espnbet", "hardrockbet"]
+# williamhill_us (Caesars) and fanatics are left out: The Odds API serves them to paid plans only and returns nothing
+# for this key, so they filled two of the ten slots for no data. novig is a sharp reference; prophetx has no direct feed.
+DEFAULT_BOOKMAKERS = ["pinnacle", "betonlineag", "draftkings", "fanduel", "betmgm", "betrivers", "espnbet",
+                      "hardrockbet", "novig", "prophetx"]
 MAX_PER_GROUP = 10  # The Odds API bills every group of 10 bookmakers as 1 region
 log = logging.getLogger(__name__)
 BASE = "https://api.the-odds-api.com/v4/sports"
