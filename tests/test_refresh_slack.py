@@ -51,13 +51,9 @@ def test_clearly_fresh_cache_is_still_served(client, choice):
     assert len(calls) == 1
 
 
-def test_default_lifetime_unchanged(client):  # Off / 120m keep current behaviour
+def test_default_lifetime_unchanged(client):  # nothing saved: 120m
     c, calls = client
     providers.get_snapshot(force=True)
-    age(7200 - 600)
-    providers.get_snapshot()
-    assert len(calls) == 1
-    c.put("/api/refresh-interval", json={"seconds": 0})
     age(7200 - 600)
     providers.get_snapshot()
     assert len(calls) == 1

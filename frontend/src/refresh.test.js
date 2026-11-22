@@ -21,8 +21,8 @@ test('unknown remaining credits show only credits per hour', () => {
   assert.equal(optionText({seconds: 30, credits_per_hour: 720}), '30s · 720 credits/h');
 });
 
-test('Off shows no cost', () => {
-  assert.equal(optionText({seconds: 0, credits_per_hour: 0, hours_left: null}), 'Off');
+test('Off shows 0 credits/h', () => {
+  assert.equal(optionText({seconds: 0, credits_per_hour: 0, hours_left: null}), 'Off · 0 credits/h');
 });
 
 test('interval in ms, none for Off or bad values', () => {

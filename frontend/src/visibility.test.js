@@ -68,3 +68,8 @@ test('refresh on show only when the data is older than the interval', () => {
   assert.equal(shouldRefreshOnShow(100, 7200), false);
   assert.equal(shouldRefreshOnShow(null, 7200), true);
 });
+
+test('shouldRefreshOnShow never asks when Off (null ttl)', () => {
+  assert.equal(shouldRefreshOnShow(99999, null), false);
+  assert.equal(shouldRefreshOnShow(null, null), false);
+});

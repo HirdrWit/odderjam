@@ -69,10 +69,10 @@ def test_put_rejects_nan(client):
     assert r.status_code == 422
 
 
-def test_off_is_saved_and_keeps_the_default_cache_lifetime(client):
+def test_off_is_saved_and_has_no_cache_lifetime(client):
     assert client.put("/api/refresh-interval", json={"seconds": 0}).json()["seconds"] == 0
     assert get(client)["seconds"] == 0
-    assert providers._ttl() == 7200
+    assert providers._ttl() is None
 
 
 def test_get_snapshot_uses_the_chosen_lifetime(client, monkeypatch):
