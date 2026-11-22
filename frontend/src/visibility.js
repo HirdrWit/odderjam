@@ -39,9 +39,10 @@ export function createPoller(fn, ms, env = {doc: document, setInterval: (...a) =
 
 /**
  * @param {?number} ageSeconds Age of the cached data; null when unknown.
- * @param {number} ttlSeconds Refresh interval.
- * @return {boolean} True when a tab that just became visible should ask for fresh data.
+ * @param {?number} ttlSeconds Refresh interval; null when auto-refresh is Off.
+ * @return {boolean} True when a tab that just became visible should ask for fresh data. Never when Off.
  */
 export function shouldRefreshOnShow(ageSeconds, ttlSeconds) {
+  if (ttlSeconds === null) return false;
   return ageSeconds == null || ageSeconds > ttlSeconds;
 }

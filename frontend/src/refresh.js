@@ -37,7 +37,7 @@ function leftText(hours) {
  */
 export function optionText(option) {
   const label = choiceLabel(option.seconds);
-  if (option.seconds === 0) return label;
+  if (option.seconds === 0) return `${label} · 0 credits/h`;
   const perHour = Math.round(option.credits_per_hour);
   const text = `${label} · ${perHour} credits/h`;
   return option.hours_left == null ? text : `${text} · ${leftText(option.hours_left)}`;

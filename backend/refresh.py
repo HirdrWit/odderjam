@@ -2,6 +2,8 @@
 
 The choice is saved in the settings table (key `refresh_seconds`, 0 = Off). It sets the pre-game cache
 lifetime that get_snapshot() uses and the pace of the frontend timer. Nothing saved: ODDS_CACHE_MINUTES.
+Off (odderjam-141) means no automatic fetch at all: the cache is served however old it is. Only the
+Refresh button or a missing cache file fetches.
 """
 import os
 
@@ -31,10 +33,10 @@ def set_seconds(seconds: int) -> int:
     return seconds
 
 
-def cache_lifetime() -> float:
-    """Seconds a pre-game snapshot stays fresh. Off keeps the default: it only refetches when stale."""
+def cache_lifetime() -> float | None:
+    """Seconds a pre-game snapshot stays fresh, or None for Off: the cache never goes stale by age."""
     seconds = get_seconds()
-    return float(seconds or default_seconds())
+    return float(seconds) if seconds else None
 
 
 def options(cost: float, remaining: float | None) -> list[dict]:

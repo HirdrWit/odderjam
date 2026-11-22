@@ -88,7 +88,8 @@ def _live() -> bool:
 TICK_SLACK_SECONDS = 1.0
 
 
-def _ttl() -> float:
+def _ttl() -> float | None:
+    """Cache lifetime in seconds; None when auto-refresh is Off (serve the cache however old)."""
     from .. import refresh  # lazy: refresh imports db
     return refresh.cache_lifetime()
 
@@ -301,8 +302,13 @@ def _pregame(force: bool, not_before: float | None = None) -> list[dict]:
     A forced call with `not_before` skips the fetch when the cache was written at or after that
     moment: another request fetched while this one waited for the lock."""
     ttl = _ttl()
-    # A poll tick at the chosen interval lands a few ms before the TTL ends; count that as stale (odderjam-126).
-    fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < ttl - min(TICK_SLACK_SECONDS, ttl * 0.2)
+    if ttl is None:  # Off (odderjam-141): only an explicit Refresh or a missing cache fetches
+        fresh = CACHE.exists()
+        if not_before is not None and fresh:
+            force = False  # the tab-shown refresh must not spend credits when Off
+    else:
+        # A poll tick at the chosen interval lands a few ms before the TTL ends; count that as stale (odderjam-126).
+        fresh = CACHE.exists() and time.time() - CACHE.stat().st_mtime < ttl - min(TICK_SLACK_SECONDS, ttl * 0.2)
     if force and not_before is not None:
         wrote = CACHE.exists() and CACHE.stat().st_mtime >= not_before
         failed = _provider_error is not None and _provider_error["at"] >= not_before

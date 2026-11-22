@@ -123,7 +123,7 @@ export const HELP_SECTIONS = [
       },
       {
         q: 'What are API credits?',
-        a: 'The data provider charges one credit per request. Each refresh spends credits. When they run out, new prices stop loading.',
+        a: 'The data provider charges one credit per request. Each refresh spends credits. With auto-refresh set to Off, odds reload only when you press Refresh, so it spends 0 credits on its own. When they run out, new prices stop loading.',
       },
       {
         q: 'Why is a book missing?',
