@@ -125,6 +125,7 @@ export const ADD_BET_FIELDS = [
   {key: 'book', id: 'bet-book', label: 'Book', required: false},
   {key: 'odds', id: 'bet-odds', label: 'Odds', required: true},
   {key: 'stake', id: 'bet-stake', label: 'Stake', required: true},
+  {key: 'event_start', id: 'bet-event-start', label: 'Event start (optional)', required: false},
 ];
 
 /**

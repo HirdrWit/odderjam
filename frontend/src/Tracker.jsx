@@ -8,6 +8,7 @@ import {trackerEmptyText} from './empty.js';
 import {errorDetail, postJson, toast, useApi, useApiStatus, useStored} from './hooks.jsx';
 import {failedText} from './tablestate.js';
 import {TableShell} from './TableShell.jsx';
+import {eventStartInfo, eventStartSortKey, eventStartToIso} from './eventstart.js';
 import {eventTime, impliedPercent, money, percent, signClass} from './fmt.js';
 import {americanToProb} from './calc.js';
 import {formatOdds} from './odds.js';
@@ -52,6 +53,7 @@ const BLANK_BET = {
   odds: '',
   stake: '',
   closing_odds: '',
+  event_start: '',
   status: 'pending',
   is_bonus: false,
 };
@@ -246,6 +248,7 @@ function betBody(bet) {
     stake: Number(bet.stake),
     strategy: bet.strategy || null,
     closing_odds: closing,
+    event_start: bet.event_start ? eventStartToIso(bet.event_start) : null,
   };
 }
 
@@ -259,12 +262,17 @@ function BetRow({bet, onPatch, onDelete}) {
       onPatch({closing_odds: e.target.value});
     }
   };
+  const start = eventStartInfo(bet.event_start, bet.status);
   const sharpTitle = bet.closing_sharp_odds != null ?
       `Sharp fair close ${formatOdds(bet.closing_sharp_odds)}` :
       '';
   return (
     <tr>
       <td data-label="Placed">{eventTime(bet.placed_at)}</td>
+      <td data-label="Event start" title={start.title || undefined}>
+        {start.text}
+        {start.label && <span className={start.state === 'passed' ? 'bad' : 'mut'}>{start.state === 'passed' ? ' ⚠ ' : ' · '}{start.label}</span>}
+      </td>
       <td className="c-pick">{bet.pick}{bet.is_bonus && <span className="mut" title="Bonus bet"> · bonus</span>}</td>
       <td className="c-event">{bet.event}</td>
       <td className="c-book">{bet.book}</td>
@@ -314,7 +322,7 @@ const SETTLE_PROMPT =
     'This costs 2 API credits per sport with pending bets. Props stay manual.';
 
 const BET_COLUMNS = [
-  ['date', 'Date', 'desc'], ['pick', 'Pick'], ['event', 'Event'], ['book', 'Book'], ['type', 'Type'],
+  ['date', 'Date', 'desc'], ['eventStart', 'Event start', 'desc'], ['pick', 'Pick'], ['event', 'Event'], ['book', 'Book'], ['type', 'Type'],
   ['odds', 'Odds', 'desc'], ['implied', 'Implied %', 'desc'], ['stake', 'Stake', 'desc'], ['close', 'Close', 'desc'],
   ['clv', 'CLV', 'desc'], ['sharpClv', 'Sharp CLV', 'desc'], ['status', 'Status'],
   ['profit', 'P/L', 'desc'],
@@ -327,7 +335,7 @@ const BET_TERM_LABELS = {
 };
 const BET_NUM = new Set(['odds', 'implied', 'stake', 'close', 'clv', 'sharpClv', 'profit']);
 const BET_SORT = {
-  date: (b) => Date.parse(b.placed_at), pick: (b) => b.pick, event: (b) => b.event, book: (b) => b.book,
+  date: (b) => Date.parse(b.placed_at), eventStart: (b) => eventStartSortKey(b), pick: (b) => b.pick, event: (b) => b.event, book: (b) => b.book,
   type: (b) => MARKETS[b.market] || b.market, odds: (b) => oddsKey(b.odds), implied: (b) => (Number.isFinite(b.odds) && Math.abs(b.odds) >= 100 ? americanToProb(b.odds) : null), stake: (b) => b.stake,
   close: (b) => (b.closing_odds == null ? null : oddsKey(b.closing_odds)), clv: (b) => b.clv_pct,
   sharpClv: (b) => b.clv_sharp_pct, status: (b) => b.status, profit: (b) => b.profit,
@@ -544,7 +552,7 @@ export function Tracker() {
                   </select>
                 ) : (
                   <input id={f.id} value={form[f.key]} onChange={field(f.key)} required={f.required}
-                    type={f.key === 'stake' ? 'number' : 'text'} step={f.key === 'stake' ? '0.01' : undefined}
+                    type={f.key === 'stake' ? 'number' : f.key === 'event_start' ? 'datetime-local' : 'text'} step={f.key === 'stake' ? '0.01' : undefined}
                     inputMode={f.key === 'odds' ? 'decimal' : undefined}
                     aria-invalid={fieldErrors[f.key] ? true : undefined}
                     aria-describedby={fieldErrors[f.key] ? `${f.id}-err` : undefined} />
